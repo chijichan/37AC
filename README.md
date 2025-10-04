@@ -1,7 +1,7 @@
 ﻿# TAC - 二次元角色识别系统
 
 **TAC**（**T**wo-Dimensional **A**nime **C**haracter recognition）是一个基于深度学习的二次元角色识别系统，支持**模型训练**与**在线预测**，并配套有简洁的 **Flask Web 界面**，方便用户上传图片进行角色识别。
-
+--计划采用分布式边缘推理节点架构缓解公网服务器压力（开发中）
 ---
 
 ## 📦 项目结构
@@ -14,7 +14,9 @@ TAC/
 │ │ ├── character_resnet18.pth # 训练好的 ResNet18 模型
 │ │ └── classes.txt # 角色类别名称（每行一个）
 │ │
+│ ├── uploads/ # 用户上传下载到本地pc的临时图片存放目录
 │ ├── anime_character_app.py # 主程序：训练、预测、验证、Web API逻辑
+│ ├── node_server.py # 预测阶段服务：发送注册信息（带 Token）、定时发送心跳、接收任务、行推理并返回结果逻辑，由anime_character_app.py调用
 │ ├── anime_character_app.spec # PyInstaller 打包配置（可选）
 │ ├── TAC.pyproj # Visual Studio 项目文件
 │ │
@@ -28,6 +30,8 @@ TAC/
 │ ├── uploads/ # 用户上传的临时图片存放目录
 │ ├── models/ # （符号链接或重复？可与上级共享，建议统一）
 │ ├── runserver.py # 启动 Flask 开发服务器
+│ ├── tcp_server.py # 节点连接管理、节点注册与鉴权、心跳维护、任务转发，由runserver.py启动,views.py可使用任务下发推理功能
+│ ├── config.py # 数据库、web服务器、tcp服务配置文件
 │ ├── AC_web.pyproj # Visual Studio 项目文件
 │ │
 ├── requirements.txt # Python 依赖包列表
@@ -39,6 +43,37 @@ TAC/
 > 🔧 **注意：**
 > - `AC_web/models/` 与 `TAC/models/` 建议**共用同一目录**，避免模型路径混乱。当前代码中 `views.py` 使用的是项目根目录下的 `../models/`，已做适配。
 > - 数据集应放在 `TAC/dataset/` 下，每个角色一个子文件夹，文件夹名为角色名，里面放该角色的图片。
+> - config.py配置文件
+  ```
+    # config.py
+
+    import pymysql
+
+    # MySQL 数据库配置（用于节点 Token 认证、后续可扩展更多配置）
+    DB_CONFIG = {
+        'host': '154.12.36.191',        # 数据库地址
+        'user': '37AC',             # 数据库用户名
+        'password': '8LhdjGBYhPZRW72D',  # ✅ 请替换为你的真实数据库密码！
+        'database': '37ac',       # 数据库名，确保已运行你提供的建表 SQL
+        'charset': 'utf8mb4',
+        'cursorclass': pymysql.cursors.DictCursor
+    }
+
+    #FLASK web服务器配置
+    WEB_HOST = 'localhost'
+    WEB_PORT = 13137
+
+    # 全局配置
+    # - DEBUG 模式
+    TSAC_DEBUG = True
+
+    # - 服务端口
+    TCP_HOST = "0.0.0.0"
+    TCP_PORT = 13138
+    
+    # - 日志配置
+    # - Redis / 其他第三方服务配置
+  ```
 
 ---
 
@@ -89,6 +124,57 @@ TAC/dataset/
 
 ---
 
+## TCP接口要求
+
+- 节点注册 - 
+-- 请求 --
+```
+{
+    "type": "register",
+    "token": 你的密钥,
+    "name": 你的名称
+}
+```
+-- 成功返回 --
+```
+{
+    "status": "success",
+    "message": "节点注册成功"
+}
+```
+- 节点心跳 - 
+-- 请求 --
+```
+{
+    "type": "heartbeat", 
+    "token":  你的密钥
+}
+```
+-- 成功返回 --
+```
+{
+    "status": "success",
+    "message": "心跳收到"
+}
+```
+---
+
+## Mysql结构
+```
+37ac
+    nodes
+        名字	    类型	                    排序规则	属性	空	默认	注释	额外	操作
+        id 主键	    int(11)			                                否	    无	节点唯一ID	AUTO_INCREMENT
+        name	    varchar(100)	            utf8mb4_unicode_ci	否	无	节点名称（可自定义，如主机名）
+        token 索引	varchar(255)	            utf8mb4_unicode_ci	否	无	节点通信密钥 / Token，用于身份认证
+        status 索引	enum('online', 'offline')	utf8mb4_unicode_ci	是	offline	节点当前状态
+		last_heartbeat 索引	timestamp		                on update CURRENT_TIMESTAMP	是	CURRENT_TIMESTAMP	最后心跳时间，用于判断节点是否存活	ON UPDATE CURRENT_TIMESTAMP
+		is_active	tinyint(1)			                            是	1	是否启用该节点（管理员可禁用）
+		created_at	timestamp			                            是	CURRENT_TIMESTAMP	节点注册时间
+		updated_at	timestamp		                        on update CURRENT_TIMESTAMP	是	CURRENT_TIMESTAMP	最后更新时间	ON UPDATE CURRENT_TIMESTAMP
+```
+---
+
 ## 🛠 技术栈
 
 - **Python 3.x**
@@ -99,6 +185,7 @@ TAC/dataset/
 - **torchvision** – 数据加载与图像预处理
 - **tqdm** – 进度条工具
 - **logging** – 日志记录
+- **Mysql** - 数据库
 - **其他**：numpy, os, io, warnings, hashlib 等标准库
 
 ---

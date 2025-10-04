@@ -362,4 +362,6 @@ MigrationBackup/
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
 /TAC/dataset/**
+/TAC/uploads/**
 /AC_web/AC_web/__pycache__/**
+/AC_web/uploads/**

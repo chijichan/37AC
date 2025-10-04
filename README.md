@@ -1,4 +1,4 @@
-﻿# 🎌 TAC - 二次元角色识别系统
+﻿# TAC - 二次元角色识别系统
 
 **TAC**（**T**wo-Dimensional **A**nime **C**haracter recognition）是一个基于深度学习的二次元角色识别系统，支持**模型训练**与**在线预测**，并配套有简洁的 **Flask Web 界面**，方便用户上传图片进行角色识别。
 

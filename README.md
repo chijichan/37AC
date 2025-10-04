@@ -107,7 +107,7 @@ TAC/dataset/
 
 ### 1. 克隆或下载项目代码
 bash
-git clone <your-repo-url>
+git clone https://github.com/chijichan/TAC.git
 cd TAC
 ### 2. 创建 Python 虚拟环境（推荐）
 bash
@@ -247,14 +247,10 @@ python TAC/anime_character_app.py
 
 如有问题、建议或合作意向，欢迎联系：
 
-- 📧 Email: [你的邮箱（可选）]
-- 🌐 项目地址: [你的仓库 GitHub/GitLab 地址]
+- 📧 Email: [qijijiang@126.com]
+- 🌐 项目地址: [https://github.com/chijichan/TAC]
 - 👥 团队: 37AC 二次元技术研究组
 
 ---
 
 **Enjoy 二次元角色识别！(≧▽≦) /**
-✅ ​​使用方法：​​
-在你的项目根目录（和 TAC/、AC_web/ 同级）创建一个名为 ​​README.md​​ 的文件
-将上述内容​​完整复制粘贴​​进去并保存
-如有特殊信息（如你的邮箱、项目地址、依赖版本等），可再做个性化修改

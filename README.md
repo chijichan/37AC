@@ -5,43 +5,6 @@
 系统采用**分布式边缘推理节点架构（开发中）**，将推理任务分发至边缘设备执行，有效降低公网服务器压力，提升推理效率与实时性。
 
 ---
- 
-## 📦 项目结构
-TAC/
-│
-├── TAC/ # 后端核心代码（训练、预测、任务调度、TCP通信）
-│ ├── dataset/ # 训练用的二次元角色图片数据集，每个角色一个子文件夹
-│ ├── models/ # 保存训练好的模型及类别文件（如 character_resnet18.pth, classes.txt）
-│ ├── uploads/ # 用户上传的临时图片（上传后转交给边缘节点处理）
-│ ├── anime_character_app.py # 主程序：模型训练、预测、Web API、TCP 任务调度逻辑
-│ ├── node_server.py # 边缘节点通信服务：注册、心跳、任务下发、结果接收
-│ ├── TAC.pyproj # Visual Studio 项目文件（Windows）
-│ ├── anime_character_app.spec # PyInstaller 打包配置（可选）
-│ │
-├── AC_web/ # Flask 前端 Web 界面
-│ ├── AC_web/ # Flask 应用主包
-│ │ ├── __init__.py
-│ │ ├── views.py # 路由与视图逻辑（上传、任务查询等）
-│ │ ├── static/ # 静态资源：CSS / JS / 图片
-│ │ └── templates/ # HTML 模板：首页、上传页、结果页
-│ ├── uploads/ # 前端用户上传的临时图片（与后端共用或软链）
-│ ├── models/ # 模型文件目录（建议与 TAC/models 共用）
-│ ├── runserver.py # 启动 Flask 开发服务器
-│ ├── tcp_server.py # TCP 服务：管理节点连接、注册、心跳、任务分发、结果接收
-│ ├── config.py # 项目配置（数据库、服务端口、TCP 等）
-│ ├── AC_web.pyproj # Visual Studio 项目文件
-│ │
-├── requirements.txt # Python 依赖包列表
-├── README.md # 本项目说明文档（即本文件）
-│
-├── TAC.sln # Visual Studio 解决方案文件
-├── TAC.slnLaunch.user # VS 用户启动配置
-> 🔧 **注意：**
-> - `AC_web/models/` 与 `TAC/models/` **建议共用同一目录**，避免模型路径混乱。当前 `views.py` 已配置为从 `../models/` 加载模型。
-> - 上传的图片首先保存在 `uploads/`，随后通过 TCP 转发至边缘节点处理。
-> - 所有节点信息、任务状态与推理结果均存储于 MySQL，由 `tcp_server.py` 管理。
-
----
 
 ## 🚀 功能特性
 

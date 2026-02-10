@@ -1,0 +1,35 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "PHP Built-in Server",
+            "type": "php",
+            "request": "launch",
+            "runtimeArgs": [
+                "-dxdebug.mode=debug",
+                "-dxdebug.start_with_request=yes",
+                "-S",
+                "localhost:8000",
+                "-t",
+                "${workspaceFolder}/public"
+            ],
+            "program": "",
+            "cwd": "${workspaceFolder}",
+            "port": 9003,
+            "serverReadyAction": {
+                "pattern": "Development Server \\(http://([^)]+)\\) started",
+                "uriFormat": "http://%s",
+                "action": "openExternally"
+            }
+        },
+        {
+            "name": "Listen for Xdebug",
+            "type": "php",
+            "request": "launch",
+            "port": 9003,
+            "pathMappings": {
+                "/var/www/html": "${workspaceFolder}"
+            }
+        }
+    ]
+}

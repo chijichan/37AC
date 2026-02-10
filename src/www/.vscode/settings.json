@@ -1,0 +1,5 @@
+{
+    "php.validate.executablePath": "php",
+    "php.suggest.basic": true,
+    "php.debug.executablePath": "php"
+}

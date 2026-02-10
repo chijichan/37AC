@@ -1,0 +1,41 @@
+# 启用重写引擎
+RewriteEngine On
+
+# 阻止访问隐藏文件
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
+
+# 阻止访问敏感文件
+<FilesMatch "(composer\.json|composer\.lock|package\.json|\.git.*|\.env)">
+    Require all denied
+</FilesMatch>
+
+# 所有请求都路由到 index.php (如果文件不存在)
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^ index.php [QSA,L]
+
+# 安全头
+<IfModule mod_headers.c>
+    # 防止点击劫持
+    Header always set X-Frame-Options "SAMEORIGIN"
+    
+    # 防止 MIME 类型嗅探
+    Header always set X-Content-Type-Options "nosniff"
+    
+    # XSS 保护
+    Header always set X-XSS-Protection "1; mode=block"
+    
+    # 移除服务器信息
+    Header unset Server
+    Header unset X-Powered-By
+</IfModule>
+
+# 禁用目录浏览
+Options -Indexes
+
+# 防止 PHP 文件被下载
+<FilesMatch "\.php$">
+    SetHandler application/x-httpd-php
+</FilesMatch>

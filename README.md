@@ -1,7 +1,5 @@
-﻿<div align="center">
-  <h1>37AC 二次元美少女识别 <sub><small>MaiCore</small></sub></h1>
-</div>
-# TAC - 二次元角色识别系统
+﻿
+# 37AC 二次元美少女识别
 
 **TAC**（**T**wo-Dimensional **A**nime **C**haracter recognition）是一个基于深度学习的二次元角色识别系统，支持**模型训练、在线预测**，并配套有简洁友好的 **Flask Web 界面**，方便用户上传图片进行角色识别。
 

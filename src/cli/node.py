@@ -1,4 +1,22 @@
-﻿import socket
+﻿from config import (
+    DATASET_DIR,
+    MODEL_SAVE_PATH,
+    CLASSES_TXT_PATH,
+    NUM_EPOCHS,
+    BATCH_SIZE,
+    IMAGE_SIZE,
+    LEARNING_RATE,
+    MODEL_LOAD_PATH,
+    TCP_HOST,
+    TCP_PORT,
+    NODE_ID,
+    TOKEN,
+    HEARTBEAT_INTERVAL_SEC,  # 心跳发送间隔（与线程一致）
+    HEARTBEAT_RESPONSE_TIMEOUT_SEC,  # 超过该时间未收到 heartbeat_ack 则认为超时
+    HEARTBEAT_MISS_LIMIT,  # 允许连续丢失 heartbeat_ack 的最大次数
+    RECONNECT_DELAY_SEC,  # 重连前等待时间（秒）
+)
+import socket
 import threading
 import json
 import time
@@ -10,24 +28,27 @@ from PIL import Image
 import torch.nn.functional as F
 import struct
 
-MODEL_PATH = os.getenv('MODEL_PATH', './models/character_resnet18.pth')
-CLASSES_FILE = os.getenv('CLASSES_FILE', './models/classes.txt')
+MODEL_PATH = MODEL_LOAD_PATH
+CLASSES_FILE = CLASSES_TXT_PATH
 
 assert os.path.exists(MODEL_PATH), f"模型文件不存在: {MODEL_PATH}"
 assert os.path.exists(CLASSES_FILE), f"类别文件不存在: {CLASSES_FILE}"
+
 
 # ======================
 # === 加载类别 ===
 # ======================
 def load_classes():
-    with open(CLASSES_FILE, 'r', encoding='utf-8') as f:
+    with open(CLASSES_FILE, "r", encoding="utf-8") as f:
         classes = [line.strip() for line in f if line.strip()]
     if not classes:
         raise ValueError("类别文件为空！")
     return classes
 
+
 CLASS_NAMES = load_classes()
 NUM_CLASSES = len(CLASS_NAMES)
+
 
 # ======================
 # === 加载模型 ===
@@ -35,9 +56,10 @@ NUM_CLASSES = len(CLASS_NAMES)
 def load_model():
     model = models.resnet18(weights=None)
     model.fc = nn.Linear(model.fc.in_features, NUM_CLASSES)
-    model.load_state_dict(torch.load(MODEL_PATH, map_location=torch.device('cpu')))
+    model.load_state_dict(torch.load(MODEL_PATH, map_location=torch.device("cpu")))
     model.eval()
     return model
+
 
 model = load_model()
 device = torch.device("cpu")  # 可改为 'cuda' 如果有 GPU
@@ -45,18 +67,21 @@ device = torch.device("cpu")  # 可改为 'cuda' 如果有 GPU
 # ======================
 # === 图片预处理 ===
 # ======================
-transform = transforms.Compose([
-    transforms.Resize((224, 224)),
-    transforms.ToTensor(),
-    transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
-])
+transform = transforms.Compose(
+    [
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+    ]
+)
+
 
 # ======================
 # === 推理函数 ===
 # ======================
 def predict_image(image_path):
     try:
-        image = Image.open(image_path).convert('RGB')
+        image = Image.open(image_path).convert("RGB")
         image_tensor = transform(image).unsqueeze(0).to(device)
         with torch.no_grad():
             outputs = model(image_tensor)
@@ -65,16 +90,17 @@ def predict_image(image_path):
             label = CLASS_NAMES[predicted_idx.item()]
             confidence = confidence.item() * 100
             class_probs = [
-                {'name': CLASS_NAMES[i], 'prob': prob.item() * 100}
+                {"name": CLASS_NAMES[i], "prob": prob.item() * 100}
                 for i, prob in enumerate(probs[0])
             ]
             return {
-                'label': label,
-                'confidence': round(confidence, 2),
-                'class_probs': class_probs
+                "label": label,
+                "confidence": round(confidence, 2),
+                "class_probs": class_probs,
             }
     except Exception as e:
-        return {'error': str(e)}
+        return {"error": str(e)}
+
 
 # =============================================
 # 5. 工具函数：JSON 长度前缀协议
@@ -85,12 +111,13 @@ def send_json(sock, msg_dict):
     """
     try:
         json_str = json.dumps(msg_dict)
-        json_bytes = json_str.encode('utf-8')
-        length_prefix = struct.pack('>I', len(json_bytes))  # 大端序 uint32，4 字节
+        json_bytes = json_str.encode("utf-8")
+        length_prefix = struct.pack(">I", len(json_bytes))  # 大端序 uint32，4 字节
         sock.sendall(length_prefix + json_bytes)
     except Exception as e:
         print(f"[send_json] 发送失败: {e}")
         raise
+
 
 def recv_json(sock):
     """
@@ -103,10 +130,10 @@ def recv_json(sock):
         if not raw_len:
             return None
 
-        length = struct.unpack('>I', raw_len)[0]
+        length = struct.unpack(">I", raw_len)[0]
 
         # 2. 按长度接收完整 body
-        data = b''
+        data = b""
         while len(data) < length:
             part = sock.recv(length - len(data))
             if not part:
@@ -114,12 +141,18 @@ def recv_json(sock):
             data += part
 
         # 3. 解码并解析
-        text = data.decode('utf-8')
+        text = data.decode("utf-8")
         return json.loads(text)
 
-    except (ConnectionError, json.JSONDecodeError, UnicodeDecodeError, struct.error) as e:
+    except (
+        ConnectionError,
+        json.JSONDecodeError,
+        UnicodeDecodeError,
+        struct.error,
+    ) as e:
         print(f"[recv_json] 接收 JSON 失败: {e}")
         return None
+
 
 # ======================
 # === TCP 客户端主逻辑 ===
@@ -128,18 +161,18 @@ def start_node_service():
     # ===========================
     # === 配置参数 ===
     # ===========================
-    TCP_SERVER_HOST = '154.9.253.170'  # 请根据实际情况设置或从环境变量获取
-    TCP_SERVER_PORT = 13138            # 请根据实际情况设置或从环境变量获取
-    NODE_ID = 1                        # 请根据实际情况设置
-    TOKEN = 'a1ce075a-1ddb-430f-912c-747cc90d28fb'  # 请根据实际情况设置
+    TCP_HOST = "154.9.253.170"  # 请根据实际情况设置或从环境变量获取
+    TCP_PORT = 13137  # 请根据实际情况设置或从环境变量获取
+    NODE_ID = 1  # 请根据实际情况设置
+    TOKEN = "a1ce075a-1ddb-430f-912c-747cc90d28fb"  # 请根据实际情况设置
 
     # ===========================
     # === 心跳超时与重连控制参数 ===
     # ===========================
-    HEARTBEAT_INTERVAL_SEC = 10              # 心跳发送间隔（与线程一致）
-    HEARTBEAT_RESPONSE_TIMEOUT_SEC = 30      # 超过该时间未收到 heartbeat_ack 则认为超时
-    HEARTBEAT_MISS_LIMIT = 3                 # 允许连续丢失 heartbeat_ack 的最大次数
-    RECONNECT_DELAY_SEC = 10                 # 重连前等待时间（秒）
+    HEARTBEAT_INTERVAL_SEC = 10  # 心跳发送间隔（与线程一致）
+    HEARTBEAT_RESPONSE_TIMEOUT_SEC = 30  # 超过该时间未收到 heartbeat_ack 则认为超时
+    HEARTBEAT_MISS_LIMIT = 3  # 允许连续丢失 heartbeat_ack 的最大次数
+    RECONNECT_DELAY_SEC = 10  # 重连前等待时间（秒）
 
     # ===========================
     # === 全局变量（在函数内使用）===
@@ -157,15 +190,11 @@ def start_node_service():
         try:
             print("[节点] 尝试连接服务器...")
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.connect((TCP_SERVER_HOST, TCP_SERVER_PORT))
-            print(f"[节点] 已连接到服务器 {TCP_SERVER_HOST}:{TCP_SERVER_PORT}")
+            s.connect((TCP_HOST, TCP_PORT))
+            print(f"[节点] 已连接到服务器 {TCP_HOST}:{TCP_PORT}")
 
             # ==== 1. 注册节点 ====
-            register_msg = {
-                'type': 'register',
-                'node_id': NODE_ID,
-                'token': TOKEN
-            }
+            register_msg = {"type": "register", "node_id": NODE_ID, "token": TOKEN}
             send_json(s, register_msg)
             print(f"[节点] 已发送注册消息")
 
@@ -197,9 +226,9 @@ def start_node_service():
         while True:
             time.sleep(HEARTBEAT_INTERVAL_SEC)
             try:
-                hb_msg = {'type': 'heartbeat'}
+                hb_msg = {"type": "heartbeat"}
                 send_json(s, hb_msg)
-                print('[节点] 发送心跳')
+                print("[节点] 发送心跳")
                 last_heartbeat_time = time.time()  # 记录发送时间
             except Exception as e:
                 print(f"[心跳线程] 发送心跳异常，可能连接已断开: {e}")
@@ -220,9 +249,13 @@ def start_node_service():
             if time_since_last_heartbeat > HEARTBEAT_RESPONSE_TIMEOUT_SEC:
                 if heartbeat_missed_count < HEARTBEAT_MISS_LIMIT:
                     heartbeat_missed_count += 1
-                    print(f"[节点] ⚠️ 心跳响应超时！({heartbeat_missed_count}/{HEARTBEAT_MISS_LIMIT}) 未收到 heartbeat_ack")
+                    print(
+                        f"[节点] ⚠️ 心跳响应超时！({heartbeat_missed_count}/{HEARTBEAT_MISS_LIMIT}) 未收到 heartbeat_ack"
+                    )
                 if heartbeat_missed_count >= HEARTBEAT_MISS_LIMIT:
-                    print(f"[节点] ❗ 心跳连续丢失 {heartbeat_missed_count} 次，超过最大限制，准备断开并重连...")
+                    print(
+                        f"[节点] ❗ 心跳连续丢失 {heartbeat_missed_count} 次，超过最大限制，准备断开并重连..."
+                    )
                     break  # 跳出主循环，触发重连逻辑
 
         # ======================
@@ -234,54 +267,66 @@ def start_node_service():
                 print("[节点] 服务端连接中断或 JSON 解析失败")
                 break
 
-            msg_type = msg.get('type')
+            msg_type = msg.get("type")
             print(f"[节点] 收到消息类型: {msg_type}")
 
             # =========================
             # === 心跳响应处理 ====
             # =========================
-            if msg_type == 'heartbeat_ack':
+            if msg_type == "heartbeat_ack":
                 print(f"[节点] 收到心跳响应: {msg.get('message', '')}")
-                heartbeat_missed_count = 0            # 重置丢失计数
-                last_heartbeat_time = 0               # 清空，表示已收到响应
+                heartbeat_missed_count = 0  # 重置丢失计数
+                last_heartbeat_time = 0  # 清空，表示已收到响应
 
             # =========================
             # === 注册响应 ===
             # =========================
-            elif msg_type == 'register_ack':
-                status = msg.get('status')
-                message = msg.get('message')
+            elif msg_type == "register_ack":
+                status = msg.get("status")
+                message = msg.get("message")
                 print(f"[注册结果] {status}: {message}")
 
             # =========================
             # === 任务处理 ===
             # =========================
-            elif msg_type == 'task':
+            elif msg_type == "task":
                 try:
-                    task_id = msg.get('task_id')
-                    has_image = msg.get('has_image', False)
-                    image_filename = msg.get('image_filename')
-                    image_size = msg.get('image_size')
+                    task_id = msg.get("task_id")
+                    has_image = msg.get("has_image", False)
+                    image_filename = msg.get("image_filename")
+                    image_size = msg.get("image_size")
 
-                    print(f"[节点] 收到任务: {task_id}, 是否包含图片: {has_image}, 图片文件名: {image_filename}, 图片大小: {image_size} 字节")
+                    print(
+                        f"[节点] 收到任务: {task_id}, 是否包含图片: {has_image}, 图片文件名: {image_filename}, 图片大小: {image_size} 字节"
+                    )
 
                     if not task_id:
                         print("[节点] 任务ID缺失")
                         continue
 
                     if not has_image:
-                        response_msg = {'type': 'task_result', 'node_id': NODE_ID, 'task_id': task_id, 'result': None}
+                        response_msg = {
+                            "type": "task_result",
+                            "node_id": NODE_ID,
+                            "task_id": task_id,
+                            "result": None,
+                        }
                         send_json(s, response_msg)
                         continue
 
                     if not image_filename or image_size is None:
-                        error_msg = {'type': 'task_result', 'task_id': task_id, 'result': None, 'error': '服务端未提供图片文件名或图片大小'}
+                        error_msg = {
+                            "type": "task_result",
+                            "task_id": task_id,
+                            "result": None,
+                            "error": "服务端未提供图片文件名或图片大小",
+                        }
                         send_json(s, error_msg)
                         continue
 
                     # 接收图片二进制
                     print(f"[节点] 开始接收图片数据，大小: {image_size} 字节")
-                    image_data = b''
+                    image_data = b""
                     received = 0
                     while received < image_size:
                         part = s.recv(min(4096, image_size - received))
@@ -293,9 +338,9 @@ def start_node_service():
                     print(f"[节点] 图片数据接收完成，共 {len(image_data)} 字节")
 
                     # 保存图片
-                    os.makedirs('uploads', exist_ok=True)
-                    local_image_path = os.path.join('uploads', image_filename)
-                    with open(local_image_path, 'wb') as f:
+                    os.makedirs("uploads", exist_ok=True)
+                    local_image_path = os.path.join("uploads", image_filename)
+                    with open(local_image_path, "wb") as f:
                         f.write(image_data)
                     print(f"[节点] 图片已保存到: {local_image_path}")
 
@@ -304,20 +349,20 @@ def start_node_service():
 
                     # 返回结果
                     response_msg = {
-                        'type': 'task_result',
-                        'node_id': NODE_ID,
-                        'task_id': task_id,
-                        'result': result
+                        "type": "task_result",
+                        "node_id": NODE_ID,
+                        "task_id": task_id,
+                        "result": result,
                     }
                     send_json(s, response_msg)
                     print(f"[节点] 已返回任务 {task_id} 的推理结果")
 
                 except Exception as e:
                     error_msg = {
-                        'type': 'task_result',
-                        'task_id': 'unknown',
-                        'result': None,
-                        'error': f'处理任务出错: {e}'
+                        "type": "task_result",
+                        "task_id": "unknown",
+                        "result": None,
+                        "error": f"处理任务出错: {e}",
                     }
                     send_json(s, error_msg)
                     print(f"[节点] 处理任务出错: {e}")
@@ -325,9 +370,9 @@ def start_node_service():
             # =========================
             # === 其它消息 ===
             # =========================
-            elif msg_type in ['msg', 'error']:
-                status = msg.get('status')
-                message = msg.get('message')
+            elif msg_type in ["msg", "error"]:
+                status = msg.get("status")
+                message = msg.get("message")
                 print(f"[节点] 服务端消息: {status} - {message}")
 
             else:
@@ -357,6 +402,7 @@ def start_node_service():
         except Exception as e:
             print(f"[节点] 重连异常: {e}，{RECONNECT_DELAY_SEC} 秒后重试...")
             time.sleep(RECONNECT_DELAY_SEC)
+
 
 # # ======================
 # # === 启动入口 ===

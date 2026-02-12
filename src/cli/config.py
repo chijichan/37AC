@@ -7,6 +7,9 @@ ROOT_PATH = Path(__file__).resolve().parent
 # import os
 # ROOT_PATH = Path(os.path.abspath(__file__)).parent.parent  # 先转成Path对象
 
+AUTO_DEVICE = True
+DEVICE = None
+
 # 训练相关配置
 DATASET_DIR = Path("E:/pj/TAC_dataset/processed")  # 建议也改为Path对象，或者保持字符串
 
@@ -31,10 +34,19 @@ HEARTBEAT_RESPONSE_TIMEOUT_SEC = 30  # 超过该时间未收到 heartbeat_ack �
 HEARTBEAT_MISS_LIMIT = 3  # 允许连续丢失 heartbeat_ack 的最大次数
 RECONNECT_DELAY_SEC = 10  # 重连前等待时间（秒）
 
-# 修正日志和数据路径
+# 日志
 LOGS_PATH = ROOT_PATH / "logs"
-DATA_PATH = ROOT_PATH / "data"
 
 # 如果需要确保目录存在，可以添加：
 LOGS_PATH.mkdir(exist_ok=True)
-DATA_PATH.mkdir(exist_ok=True)
+
+if AUTO_DEVICE == False:
+    DEVICE = "cpu"
+else:
+    import torch
+
+    DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+import logging
+
+logging.info(f"使用设备: {DEVICE}")

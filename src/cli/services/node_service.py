@@ -21,85 +21,8 @@ import threading
 import json
 import time
 import os
-import torch
-import torch.nn as nn
-from torchvision import models, transforms
-from PIL import Image
-import torch.nn.functional as F
+from prediction.predictor import predict_image
 import struct
-
-MODEL_PATH = MODEL_LOAD_PATH
-CLASSES_FILE = CLASSES_TXT_PATH
-
-assert os.path.exists(MODEL_PATH), f"模型文件不存在: {MODEL_PATH}"
-assert os.path.exists(CLASSES_FILE), f"类别文件不存在: {CLASSES_FILE}"
-
-
-# ======================
-# === 加载类别 ===
-# ======================
-def load_classes():
-    with open(CLASSES_FILE, "r", encoding="utf-8") as f:
-        classes = [line.strip() for line in f if line.strip()]
-    if not classes:
-        raise ValueError("类别文件为空！")
-    return classes
-
-
-CLASS_NAMES = load_classes()
-NUM_CLASSES = len(CLASS_NAMES)
-
-
-# ======================
-# === 加载模型 ===
-# ======================
-def load_model():
-    model = models.resnet18(weights=None)
-    model.fc = nn.Linear(model.fc.in_features, NUM_CLASSES)
-    model.load_state_dict(torch.load(MODEL_PATH, map_location=torch.device("cpu")))
-    model.eval()
-    return model
-
-
-model = load_model()
-device = torch.device("cpu")  # 可改为 'cuda' 如果有 GPU
-
-# ======================
-# === 图片预处理 ===
-# ======================
-transform = transforms.Compose(
-    [
-        transforms.Resize((224, 224)),
-        transforms.ToTensor(),
-        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
-    ]
-)
-
-
-# ======================
-# === 推理函数 ===
-# ======================
-def predict_image(image_path):
-    try:
-        image = Image.open(image_path).convert("RGB")
-        image_tensor = transform(image).unsqueeze(0).to(device)
-        with torch.no_grad():
-            outputs = model(image_tensor)
-            probs = torch.softmax(outputs, dim=1)
-            confidence, predicted_idx = torch.max(probs, 1)
-            label = CLASS_NAMES[predicted_idx.item()]
-            confidence = confidence.item() * 100
-            class_probs = [
-                {"name": CLASS_NAMES[i], "prob": prob.item() * 100}
-                for i, prob in enumerate(probs[0])
-            ]
-            return {
-                "label": label,
-                "confidence": round(confidence, 2),
-                "class_probs": class_probs,
-            }
-    except Exception as e:
-        return {"error": str(e)}
 
 
 # =============================================

@@ -261,8 +261,8 @@ def start_node_service():
                     print(f"[节点] 图片数据接收完成，共 {len(image_data)} 字节")
 
                     # 保存图片
-                    os.makedirs("uploads", exist_ok=True)
-                    local_image_path = os.path.join("uploads", image_filename)
+                    os.makedirs("saves/uploads", exist_ok=True)
+                    local_image_path = os.path.join("saves/uploads", image_filename)
                     with open(local_image_path, "wb") as f:
                         f.write(image_data)
                     print(f"[节点] 图片已保存到: {local_image_path}")

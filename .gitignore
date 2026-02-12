@@ -30,8 +30,7 @@ Thumbs.db
 *.pkl
 *.db
 *.sqlite3
-data/
-models/
+saves/
 
 # Environment
 .env

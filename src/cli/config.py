@@ -13,8 +13,8 @@ DEVICE = None
 # 训练相关配置
 DATASET_DIR = Path("E:/pj/TAC_dataset/processed")  # 建议也改为Path对象，或者保持字符串
 
-MODEL_SAVE_PATH = ROOT_PATH / "models" / "character_resnet18.pth"  # 模型
-CLASSES_TXT_PATH = ROOT_PATH / "models" / "classes.txt"  # 类别名
+MODEL_SAVE_PATH = ROOT_PATH / "saves" / "models" / "character_resnet18.pth"  # 模型
+CLASSES_TXT_PATH = ROOT_PATH / "saves" / "models" / "classes.txt"  # 类别名
 
 NUM_EPOCHS = 10
 BATCH_SIZE = 16
@@ -22,7 +22,7 @@ IMAGE_SIZE = 224
 LEARNING_RATE = 1e-4
 
 # 预测相关配置
-MODEL_LOAD_PATH = ROOT_PATH / "models" / "character_resnet18.pth"  # 模型文件
+MODEL_LOAD_PATH = ROOT_PATH / "saves" / "models" / "character_resnet18.pth"  # 模型文件
 
 # 节点服务配置
 TCP_HOST = "154.9.253.170"  # 请根据实际情况设置或从环境变量获取

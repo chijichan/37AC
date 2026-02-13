@@ -25,8 +25,6 @@ TRAIN_TRANSFORMS = transforms.Compose(
 
 
 def train_model():
-    logger.info("\n=== 1. 训练模型 ===")
-
     # 检查数据集目录
     if not os.path.exists(DATASET_DIR):
         logger.error(f"数据集目录不存在: {DATASET_DIR}")
@@ -60,7 +58,7 @@ def train_model():
         criterion = nn.CrossEntropyLoss()
         optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
-        logger.info("(ง •̀_•́)ง 开始训练咯...")
+        logger.info("开始训练咯...")
 
         best_accuracy = 0.0
         for epoch in range(NUM_EPOCHS):
@@ -108,18 +106,15 @@ def train_model():
                 best_accuracy = epoch_acc
                 model_handler.save_model(MODEL_SAVE_PATH)
                 logger.info(
-                    f"保存最佳模型 (准确率: {best_accuracy:.2f}%) 到: {MODEL_SAVE_PATH}"
+                    f"保存最佳模型 (准确率: {best_accuracy:.2f}%) 到: {str(MODEL_SAVE_PATH)}"
                 )
+                save_classes_to_file(CLASSES_TXT_PATH, class_names)  # 保存类别名称
 
-        # 训练完成，保存最终模型
-        model_handler.save_model(MODEL_SAVE_PATH)
-        logger.info("模型保存好啦~ 文件: " + MODEL_SAVE_PATH)
-
-        # 保存类别名称
-        if save_classes_to_file(CLASSES_TXT_PATH, class_names):
-            logger.info("类别名称已保存到: " + CLASSES_TXT_PATH)
-        else:
-            logger.error("保存类别名称失败")
+        # 训练完成，输出最终模型
+        logger.info(
+            f"模型保存完成 (准确率: {best_accuracy:.2f}%) 到: {str(MODEL_SAVE_PATH)}"
+        )
+        logger.info(f"类别名称已保存到: {str(CLASSES_TXT_PATH)}")
 
     except Exception as e:
         logger.error(f"训练过程中出现严重错误: {str(e)}", exc_info=True)

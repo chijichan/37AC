@@ -66,7 +66,7 @@ def load_classes_from_file(file_path: str) -> list:
 def save_classes_to_file(file_path: str, class_names: list) -> bool:
     """保存类别列表到文件"""
     try:
-        from config import CLASSES_TXT_PATH
+        # from config import CLASSES_TXT_PATH
 
         ensure_directory_exists(os.path.dirname(file_path))
         with open(file_path, "w", encoding="utf-8") as f:

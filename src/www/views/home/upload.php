@@ -593,7 +593,7 @@ require_once ROOT_PATH . '/views/layout.php';
 
                     if (data.status === 'completed') {
                         // this.hideLoadingResult(); // 隐藏“推理中”提示（如有）
-                        this.showResult(data);   // 展示结果
+                        this.showResult(data); // 展示结果
                         return;
                     } else if (data.status === 'pending') {
                         // 结果还未返回，继续轮询
@@ -625,15 +625,15 @@ require_once ROOT_PATH . '/views/layout.php';
         showResult(data) {
             const html = `
             <div class="result-content">
-                <h3>识别结果: ${data.result.label}</h3>
-                <a href="https://zh.moegirl.org.cn/index.php?title=${data.result.label}" Target="_blank"“">${data.result.label} - 萌娘百科</a>
+                <h3>识别结果: ${data.result.label.split("/")[1]}</h3>
+                <a href="https://zh.moegirl.org.cn/index.php?title=${data.result.label.split("/")[1]}" Target="_blank"“">${data.result.label.split("/")[1]} - 萌娘百科</a>
                 <p class="confidence"><strong>置信度:</strong> ${data.result.confidence}%</p>
                 
                 <div class="probability-list">
                     <h4>概率分布:</h4>
                     ${data.result.class_probs.map(item => `
                         <div class="probability-item">
-                            <span class="character-name">${item.name}</span>
+                            <span class="character-name">${item.name.split("/")[1]}</span>
                             <span class="probability-value">${item.prob.toFixed(2)}%</span>
                             <div class="probability-bar">
                                 <div class="probability-fill" style="width: ${item.prob}%"></div>

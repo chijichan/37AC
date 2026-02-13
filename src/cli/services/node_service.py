@@ -1,21 +1,4 @@
-﻿from config import (
-    DATASET_DIR,
-    MODEL_SAVE_PATH,
-    CLASSES_TXT_PATH,
-    NUM_EPOCHS,
-    BATCH_SIZE,
-    IMAGE_SIZE,
-    LEARNING_RATE,
-    MODEL_LOAD_PATH,
-    TCP_HOST,
-    TCP_PORT,
-    NODE_ID,
-    TOKEN,
-    HEARTBEAT_INTERVAL_SEC,  # 心跳发送间隔（与线程一致）
-    HEARTBEAT_RESPONSE_TIMEOUT_SEC,  # 超过该时间未收到 heartbeat_ack 则认为超时
-    HEARTBEAT_MISS_LIMIT,  # 允许连续丢失 heartbeat_ack 的最大次数
-    RECONNECT_DELAY_SEC,  # 重连前等待时间（秒）
-)
+﻿from config import *
 import socket
 import threading
 import json
@@ -261,8 +244,8 @@ def start_node_service():
                     print(f"[节点] 图片数据接收完成，共 {len(image_data)} 字节")
 
                     # 保存图片
-                    os.makedirs("saves/uploads", exist_ok=True)
-                    local_image_path = os.path.join("saves/uploads", image_filename)
+                    os.makedirs(IMAGE_PATH, exist_ok=True)
+                    local_image_path = os.path.join(IMAGE_PATH, image_filename)
                     with open(local_image_path, "wb") as f:
                         f.write(image_data)
                     print(f"[节点] 图片已保存到: {local_image_path}")

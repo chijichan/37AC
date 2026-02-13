@@ -6,7 +6,7 @@ from torchvision import datasets
 class IPRoleImageFolder(datasets.ImageFolder):
     def find_classes(self, directory: str):
         """
-        重写 find_classes 方法，将目录结构 IP@角色 映射为类别名 "IP@角色"
+        重写 find_classes 方法，将目录结构 IP/角色 映射为类别名 "IP/角色"
         """
         ip_names = sorted(
             [
@@ -28,7 +28,7 @@ class IPRoleImageFolder(datasets.ImageFolder):
                 ]
             )
             for role_name in role_names:
-                class_name = f"{ip_name}/{role_name}"  # 格式: IP@角色
+                class_name = f"{ip_name}/{role_name}"  # 格式: IP/角色
                 class_names.append(class_name)
                 class_to_idx[class_name] = len(class_to_idx)
 
@@ -36,5 +36,5 @@ class IPRoleImageFolder(datasets.ImageFolder):
         import logging
 
         logger = logging.getLogger(__name__)
-        logger.info(f"自动生成 {len(class_names)} 个类别（格式: IP@角色）")
+        logger.info(f"自动生成 {len(class_names)} 个类别（格式: IP/角色）")
         return class_names, class_to_idx

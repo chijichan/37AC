@@ -17,9 +17,9 @@ DATASET_DIR = Path("E:/pj/TAC_dataset/processed")
 MODEL_SAVE_PATH = ROOT_PATH / "saves" / "models" / "character_resnet18.pth"  # 模型
 CLASSES_TXT_PATH = ROOT_PATH / "saves" / "models" / "classes.txt"  # 类别名
 
-NUM_EPOCHS = 100
+NUM_EPOCHS = 50
 BATCH_SIZE = 16  # 16
-IMAGE_SIZE = 256  # 224
+IMAGE_SIZE = 224  # 224
 LEARNING_RATE = 1e-4
 
 # 预测相关配置

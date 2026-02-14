@@ -24,11 +24,12 @@ LEARNING_RATE = 1e-4
 MODEL_LOAD_PATH = ROOT_PATH / "saves" / "models" / "character_resnet18.pth"  # 模型文件
 
 # 节点服务配置
-# TCP_HOST = "154.9.253.170"                    # 请根据实际情况设置或从环境变量获取
+# TCP_HOST = "154.9.253.170"                    # 服务端TCP监听地址
 TCP_HOST = "127.0.0.1"
-TCP_PORT = 13137  # 请根据实际情况设置或从环境变量获取
-NODE_ID = 1  # 请根据实际情况设置
-TOKEN = "a1ce075a-1ddb-430f-912c-747cc90d28fb"  # 请根据实际情况设置
+TCP_PORT = 13137  # 服务端TCP监听端口
+LOCAL_PORT = 13131  # 本地服务监听端口
+NODE_ID = 1  # 节点ID
+TOKEN = "a1ce075a-1ddb-430f-912c-747cc90d28fb"  # 节点认证Token
 HEARTBEAT_INTERVAL_SEC = 10  # 心跳发送间隔（与线程一致）
 HEARTBEAT_RESPONSE_TIMEOUT_SEC = 30  # 超过该时间未收到 heartbeat_ack 则认为超时
 HEARTBEAT_MISS_LIMIT = 3  # 允许连续丢失 heartbeat_ack 的最大次数

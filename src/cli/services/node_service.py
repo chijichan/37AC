@@ -13,7 +13,7 @@ import logging
 logger = logging.getLogger("node_service")
 
 
-# 工具函数：自定义消息头长度前缀协议
+# 自定义消息头长度前缀协议
 def send_json(sock, msg_dict, header="node"):
     """
     发送一条 JSON 消息到 socket，使用自定义消息头的长度前缀协议
@@ -192,6 +192,8 @@ def start_node_service():
         try:
             logger.info("[节点] 尝试连接服务器...")
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            # 新增：绑定本地端口
+            s.bind(("0.0.0.0", 13131))
             s.connect((TCP_HOST, TCP_PORT))
             logger.info(f"[节点] 已连接到服务器 {TCP_HOST}:{TCP_PORT}")
 
@@ -302,9 +304,19 @@ def start_node_service():
             elif msg_type == "task":
                 try:
                     task_id = msg.get("task_id")
-                    has_image = msg.get("has_image", False)
                     image_filename = msg.get("image_filename")
                     image_size = msg.get("image_size")
+                    image_data_b64 = msg.get("image_data")
+                    timestamp = msg.get("timestamp")
+
+                    if not all([task_id, image_filename, image_data_b64]):
+                        logger.warning("[节点] 任务数据不完整")
+                        continue
+
+                    logger.info(
+                        f"[节点] 收到带图片任务: {task_id}, 文件名: {image_filename}, "
+                        f"大小: {image_size} 字节, 时间戳: {timestamp}"
+                    )
 
                     # 节点开始处理任务时
                     status_update_increment = {
@@ -319,78 +331,63 @@ def start_node_service():
                     }
                     send_json(s, status_update_increment)
 
-                    logger.info(
-                        f"[节点] 收到任务: {task_id}, 是否包含图片: {has_image}, 图片文件名: {image_filename}, 图片大小: {image_size} 字节"
-                    )
+                    # 解码 base64 图片数据
+                    try:
+                        import base64
 
-                    if not task_id:
-                        logger.warning("[节点] 任务ID缺失")
-                        continue
+                        image_bytes = base64.b64decode(image_data_b64)
 
-                    if not has_image:
+                        # 验证解码后的大小
+                        if len(image_bytes) != image_size:
+                            logger.warning(
+                                f"[节点] 图片大小不匹配: 期望={image_size}, 实际={len(image_bytes)}"
+                            )
+
+                        # 保存图片
+                        os.makedirs(IMAGE_PATH, exist_ok=True)
+                        local_image_path = os.path.join(IMAGE_PATH, image_filename)
+                        with open(local_image_path, "wb") as f:
+                            f.write(image_bytes)
+                        logger.info(f"[节点] 图片已保存到: {local_image_path}")
+
+                        # 推理
+                        result = predict_image(local_image_path)
+
+                        # 返回结果
                         response_msg = {
                             "type": "task_result",
                             "node_id": NODE_ID,
                             "task_id": task_id,
-                            "result": None,
+                            "result": result,
+                            "processed_image_path": local_image_path,
                         }
                         send_json(s, response_msg)
-                        continue
+                        logger.info(f"[节点] 已返回任务 {task_id} 的推理结果")
 
-                    if not image_filename or image_size is None:
+                    except Exception as decode_error:
+                        logger.error(f"[节点] 图片数据解码失败: {decode_error}")
                         error_msg = {
                             "type": "task_result",
+                            "node_id": NODE_ID,
                             "task_id": task_id,
                             "result": None,
-                            "error": "服务端未提供图片文件名或图片大小",
+                            "error": f"图片数据解码失败: {decode_error}",
                         }
                         send_json(s, error_msg)
-                        continue
 
-                    # 接收图片二进制
-                    logger.info(f"[节点] 开始接收图片数据，大小: {image_size} 字节")
-                    image_data = b""
-                    received = 0
-                    while received < image_size:
-                        part = s.recv(min(4096, image_size - received))
-                        if not part:
-                            raise ConnectionError("连接中断，未能接收完整图片")
-                        image_data += part
-                        received += len(part)
-
-                    logger.info(f"[节点] 图片数据接收完成，共 {len(image_data)} 字节")
-
-                    # 保存图片
-                    os.makedirs(IMAGE_PATH, exist_ok=True)
-                    local_image_path = os.path.join(IMAGE_PATH, image_filename)
-                    with open(local_image_path, "wb") as f:
-                        f.write(image_data)
-                    logger.info(f"[节点] 图片已保存到: {local_image_path}")
-
-                    # 推理
-                    result = predict_image(local_image_path)
-
-                    # 返回结果
-                    response_msg = {
-                        "type": "task_result",
-                        "node_id": NODE_ID,
-                        "task_id": task_id,
-                        "result": result,
-                    }
-                    send_json(s, response_msg)
-                    logger.info(f"[节点] 已返回任务 {task_id} 的推理结果")
                     # 节点完成任务
                     send_json(s, status_update_decrement)
 
                 except Exception as e:
+                    logger.error(f"[节点] 处理带图片任务出错: {e}")
                     error_msg = {
                         "type": "task_result",
+                        "node_id": NODE_ID,
                         "task_id": "unknown",
                         "result": None,
                         "error": f"处理任务出错: {e}",
                     }
                     send_json(s, error_msg)
-                    logger.error(f"[节点] 处理任务出错: {e}")
 
                     # 节点完成任务
                     send_json(s, status_update_decrement)

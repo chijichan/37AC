@@ -1,4 +1,4 @@
-﻿# services/tcp_services.py
+﻿# services/tcp_service.py
 
 import socket
 import threading
@@ -10,18 +10,22 @@ import pymysql
 from pymysql import Error
 from config import *
 import struct
+from concurrent.futures import ThreadPoolExecutor
+from queue import Queue
+
+# import asyncio
 
 # =============================================
-# 0. 日志配置
+# 日志配置
 # =============================================
-logger = logging.getLogger("tcp_server_logger")
+logger = logging.getLogger("tcp_service")
 if TSAC_DEBUG:
     log_level = logging.DEBUG
 else:
     log_level = logging.INFO
 logger.setLevel(log_level)
 
-file_handler = logging.FileHandler(LOGS_PATH / "/tcp_server_logger.log")
+file_handler = logging.FileHandler(LOGS_PATH / "/tcp_server.log")
 console_handler = logging.StreamHandler()
 
 formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -30,6 +34,99 @@ console_handler.setFormatter(formatter)
 
 logger.addHandler(file_handler)
 logger.addHandler(console_handler)
+
+
+# 异步处理器
+class AsyncTaskProcessor:
+    """异步任务处理器"""
+
+    def __init__(self, max_workers=5):
+        self.executor = ThreadPoolExecutor(max_workers=max_workers)
+        self.task_queue = Queue()
+        self.result_queue = Queue()
+
+        # 启动后台处理线程
+        self.start_background_processor()
+
+    def start_background_processor(self):
+        """启动后台任务处理器"""
+
+        def process_tasks():
+            while True:
+                try:
+                    task_func, args, kwargs = self.task_queue.get(timeout=1)
+                    future = self.executor.submit(task_func, *args, **kwargs)
+                    self.result_queue.put(future)
+                except:
+                    continue
+
+        processor_thread = threading.Thread(target=process_tasks, daemon=True)
+        processor_thread.start()
+
+    def submit_task(self, func, *args, **kwargs):
+        """提交任务到异步处理器"""
+        self.task_queue.put((func, args, kwargs))
+        return True
+
+
+class MessageTypeProcessor:
+    """按消息类型分类的异步处理器"""
+
+    def __init__(self):
+        # 为每个消息类型创建独立的线程池
+        self.processors = {
+            "register": ThreadPoolExecutor(max_workers=3),
+            "heartbeat": ThreadPoolExecutor(max_workers=10),  # 心跳可以并发高一些
+            "task_status_update": ThreadPoolExecutor(max_workers=5),
+            "task_result": ThreadPoolExecutor(max_workers=5),
+            "default": ThreadPoolExecutor(max_workers=3),
+        }
+
+        # 消息队列用于处理特定类型的消息
+        self.message_queues = {
+            "register": Queue(),
+            "heartbeat": Queue(),
+            "task_status_update": Queue(),
+            "task_result": Queue(),
+            "default": Queue(),
+        }
+
+        # 启动各消息类型的处理循环
+        self._start_message_processors()
+
+    def _start_message_processors(self):
+        """启动各消息类型的后台处理循环"""
+        for msg_type in self.message_queues.keys():
+            self._start_single_message_processor(msg_type)
+
+    def _start_single_message_processor(self, msg_type):
+        """启动单个消息类型的处理循环"""
+
+        def message_processor():
+            queue = self.message_queues[msg_type]
+            processor = self.processors[msg_type]
+
+            while True:
+                try:
+                    task_func, args, kwargs = queue.get(timeout=1)
+                    processor.submit(task_func, *args, **kwargs)
+                except:
+                    continue
+
+        thread = threading.Thread(target=message_processor, daemon=True)
+        thread.start()
+
+    def submit_message_task(self, msg_type, func, *args, **kwargs):
+        """提交消息处理任务"""
+        if msg_type in self.message_queues:
+            self.message_queues[msg_type].put((func, args, kwargs))
+        else:
+            self.message_queues["default"].put((func, args, kwargs))
+
+
+# 初始化异步处理器
+async_processor = AsyncTaskProcessor(max_workers=10)
+message_processor = MessageTypeProcessor()
 
 
 # 节点管理器
@@ -287,15 +384,11 @@ class NodeManager:
                 conn.close()
 
 
-# =============================================
-# 3. 全局节点管理器
-# =============================================
+# 全局节点管理器
 node_manager = NodeManager()
 
 
-# =============================================
-# 4. 数据库工具
-# =============================================
+# 数据库工具
 def get_db_connection():
     try:
         conn = pymysql.connect(**DB_CONFIG)
@@ -305,7 +398,7 @@ def get_db_connection():
         return None
 
 
-# 工具函数：自定义消息头长度前缀协议
+# 自定义消息头长度前缀协议
 def send_json(sock, msg_dict, header="server"):
     """
     发送一条 JSON 消息到 socket，使用自定义消息头的长度前缀协议
@@ -345,10 +438,10 @@ def recv_json(sock, expected_headers=["node"]):
 
     Args:
         sock: socket对象
-        expected_headers: 期望的消息头列表，默认为["server"]
+        expected_headers: 期望的消息头列表，默认为["node"]
     """
     if expected_headers is None:
-        expected_headers = ["server"]
+        expected_headers = ["node"]
     elif isinstance(expected_headers, str):
         expected_headers = [expected_headers]
 
@@ -452,30 +545,212 @@ def recv_json(sock, expected_headers=["node"]):
         return None
 
 
-# =============================================
-# 6. 任务分发（供外部调用，如 views.py）
-# =============================================
+# 异步处理函数
+
+
+def async_handle_register(conn, addr, msg):
+    """异步处理注册消息"""
+    node_id = msg.get("node_id")
+    token = msg.get("token")
+    max_tasks = msg.get("max_tasks", 5)
+
+    # 参数检查（新增：验证max_tasks是否为有效数字）
+    if not node_id or not token or not isinstance(max_tasks, (int, float)):
+        register_ack = {
+            "type": "register_ack",
+            "status": "error",
+            "message": "node_id、token和max_tasks必须提供且有效",
+        }
+        send_json(conn, register_ack)
+        return
+
+    conn_db = get_db_connection()
+    if not conn_db:
+        register_ack = {
+            "type": "register_ack",
+            "status": "error",
+            "message": "数据库连接失败",
+        }
+        send_json(conn, register_ack)
+        return
+
+    try:
+        cursor = conn_db.cursor(pymysql.cursors.DictCursor)
+        query = """
+            SELECT * FROM nodes 
+            WHERE id = %s AND token = %s AND is_active = 1
+        """
+        cursor.execute(query, (node_id, token))
+        result = cursor.fetchone()
+
+        if result:
+            # 修复1：添加节点状态验证
+            if node_id in node_manager.nodes:
+                register_ack = {
+                    "type": "register_ack",
+                    "status": "error",
+                    "message": "节点已注册",
+                }
+                send_json(conn, register_ack)
+                return
+
+            # 修复2：添加max_tasks范围验证
+            if max_tasks <= 0 or max_tasks > 100:  # 假设最大任务数不超过100
+                max_tasks = 5  # 使用默认值
+
+            # 使用节点上报的max_tasks注册节点
+            node_manager.register_node(node_id, addr, conn, max_tasks)
+            node_manager.update_db_node_status(node_id, "online")
+            node_manager.set_node_idle(node_id)
+
+            register_ack = {
+                "type": "register_ack",
+                "status": "success",
+                "message": f"节点注册成功，最大任务数: {max_tasks}",
+                "max_tasks": max_tasks,
+            }
+            send_json(conn, register_ack)
+            logger.info(
+                f"[注册成功] node_id={node_id}, addr={addr}, max_tasks={max_tasks}"
+            )
+        else:
+            register_ack = {
+                "type": "register_ack",
+                "status": "error",
+                "message": "节点未激活或凭证无效",
+            }
+            send_json(conn, register_ack)
+    except Exception as e:
+        logger.error(f"[注册错误] 处理注册时出错: {e}")
+        register_ack = {
+            "type": "register_ack",
+            "status": "error",
+            "message": "服务器内部错误",
+        }
+        send_json(conn, register_ack)
+    finally:
+        if "cursor" in locals():
+            cursor.close()
+        if conn_db:
+            conn_db.close()
+
+
+def async_handle_heartbeat(conn, addr, msg, node_id):
+    """异步处理心跳消息"""
+    node_manager.update_heartbeat(node_id)
+    heartbeat_ack = {
+        "type": "heartbeat_ack",
+        "status": "success",
+        "message": "心跳已更新",
+    }
+    send_json(conn, heartbeat_ack)
+
+
+def async_handle_task_status_update(conn, addr, msg, node_id):
+    """异步处理任务状态更新消息"""
+    action = msg.get("action")  # "increment" 或 "decrement"
+    task_id = msg.get("task_id")
+
+    if action == "increment":
+        node_manager.increment_task_count(node_id)
+        status_update = {
+            "type": "status_update_ack",
+            "task_id": task_id,
+            "status": "success",
+            "message": "任务计数增加成功",
+            "current_tasks": node_manager.get_node_current_tasks(node_id),
+            "max_tasks": node_manager.get_node_max_tasks(node_id),
+        }
+    elif action == "decrement":
+        node_manager.decrement_task_count(node_id)
+        status_update = {
+            "type": "status_update_ack",
+            "task_id": task_id,
+            "status": "success",
+            "message": "任务计数减少成功",
+            "current_tasks": node_manager.get_node_current_tasks(node_id),
+            "max_tasks": node_manager.get_node_max_tasks(node_id),
+        }
+    else:
+        status_update = {
+            "type": "status_update_ack",
+            "status": "error",
+            "message": "无效的操作类型",
+        }
+
+    send_json(conn, status_update)
+
+
+def async_handle_task_result(conn, addr, msg):
+    """异步处理任务结果消息 - 整合了数据库保存和任务计数减少"""
+    node_id = msg.get("node_id")
+    task_id = msg.get("task_id")
+    result = msg.get("result")
+
+    # 定义完整的异步处理任务
+    def process_task_result():
+        try:
+            conn = get_db_connection()
+            with conn.cursor() as cursor:
+                sql = """
+                    INSERT INTO task_results (task_id, result, status)
+                    VALUES (%s, %s, %s)
+                    ON DUPLICATE KEY UPDATE
+                        result = VALUES(result),
+                        status = VALUES(status),
+                        updated_at = CURRENT_TIMESTAMP
+                """
+                cursor.execute(sql, (task_id, json.dumps(result), "completed"))
+            conn.commit()
+            logger.info(f"[DB] 任务结果已保存: task_id={task_id}")
+
+            # 如果有node_id，减少任务计数
+            if node_id:
+                node_manager.decrement_task_count(node_id)
+                logger.info(
+                    f"[任务处理] 节点 {node_id} 任务计数已减少，task_id={task_id}"
+                )
+
+        except Exception as e:
+            logger.error(f"[DB] 异步保存失败: {e}")
+        finally:
+            if "conn" in locals() and conn:
+                conn.close()
+
+    # 提交完整的处理任务到异步处理器
+    async_processor.submit_task(process_task_result)
+
+
+def async_handle_unknown_message(conn, addr, msg):
+    """异步处理未知消息类型"""
+    conn.sendall(
+        json.dumps(
+            {"type": "msg", "status": "error", "message": "未知消息类型"}
+        ).encode("utf-8")
+    )
+
+
+# 任务分发（供外部调用，如 views.py）
 def dispatch_task(image_path: str, image_data, task_id: str):
     """
     优先通过 TCP 将 image_file（图片二进制）发送给节点，
-    同时保留将图片保存到 ./uploads/ 的逻辑（备用）
+    使用统一的 JSON 协议，避免粘包问题
     """
     # === 可选：备份逻辑 ===
-    # 如果您想把图片也保存到服务端的 ./uploads/，可以取消下面的注释
-
     import os
 
-    uploads_dir = "./uploads"
-    os.makedirs(uploads_dir, exist_ok=True)
-    backup_image_path = os.path.join(uploads_dir, os.path.basename(image_path))
-    with open(backup_image_path, "wb") as f:
-        if hasattr(image_data, "read"):  # 比如 request.files 的 FileStorage 对象
-            f.write(image_data.read())
-        else:  # 如果是二进制数据，比如 bytes
-            f.write(image_data)
-    logger.info(f"[服务端] 图片已备份到本地: {backup_image_path}")
+    # uploads_dir = "./uploads"
+    # os.makedirs(uploads_dir, exist_ok=True)
+    # backup_image_path = os.path.join(uploads_dir, os.path.basename(image_path))
+    # with open(backup_image_path, "wb") as f:
+    #     if hasattr(image_data, "read"):  # 比如 request.files 的 FileStorage 对象
+    #         f.write(image_data.read())
+    #     else:  # 如果是二进制数据，比如 bytes
+    #         f.write(image_data)
+    # logger.info(f"[服务端] 图片已备份到本地: {backup_image_path}")
 
-    # === 优先：通过 TCP 传输图片给节点 ===
+    # === 优先：通过 TCP 传输图片给节点（使用统一 JSON 协议）===
+
     node_id, node_info = node_manager.get_idle_node()
     if not node_id:
         return {"status": "waiting", "task_id": task_id, "message": "没有空闲节点"}
@@ -486,37 +761,64 @@ def dispatch_task(image_path: str, image_data, task_id: str):
         return {"status": "failed", "task_id": task_id, "error": "节点未连接"}
 
     try:
-        # 1. 构造任务消息头部（JSON）
-        image_filename = os.path.basename(
-            image_path
-        )  # 如 '6a67fa40-de07-41d6-a21f-2a8479d7747e.jpg'
+        image_filename = os.path.basename(image_path)
 
+        # 关键修改：将图片数据编码为 base64 放入 JSON 中
+        import base64
+
+        # 处理不同类型的 image_data
+        if hasattr(image_data, "read"):
+            # FileStorage 对象，需要先读取
+            image_bytes = image_data.read()
+        elif isinstance(image_data, bytes):
+            image_bytes = image_data
+        else:
+            # 其他类型，尝试转换为 bytes
+            image_bytes = str(image_data).encode("utf-8")
+
+        # 检查图片大小限制（10MB）
+        MAX_IMAGE_SIZE = 1024 * 1024 * 10  # 10MB
+        if len(image_bytes) > MAX_IMAGE_SIZE:
+            logger.error(
+                f"[dispatch_task] 图片过大: {len(image_bytes)} 字节，超过1MB限制"
+            )
+            node_manager.set_node_idle(node_id)
+            return {"status": "failed", "task_id": task_id, "error": "图片文件过大"}
+
+        # 将图片数据编码为 base64 字符串
+        image_base64 = base64.b64encode(image_bytes).decode("utf-8")
+
+        # 构造包含图片数据的完整任务消息
         task_msg = {
             "type": "task",
             "task_id": task_id,
-            "has_image": True,
-            "image_filename": image_filename,  # 告诉节点图片保存时的文件名
-            "image_size": len(image_data),
+            "image_filename": image_filename,
+            "image_size": len(image_bytes),
+            "image_data": image_base64,  # base64 编码的图片数据
+            "timestamp": time.time(),  # 添加时间戳
         }
 
-        # 2. 发送任务消息 JSON
-        send_json(socket_obj, task_msg)
-        # socket_obj.sendall(json.dumps(task_msg).encode('utf-8'))
+        # 使用统一的 send_json 发送（包含图片数据）
+        send_json(socket_obj, task_msg, header="server")
 
-        # 3. 发送图片二进制数据
-        socket_obj.sendall(image_data)
+        logger.info(
+            f"[dispatch_task] 任务已发送: task_id={task_id}, 图片={image_filename}, "
+            f"大小={len(image_bytes)}字节, base64大小={len(image_base64)}字节"
+        )
 
-        # 4. 标记节点为忙碌
+        # 标记节点为忙碌
         node_manager.set_node_busy(node_id)
 
         return {"status": "dispatched", "task_id": task_id, "node_id": node_id}
 
     except Exception as e:
+        logger.error(f"[dispatch_task] 发送任务失败: {e}")
         node_manager.set_node_idle(node_id)
         return {"status": "failed", "task_id": task_id, "error": str(e)}
 
     """
     【已废弃】现在任务由用户直接连接节点发送，此方法仅作备用
+
     保留基本功能用于兼容现有代码
     """
     logger.warning("[任务分发] dispatch_task 方法已废弃，任务现在由用户直接发送到节点")
@@ -530,18 +832,14 @@ def dispatch_task(image_path: str, image_data, task_id: str):
     return {"status": "deprecated", "message": "请直接使用节点API"}
 
 
-# =============================================
-# 7. TCP 服务端核心逻辑
-# =============================================
+# TCP 服务端核心逻辑
 def handle_client(conn, addr):
     print(f"[TCP] 新连接来自: {addr}")
     node_id = None
 
     try:
         while True:
-            msg = recv_json(
-                conn
-            )  # ✅ 使用安全的 recv_json()，替代 conn.recv + json.loads
+            msg = recv_json(conn)
             if msg is None:
                 break  # 客户端断开或数据错误
 
@@ -550,73 +848,18 @@ def handle_client(conn, addr):
             if msg_type == "register":
                 node_id = msg.get("node_id")
                 token = msg.get("token")
-                max_tasks = msg.get("max_tasks", 5)  # 获取节点上报的最大任务数，默认为5
-
-                if not node_id or not token:
-                    register_ack = {
-                        "type": "register_ack",
-                        "status": "error",
-                        "message": "node_id 和 token 必须提供",
-                    }
-                    send_json(conn, register_ack)
-                    continue
-
-                conn_db = get_db_connection()
-                if not conn_db:
-                    register_ack = {
-                        "type": "register_ack",
-                        "status": "error",
-                        "message": "数据库错误",
-                    }
-                    send_json(conn, register_ack)
-                    continue
-
-                try:
-                    cursor = conn_db.cursor(pymysql.cursors.DictCursor)
-                    query = """
-                        SELECT * FROM nodes 
-                        WHERE id = %s AND token = %s AND is_active = 1
-                    """
-                    cursor.execute(query, (node_id, token))
-                    result = cursor.fetchone()
-
-                    if result:
-                        # 使用节点上报的max_tasks注册节点
-                        node_manager.register_node(node_id, addr, conn, max_tasks)
-                        node_manager.update_db_node_status(node_id, "online")
-                        node_manager.set_node_idle(node_id)
-
-                        register_ack = {
-                            "type": "register_ack",
-                            "status": "success",
-                            "message": f"节点注册成功，最大任务数: {max_tasks}",
-                            "max_tasks": max_tasks,  # 在响应中也返回max_tasks
-                        }
-                        send_json(conn, register_ack)
-                        print(
-                            f"[注册成功] node_id={node_id}, addr={addr}, max_tasks={max_tasks}"
-                        )
-                    else:
-                        register_ack = {
-                            "type": "register_ack",
-                            "status": "error",
-                            "message": "节点未激活或凭证无效",
-                        }
-                        send_json(conn, register_ack)
-                finally:
-                    if conn_db:
-                        cursor.close()
-                        conn_db.close()
+                max_tasks = msg.get("max_tasks", 5)
+                # 异步处理注册消息
+                message_processor.submit_message_task(
+                    "register", async_handle_register, conn, addr, msg
+                )
 
             elif msg_type == "heartbeat":
+                # 异步处理心跳消息
                 if node_id:
-                    node_manager.update_heartbeat(node_id)
-                    heartbeat_ack = {
-                        "type": "heartbeat_ack",
-                        "status": "success",
-                        "message": "心跳已更新",
-                    }
-                    send_json(conn, heartbeat_ack)
+                    message_processor.submit_message_task(
+                        "heartbeat", async_handle_heartbeat, conn, addr, msg, node_id
+                    )
                 else:
                     heartbeat_ack = {
                         "type": "heartbeat_ack",
@@ -626,7 +869,7 @@ def handle_client(conn, addr):
                     send_json(conn, heartbeat_ack)
 
             elif msg_type == "task_status_update":
-                # 新增：处理节点主动上报的任务状态变化
+                # 异步处理任务状态更新消息
                 if not node_id:
                     status_update = {
                         "type": "status_update_ack",
@@ -636,76 +879,25 @@ def handle_client(conn, addr):
                     send_json(conn, status_update)
                     continue
 
-                action = msg.get("action")  # "increment" 或 "decrement"
-                task_id = msg.get("task_id")
-
-                if action == "increment":
-                    node_manager.increment_task_count(node_id)
-                    status_update = {
-                        "type": "status_update_ack",
-                        "task_id": task_id,
-                        "status": "success",
-                        "message": "任务计数增加成功",
-                        "current_tasks": node_manager.get_node_current_tasks(node_id),
-                        "max_tasks": node_manager.get_node_max_tasks(node_id),
-                    }
-                elif action == "decrement":
-                    node_manager.decrement_task_count(node_id)
-                    status_update = {
-                        "type": "status_update_ack",
-                        "task_id": task_id,
-                        "status": "success",
-                        "message": "任务计数减少成功",
-                        "current_tasks": node_manager.get_node_current_tasks(node_id),
-                        "max_tasks": node_manager.get_node_max_tasks(node_id),
-                    }
-                else:
-                    status_update = {
-                        "type": "status_update_ack",
-                        "status": "error",
-                        "message": "无效的操作类型",
-                    }
-
-                send_json(conn, status_update)
+                message_processor.submit_message_task(
+                    "task_status_update",
+                    async_handle_task_status_update,
+                    conn,
+                    addr,
+                    msg,
+                    node_id,
+                )
 
             elif msg_type == "task_result":
-                # 保留原有的任务结果处理逻辑，但现在主要由节点直接处理
-                node_id = msg.get("node_id")
-                task_id = msg.get("task_id")
-                result = msg.get("result")
-
-                print(f"[TCP服务端] 收到任务结果: task_id={task_id}, result={result}")
-
-                try:
-                    mysql_conn = get_db_connection()
-                    with mysql_conn.cursor() as cursor:
-                        sql = """
-                        INSERT INTO task_results (task_id, result, status)
-                        VALUES (%s, %s, %s)
-                        ON DUPLICATE KEY UPDATE
-                            result = VALUES(result),
-                            status = VALUES(status),
-                            updated_at = CURRENT_TIMESTAMP
-                        """
-                        cursor.execute(sql, (task_id, json.dumps(result), "completed"))
-                    mysql_conn.commit()
-                    print(f"[MySQL] 任务结果已保存: task_id={task_id}")
-
-                    # 任务完成后，减少任务计数
-                    if node_id:
-                        node_manager.decrement_task_count(node_id)
-
-                except Exception as e:
-                    print(f"[MySQL] 保存任务结果失败: {e}")
-                finally:
-                    if mysql_conn:
-                        mysql_conn.close()
+                # 异步处理任务结果消息
+                message_processor.submit_message_task(
+                    "task_result", async_handle_task_result, conn, addr, msg
+                )
 
             else:
-                conn.sendall(
-                    json.dumps(
-                        {"type": "msg", "status": "error", "message": "未知消息类型"}
-                    ).encode("utf-8")
+                # 异步处理未知消息类型
+                message_processor.submit_message_task(
+                    "default", async_handle_unknown_message, conn, addr, msg
                 )
 
     except ConnectionResetError:
@@ -732,9 +924,7 @@ def handle_client(conn, addr):
         logging.info(f"[TCP] 连接关闭: {addr}")
 
 
-# =============================================
-# 8. 启动 TCP 服务
-# =============================================
+# 启动 TCP 服务
 def start_tcp_server(host="0.0.0.0", port=TCP_PORT):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -767,7 +957,7 @@ def start_tcp_server(host="0.0.0.0", port=TCP_PORT):
 
 
 # =============================================
-# 9. 启动入口（测试用，可直接注释）
+# 启动入口（测试用，可直接注释）
 # =============================================
 # if __name__ == '__main__':
 #     start_tcp_server()

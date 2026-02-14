@@ -7,7 +7,7 @@ from flask import render_template, request, redirect, url_for, flash, jsonify
 from AC_web import app
 import threading
 from config import *
-from services.tcp_services import get_db_connection, node_manager
+from services.tcp_service import get_db_connection, node_manager
 
 # ======================
 # === 配置项 ===
@@ -79,7 +79,7 @@ def upload_and_predict():
 
         # 启动一个线程去分发任务（非阻塞）
         def dispatch():
-            from services.tcp_services import dispatch_task
+            from services.tcp_service import dispatch_task
 
             result = dispatch_task(filepath, image_data, task_id)
             print(f"[调度结果] 任务 {task_id}: {result}")

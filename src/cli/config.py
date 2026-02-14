@@ -11,8 +11,8 @@ AUTO_DEVICE = True
 DEVICE = None
 
 # 训练相关配置
-DATASET_DIR = Path("E:/pj/TAC_dataset/processed")
-# DATASET_DIR = Path("W:/Img")
+# DATASET_DIR = Path("E:/pj/TAC_dataset/processed")
+DATASET_DIR = Path("W:/Img")
 
 MODEL_SAVE_PATH = ROOT_PATH / "saves" / "models" / "character_resnet18.pth"  # 模型
 CLASSES_TXT_PATH = ROOT_PATH / "saves" / "models" / "classes.txt"  # 类别名

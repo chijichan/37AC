@@ -74,10 +74,6 @@ def show_menu():
 3:::::::::::::::33  7::::::7A:::::A                 A:::::A CCC::::::::::::C
  333333333333333   77777777AAAAAAA                   AAAAAAA   CCCCCCCCCCCCC
                                                                             
-                                                                            
-                                                                            
-                                                                            
-
                                                                              """
     )
     print("=" * 80)

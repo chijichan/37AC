@@ -57,7 +57,6 @@ def main():
         return
     elif args.mode == 4:
         logger.info("\n=== 4. 启动节点服务 ===")
-        print("7888")
         start_node_service()
         return
 

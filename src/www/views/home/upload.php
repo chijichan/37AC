@@ -530,7 +530,8 @@ require_once ROOT_PATH . '/views/layout.php';
             formData.append('file', file);
 
             try {
-                const response = await fetch('https://api.322337.xyz/upload', {
+                // const response = await fetch('https://api.322337.xyz/upload', {
+                const response = await fetch('http://127.0.0.1:13138/upload', {
                     method: 'POST',
                     body: formData,
                     headers: {

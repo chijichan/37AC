@@ -192,261 +192,297 @@ def start_node_service():
     s = None
     heartbeat_missed_count = 0
     last_heartbeat_send_time = 0  # 重命名为发送时间
-    last_heartbeat_response_time = 0  # 新增：响应时间
-    connection_alive = True  # 新增：连接状态标志
+    last_heartbeat_response_time = 0  # 响应时间
+    connection_alive = True  # 连接状态标志
+    reconnect_attempts = 0
 
     # === 连接并注册函数（辅助函数）===
     def connect_and_register():
-        nonlocal s
+        nonlocal s, reconnect_attempts
         try:
             logger.info("[节点] 尝试连接服务器...")
+
+            # 修改1：确保关闭之前的socket
+            if s:
+                try:
+                    s.close()
+                except:
+                    pass
+                s = None
+
+            # 修改2：创建新socket时不绑定固定端口
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            # 新增：绑定本地端口
-            s.bind(("0.0.0.0", LOCAL_PORT if LOCAL_PORT else 0))
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # 允许地址重用
+
+            # 修改3：移除本地端口绑定
             s.connect((TCP_HOST, TCP_PORT))
             logger.info(f"[节点] 已连接到服务器 {TCP_HOST}:{TCP_PORT}")
 
-            # ==== 1. 注册节点 ====
-            register_msg = {
-                "type": "register",
-                "node_id": NODE_ID,
-                "token": TOKEN,
-                "max_tasks": MAX_TASKS,  # 新增：上报节点最大任务处理数
-            }
-            json_protocol.send_json(s, register_msg)
-            logger.info(f"[节点] 已发送注册消息 {TCP_HOST}:{TCP_PORT}")
-
-            # 重置心跳状态
+            # 重置状态
             nonlocal heartbeat_missed_count, last_heartbeat_send_time, last_heartbeat_response_time
             heartbeat_missed_count = 0
             last_heartbeat_send_time = 0
             last_heartbeat_response_time = 0
+            reconnect_attempts = 0  # 重置重连计数
+
+            # 注册节点
+            register_msg = {
+                "type": "register",
+                "node_id": NODE_ID,
+                "token": TOKEN,
+                "max_tasks": MAX_TASKS,
+            }
+            json_protocol.send_json(s, register_msg)
+            logger.info(f"[节点] 已发送注册消息 {TCP_HOST}:{TCP_PORT}")
 
             return True
         except Exception as e:
             logger.error(f"[节点] 连接或注册失败: {e}")
             if s:
-                s.close()
+                try:
+                    s.close()
+                except:
+                    pass
                 s = None
             return False
 
-    # === 启动连接 ===
-    if not connect_and_register():
-        logger.error("[节点] 初始连接失败，程序退出")
-        return
+    # === 主循环 ===
+    while True:
+        # 初始连接
+        if not connect_and_register():
+            logger.error("[节点] 初始连接失败，程序退出")
+            return
 
-    # === 心跳线程 ====
-    def heartbeat_loop():
-        nonlocal last_heartbeat_send_time, connection_alive
-        while connection_alive and s:
-            time.sleep(HEARTBEAT_INTERVAL_SEC)
-            try:
-                hb_msg = {"type": "heartbeat"}
-                json_protocol.send_json(s, hb_msg)
-                last_heartbeat_send_time = time.time()  # 记录发送时间
-                logger.info("[节点] 发送心跳")
-            except Exception as e:
-                logger.error(f"[心跳线程] 发送心跳异常，可能连接已断开: {e}")
-                connection_alive = False  # 标记连接失效
-                break  # 退出心跳线程
-
-    threading.Thread(target=heartbeat_loop, daemon=True).start()
-
-    # === 主接收循环 ====
-    while connection_alive and s:
-        # === 心跳超时检测 ===
-        current_time = time.time()
-
-        # 修正的超时检测逻辑：只在发送心跳后未收到响应时才计时
-        if last_heartbeat_send_time > 0 and last_heartbeat_response_time == 0:
-            # 已经发送心跳但未收到响应
-            time_since_last_send = current_time - last_heartbeat_send_time
-            if time_since_last_send > HEARTBEAT_RESPONSE_TIMEOUT_SEC:
-                if heartbeat_missed_count < HEARTBEAT_MISS_LIMIT:
-                    heartbeat_missed_count += 1
-                    logger.warning(
-                        f"[节点] ⚠️ 心跳响应超时！({heartbeat_missed_count}/{HEARTBEAT_MISS_LIMIT}) "
-                        f"上次发送: {time_since_last_send:.1f}s 前"
-                    )
-                if heartbeat_missed_count >= HEARTBEAT_MISS_LIMIT:
-                    logger.error(
-                        f"[节点] ❗ 心跳连续丢失 {heartbeat_missed_count} 次，超过最大限制，准备断开并重连..."
-                    )
-                    connection_alive = False  # 标记连接失效
-                    break  # 跳出主循环，触发重连逻辑
-
-        # === 接收消息 ===
-        try:
-            # 设置接收超时，避免永久阻塞
-            s.settimeout(1.0)  # 1秒超时
-            msg = json_protocol.recv_json(s)
-            s.settimeout(None)  # 恢复阻塞模式
-
-            if msg is None:
-                # 检查是否因为超时导致的None，如果是则继续循环
-                continue
-
-            msg_type = msg.get("type")
-            logger.info(f"[节点] 收到消息类型: {msg_type}")
-
-            # === 心跳响应处理 ====
-            if msg_type == "heartbeat_ack":
-                logger.info(f"[节点] 收到心跳响应: {msg.get('message', '')}")
-                heartbeat_missed_count = 0  # 重置丢失计数
-                last_heartbeat_response_time = time.time()  # 记录响应时间
-                last_heartbeat_send_time = 0  # 重置发送时间，准备下一次发送
-
-            # === 注册响应 ===
-            elif msg_type == "register_ack":
-                status = msg.get("status")
-                message = msg.get("message")
-                logger.info(f"[注册结果] {status}: {message}")
-
-            # === 任务状态响应 ===
-            elif msg_type == "status_update_ack":
-                status = msg.get("status")
-                message = msg.get("message")
-                task_id = msg.get("task_id")
-                logger.info(f"[任务状态更新] 任务ID: {task_id}, 动作: {message}")
-
-            # === 任务处理 ===
-            elif msg_type == "task":
+        # === 心跳线程 ===
+        def heartbeat_loop():
+            nonlocal last_heartbeat_send_time, connection_alive
+            while connection_alive and s:
+                time.sleep(HEARTBEAT_INTERVAL_SEC)
                 try:
+                    hb_msg = {"type": "heartbeat"}
+                    json_protocol.send_json(s, hb_msg)
+                    last_heartbeat_send_time = time.time()
+                    logger.debug("[节点] 发送心跳")
+                except Exception as e:
+                    logger.error(f"[心跳线程] 发送心跳异常: {e}")
+                    connection_alive = False
+                    break
+
+        heartbeat_thread = threading.Thread(target=heartbeat_loop, daemon=True)
+        heartbeat_thread.start()
+
+        # === 主接收循环 ====
+        while connection_alive and s:
+            # === 心跳超时检测 ===
+            current_time = time.time()
+
+            # 修正的超时检测逻辑：只在发送心跳后未收到响应时才计时
+            if last_heartbeat_send_time > 0 and last_heartbeat_response_time == 0:
+                # 已经发送心跳但未收到响应
+                time_since_last_send = current_time - last_heartbeat_send_time
+                if time_since_last_send > HEARTBEAT_RESPONSE_TIMEOUT_SEC:
+                    if heartbeat_missed_count < HEARTBEAT_MISS_LIMIT:
+                        heartbeat_missed_count += 1
+                        logger.warning(
+                            f"[节点] ⚠️ 心跳响应超时！({heartbeat_missed_count}/{HEARTBEAT_MISS_LIMIT}) "
+                            f"上次发送: {time_since_last_send:.1f}s 前"
+                        )
+                    if heartbeat_missed_count >= HEARTBEAT_MISS_LIMIT:
+                        logger.error(
+                            f"[节点] ❗ 心跳连续丢失 {heartbeat_missed_count} 次，超过最大限制，准备断开并重连..."
+                        )
+                        connection_alive = False  # 标记连接失效
+                        break  # 跳出主循环，触发重连逻辑
+
+            # === 接收消息 ===
+            try:
+                # 设置接收超时，避免永久阻塞
+                s.settimeout(1.0)  # 1秒超时
+                msg = json_protocol.recv_json(s)
+                s.settimeout(None)  # 恢复阻塞模式
+
+                if msg is None:
+                    # 检查是否因为超时导致的None，如果是则继续循环
+                    continue
+
+                msg_type = msg.get("type")
+                logger.info(f"[节点] 收到消息类型: {msg_type}")
+
+                # === 心跳响应处理 ====
+                if msg_type == "heartbeat_ack":
+                    logger.info(f"[节点] 收到心跳响应: {msg.get('message', '')}")
+                    heartbeat_missed_count = 0  # 重置丢失计数
+                    last_heartbeat_response_time = time.time()  # 记录响应时间
+                    last_heartbeat_send_time = 0  # 重置发送时间，准备下一次发送
+
+                # === 注册响应 ===
+                elif msg_type == "register_ack":
+                    status = msg.get("status")
+                    message = msg.get("message")
+                    logger.info(f"[注册结果] {status}: {message}")
+
+                # === 任务状态响应 ===
+                elif msg_type == "status_update_ack":
+                    status = msg.get("status")
+                    message = msg.get("message")
                     task_id = msg.get("task_id")
-                    image_filename = msg.get("image_filename")
-                    image_size = msg.get("image_size")
-                    image_data_b64 = msg.get("image_data")
-                    timestamp = msg.get("timestamp")
+                    logger.info(f"[任务状态更新] 任务ID: {task_id}, 动作: {message}")
 
-                    if not all([task_id, image_filename, image_data_b64]):
-                        logger.warning("[节点] 任务数据不完整")
-                        continue
-
-                    logger.info(
-                        f"[节点] 收到带图片任务: {task_id}, 文件名: {image_filename}, "
-                        f"大小: {image_size} 字节, 时间戳: {timestamp}"
-                    )
-
-                    # 节点开始处理任务时
-                    status_update_increment = {
-                        "type": "task_status_update",
-                        "action": "increment",
-                        "task_id": task_id,
-                    }
-                    status_update_decrement = {
-                        "type": "task_status_update",
-                        "action": "decrement",
-                        "task_id": task_id,
-                    }
-                    json_protocol.send_json(s, status_update_increment)
-
-                    # 解码 base64 图片数据
+                # === 任务处理 ===
+                elif msg_type == "task":
                     try:
-                        import base64
+                        task_id = msg.get("task_id")
+                        image_filename = msg.get("image_filename")
+                        image_size = msg.get("image_size")
+                        image_data_b64 = msg.get("image_data")
+                        timestamp = msg.get("timestamp")
 
-                        image_bytes = base64.b64decode(image_data_b64)
+                        if not all([task_id, image_filename, image_data_b64]):
+                            logger.warning("[节点] 任务数据不完整")
+                            continue
 
-                        # 验证解码后的大小
-                        if len(image_bytes) != image_size:
-                            logger.warning(
-                                f"[节点] 图片大小不匹配: 期望={image_size}, 实际={len(image_bytes)}"
-                            )
+                        logger.info(
+                            f"[节点] 收到带图片任务: {task_id}, 文件名: {image_filename}, "
+                            f"大小: {image_size} 字节, 时间戳: {timestamp}"
+                        )
 
-                        # 保存图片
-                        os.makedirs(IMAGE_PATH, exist_ok=True)
-                        local_image_path = os.path.join(IMAGE_PATH, image_filename)
-                        with open(local_image_path, "wb") as f:
-                            f.write(image_bytes)
-                        logger.info(f"[节点] 图片已保存到: {local_image_path}")
-
-                        # 推理
-                        result = predict_image(local_image_path)
-
-                        # 返回结果
-                        response_msg = {
-                            "type": "task_result",
-                            "node_id": NODE_ID,
+                        # 节点开始处理任务时
+                        status_update_increment = {
+                            "type": "task_status_update",
+                            "action": "increment",
                             "task_id": task_id,
-                            "result": result,
-                            "processed_image_path": local_image_path,
                         }
-                        json_protocol.send_json(s, response_msg)
-                        logger.info(f"[节点] 已返回任务 {task_id} 的推理结果")
+                        status_update_decrement = {
+                            "type": "task_status_update",
+                            "action": "decrement",
+                            "task_id": task_id,
+                        }
+                        json_protocol.send_json(s, status_update_increment)
 
-                    except Exception as decode_error:
-                        logger.error(f"[节点] 图片数据解码失败: {decode_error}")
+                        # 解码 base64 图片数据
+                        try:
+                            import base64
+
+                            image_bytes = base64.b64decode(image_data_b64)
+
+                            # 验证解码后的大小
+                            if len(image_bytes) != image_size:
+                                logger.warning(
+                                    f"[节点] 图片大小不匹配: 期望={image_size}, 实际={len(image_bytes)}"
+                                )
+
+                            # 保存图片
+                            os.makedirs(IMAGE_PATH, exist_ok=True)
+                            local_image_path = os.path.join(IMAGE_PATH, image_filename)
+                            with open(local_image_path, "wb") as f:
+                                f.write(image_bytes)
+                            logger.info(f"[节点] 图片已保存到: {local_image_path}")
+
+                            # 推理
+                            result = predict_image(local_image_path)
+
+                            # 返回结果
+                            response_msg = {
+                                "type": "task_result",
+                                "node_id": NODE_ID,
+                                "task_id": task_id,
+                                "result": result,
+                                "processed_image_path": local_image_path,
+                            }
+                            json_protocol.send_json(s, response_msg)
+                            logger.info(f"[节点] 已返回任务 {task_id} 的推理结果")
+
+                        except Exception as decode_error:
+                            logger.error(f"[节点] 图片数据解码失败: {decode_error}")
+                            error_msg = {
+                                "type": "task_result",
+                                "node_id": NODE_ID,
+                                "task_id": task_id,
+                                "result": None,
+                                "error": f"图片数据解码失败: {decode_error}",
+                            }
+                            json_protocol.send_json(s, error_msg)
+
+                        # 节点完成任务
+                        json_protocol.send_json(s, status_update_decrement)
+
+                    except Exception as e:
+                        logger.error(f"[节点] 处理带图片任务出错: {e}")
                         error_msg = {
                             "type": "task_result",
                             "node_id": NODE_ID,
-                            "task_id": task_id,
+                            "task_id": "unknown",
                             "result": None,
-                            "error": f"图片数据解码失败: {decode_error}",
+                            "error": f"处理任务出错: {e}",
                         }
                         json_protocol.send_json(s, error_msg)
 
-                    # 节点完成任务
-                    json_protocol.send_json(s, status_update_decrement)
+                        # 节点完成任务
+                        json_protocol.send_json(s, status_update_decrement)
 
-                except Exception as e:
-                    logger.error(f"[节点] 处理带图片任务出错: {e}")
-                    error_msg = {
-                        "type": "task_result",
-                        "node_id": NODE_ID,
-                        "task_id": "unknown",
-                        "result": None,
-                        "error": f"处理任务出错: {e}",
-                    }
-                    json_protocol.send_json(s, error_msg)
+                # === 其它消息 ===
+                elif msg_type in ["msg", "error"]:
+                    status = msg.get("status")
+                    message = msg.get("message")
+                    logger.info(f"[节点] 服务端消息: {status} - {message}")
 
-                    # 节点完成任务
-                    json_protocol.send_json(s, status_update_decrement)
+                else:
+                    logger.warning(f"[节点] 未知消息类型: {msg_type}")
 
-            # === 其它消息 ===
-            elif msg_type in ["msg", "error"]:
-                status = msg.get("status")
-                message = msg.get("message")
-                logger.info(f"[节点] 服务端消息: {status} - {message}")
+            except socket.timeout:
+                # 接收超时是正常的，继续循环检查其他条件
+                continue
+            except Exception as e:
+                logger.error(f"[节点] 主循环异常: {e}")
+                connection_alive = False
+                break
 
-            else:
-                logger.warning(f"[节点] 未知消息类型: {msg_type}")
+        # === 连接异常处理 ===
+        logger.info("[节点] 连接异常，准备重连...")
+        if s:
+            try:
+                s.close()
+            except:
+                pass
+            s = None
 
-        except socket.timeout:
-            # 接收超时是正常的，继续循环检查其他条件
-            continue
-        except Exception as e:
-            logger.error(f"[节点] 主循环异常: {e}")
-            connection_alive = False
-            break
+        # 修改5：增加重连延迟和最大尝试次数
+        reconnect_attempts += 1
+        if reconnect_attempts > 5:  # 最多尝试5次
+            logger.error("[节点] 重连尝试次数过多，退出程序")
+            return
 
-    # === 连接异常或心跳超时，断开并尝试重连 ===
-    logger.info("[节点] 当前连接异常或心跳超时，尝试重新连接...")
-    if s:
-        try:
-            s.close()
-        except:
-            pass
-    s = None
-    connection_alive = True  # 重置连接状态
-    heartbeat_missed_count = 0
-    last_heartbeat_send_time = 0
-    last_heartbeat_response_time = 0
+        time.sleep(RECONNECT_DELAY_SEC)
+        connection_alive = True  # 重置连接状态
+        heartbeat_missed_count = 0
+        last_heartbeat_send_time = 0
+        last_heartbeat_response_time = 0
 
-    time.sleep(RECONNECT_DELAY_SEC)
+        # === 连接异常或心跳超时，断开并尝试重连 ===
+        logger.info("[节点] 当前连接异常或心跳超时，尝试重新连接...")
+        if s:
+            try:
+                s.close()
+            except:
+                pass
+        s = None
 
-    while True:
-        try:
-            logger.info("[节点] 尝试重新连接服务器...")
-            if connect_and_register():
-                logger.info("[节点] 重连成功，继续运行...")
-                # 递归调用自己来重启服务
-                start_node_service()
-                break  # 如果递归返回，说明服务结束
-            else:
-                logger.warning(f"[节点] 重连失败，{RECONNECT_DELAY_SEC} 秒后重试...")
+        while True:
+            try:
+                logger.info("[节点] 尝试重新连接服务器...")
+                if connect_and_register():
+                    logger.info("[节点] 重连成功，继续运行...")
+                    # 递归调用自己来重启服务
+                    start_node_service()
+                    break  # 如果递归返回，说明服务结束
+                else:
+                    logger.warning(
+                        f"[节点] 重连失败，{RECONNECT_DELAY_SEC} 秒后重试..."
+                    )
+                    time.sleep(RECONNECT_DELAY_SEC)
+            except Exception as e:
+                logger.error(f"[节点] 重连异常: {e}，{RECONNECT_DELAY_SEC} 秒后重试...")
                 time.sleep(RECONNECT_DELAY_SEC)
-        except Exception as e:
-            logger.error(f"[节点] 重连异常: {e}，{RECONNECT_DELAY_SEC} 秒后重试...")
-            time.sleep(RECONNECT_DELAY_SEC)
 
 
 # # ======================

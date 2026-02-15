@@ -1,16 +1,7 @@
 # main.py
-import torch
-import torch.nn as nn
-import torch.optim as optim
-from torch.utils.data import DataLoader
-from torchvision import datasets, transforms, models
-from torchvision.models import resnet18
 from PIL import Image, ImageFile
-import os
 import sys
 import logging
-import hashlib
-from typing import List, Optional, Tuple, Dict, Any
 import argparse
 
 # 设置日志
@@ -23,9 +14,6 @@ logger = logging.getLogger(__name__)
 
 # 允许PIL加载截断的图像文件，增强健壮性
 ImageFile.LOAD_TRUNCATED_IMAGES = True
-
-# 导入配置
-from config import *
 
 # 导入各个模块
 from training.trainer import train_model

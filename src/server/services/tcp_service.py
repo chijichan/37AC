@@ -75,7 +75,7 @@ class MessageTypeProcessor:
         # 为每个消息类型创建独立的线程池
         self.processors = {
             "register": ThreadPoolExecutor(max_workers=3),
-            "heartbeat": ThreadPoolExecutor(max_workers=10),  # 心跳可以并发高一些
+            "heartbeat": ThreadPoolExecutor(max_workers=15),
             "task_status_update": ThreadPoolExecutor(max_workers=5),
             "task_result": ThreadPoolExecutor(max_workers=5),
             "default": ThreadPoolExecutor(max_workers=3),
@@ -583,7 +583,7 @@ def async_handle_register(conn, addr, msg):
                 register_ack = {
                     "type": "register_ack",
                     "status": "success",
-                    "message": "节点已注册",
+                    "message": f"节点已注册，最大任务数: {node_manager.get_node_max_tasks(node_id)}",
                     "max_tasks": max_tasks,
                 }
                 json_protocol.send_json(conn, register_ack)
@@ -774,7 +774,7 @@ def dispatch_task(image_path: str, image_data, task_id: str):
         MAX_IMAGE_SIZE = 1024 * 1024 * 10  # 10MB
         if len(image_bytes) > MAX_IMAGE_SIZE:
             logger.error(
-                f"[dispatch_task] 图片过大: {len(image_bytes)} 字节，超过1MB限制"
+                f"[dispatch_task] 图片过大: {len(image_bytes)} 字节，超过10MB限制"
             )
             node_manager.set_node_idle(node_id)
             return {"status": "failed", "task_id": task_id, "error": "图片文件过大"}

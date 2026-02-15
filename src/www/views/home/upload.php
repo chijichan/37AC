@@ -23,7 +23,16 @@ require_once ROOT_PATH . '/views/layout.php';
 
     <!-- 裁剪区域 -->
     <div id="cropContainer" class="crop-container">
-        <div class="crop-layout">
+        <!-- 新增导航栏 -->
+        <div class="crop-navigation">
+            <div class="nav-tabs">
+                <button class="nav-tab active" data-mode="crop">裁剪模式</button>
+                <button class="nav-tab" data-mode="remove-bg">去除背景</button>
+            </div>
+        </div>
+
+        <!-- 裁剪布局 -->
+        <div id="cropLayout" class="crop-layout">
             <div class="crop-main">
                 <h3>调整选框以精确框选角色</h3>
                 <div class="image-wrapper">
@@ -35,6 +44,34 @@ require_once ROOT_PATH . '/views/layout.php';
                 <h3>预览效果</h3>
                 <div id="cropPreview" class="preview-box"></div>
                 <p class="preview-hint">实时预览裁剪结果</p>
+            </div>
+        </div>
+
+        <!-- 背景去除布局 -->
+        <div id="removeBgLayout" class="remove-bg-layout" style="display: none;">
+            <div class="remove-bg-main">
+                <h3>去除图片背景</h3>
+                <div class="remove-bg-content">
+                    <div class="single-image-container">
+                        <div class="image-box">
+                            <h4 id="imageTitle">原图</h4>
+                            <div class="image-wrapper">
+                                <img id="mainImage" src="#" alt="处理后图片" class="bg-image" />
+                                <div class="image-placeholder" id="imagePlaceholder">
+                                    <p>请先上传图片，然后点击"开始去除背景"</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="remove-bg-controls">
+                        <button id="removeBgBtn" class="btn btn-primary">开始去除背景</button>
+                        <div class="progress" id="progressContainer" style="display: none;">
+                            <div class="progress-bar" id="progressBar"></div>
+                        </div>
+                        <p class="processing-hint">首次使用需要下载AI模型，请耐心等待</p>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -136,6 +173,40 @@ require_once ROOT_PATH . '/views/layout.php';
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     }
 
+    /* 新增导航栏样式 */
+    .crop-navigation {
+        margin-bottom: 20px;
+        border-bottom: 1px solid #e9ecef;
+    }
+
+    .nav-tabs {
+        display: flex;
+        gap: 0;
+    }
+
+    .nav-tab {
+        padding: 12px 24px;
+        border: none;
+        background: none;
+        cursor: pointer;
+        font-size: 16px;
+        font-weight: 500;
+        color: #6c757d;
+        border-bottom: 2px solid transparent;
+        transition: all 0.3s ease;
+    }
+
+    .nav-tab:hover {
+        color: #007bff;
+        background-color: #f8f9fa;
+    }
+
+    .nav-tab.active {
+        color: #007bff;
+        border-bottom-color: #007bff;
+        background-color: #fff;
+    }
+
     .crop-layout {
         display: grid;
         grid-template-columns: 1fr auto;
@@ -155,12 +226,28 @@ require_once ROOT_PATH . '/views/layout.php';
         border-radius: 8px;
         overflow: hidden;
         max-width: 500px;
+        position: relative;
+        min-height: 200px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: #f8f9fa;
     }
 
     .crop-image {
         max-width: 100%;
+        max-height: 400px;
         height: auto;
         display: block;
+    }
+
+    .bg-image {
+        max-width: 100%;
+        max-height: 400px;
+        width: auto;
+        height: auto;
+        display: block;
+        object-fit: contain;
     }
 
     .preview-box {
@@ -176,6 +263,80 @@ require_once ROOT_PATH . '/views/layout.php';
         font-size: 12px;
         color: #6c757d;
         margin-top: 8px;
+    }
+
+    /* 背景去除布局样式 */
+    .remove-bg-layout {
+        width: 100%;
+    }
+
+    .remove-bg-main h3 {
+        margin-bottom: 20px;
+        color: #343a40;
+        font-size: 18px;
+    }
+
+    .remove-bg-content {
+        width: 100%;
+    }
+
+    .single-image-container {
+        width: 100%;
+        margin-bottom: 20px;
+    }
+
+    .image-box {
+        text-align: center;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .image-box h4 {
+        margin-bottom: 10px;
+        color: #495057;
+        font-size: 16px;
+        font-weight: 500;
+    }
+
+    .image-placeholder {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 200px;
+        color: #6c757d;
+        font-size: 14px;
+        text-align: center;
+        padding: 20px;
+    }
+
+    .remove-bg-controls {
+        text-align: center;
+        margin-top: 20px;
+    }
+
+    .progress {
+        width: 100%;
+        height: 20px;
+        background-color: #f0f0f0;
+        border-radius: 10px;
+        margin: 15px 0;
+        display: none;
+    }
+
+    .progress-bar {
+        height: 100%;
+        background-color: #007bff;
+        border-radius: 10px;
+        width: 0%;
+        transition: width 0.3s ease;
+    }
+
+    .processing-hint {
+        font-size: 12px;
+        color: #6c757d;
+        margin-top: 10px;
+        font-style: italic;
     }
 
     .crop-controls {
@@ -237,10 +398,6 @@ require_once ROOT_PATH . '/views/layout.php';
     .spinner {
         width: 40px;
         height: 40px;
-        /* border: 4px solid #f3f3f3;
-        border-top: 4px solid #007bff;
-        border-radius: 50%; */
-        /* animation: spin 1s linear infinite; */
         margin: 0 auto 16px;
     }
 
@@ -298,27 +455,63 @@ require_once ROOT_PATH . '/views/layout.php';
         .btn {
             width: 100%;
         }
+
+        .nav-tabs {
+            flex-direction: column;
+        }
+
+        .nav-tab {
+            text-align: left;
+            border-bottom: 1px solid #e9ecef;
+            border-right: none;
+        }
+
+        .nav-tab.active {
+            border-bottom-color: #e9ecef;
+            border-left: 3px solid #007bff;
+        }
+
+        .image-wrapper {
+            min-height: 150px;
+        }
+
+        .bg-image {
+            max-height: 300px;
+        }
     }
 </style>
 
-<script>
+<script type="module">
+    import {
+        removeBackground
+    } from 'https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.7.0/+esm';
+
     class AnimeDetector {
         constructor() {
             this.elements = {
                 fileInput: document.getElementById('fileInput'),
                 imagePreview: document.getElementById('imagePreview'),
+                mainImage: document.getElementById('mainImage'),
                 cropContainer: document.getElementById('cropContainer'),
+                cropLayout: document.getElementById('cropLayout'),
+                removeBgLayout: document.getElementById('removeBgLayout'),
                 cropPreview: document.getElementById('cropPreview'),
                 confirmCropBtn: document.getElementById('confirmCropBtn'),
                 cancelCropBtn: document.getElementById('cancelCropBtn'),
+                removeBgBtn: document.getElementById('removeBgBtn'),
                 loadingSpinner: document.getElementById('loadingSpinner'),
-                resultDiv: document.getElementById('result')
+                resultDiv: document.getElementById('result'),
+                progressContainer: document.getElementById('progressContainer'),
+                progressBar: document.getElementById('progressBar'),
+                imagePlaceholder: document.getElementById('imagePlaceholder'),
+                imageTitle: document.getElementById('imageTitle')
             };
 
             this.state = {
                 cropper: null,
                 originalFile: null,
-                isUploading: false
+                isUploading: false,
+                currentMode: 'crop' // 'crop' or 'remove-bg'
             };
 
             this.initEventListeners();
@@ -329,6 +522,13 @@ require_once ROOT_PATH . '/views/layout.php';
                 this.handleFileSelect(event);
             });
 
+            // 导航标签切换
+            document.querySelectorAll('.nav-tab').forEach(tab => {
+                tab.addEventListener('click', (e) => {
+                    this.switchMode(e.target.dataset.mode);
+                });
+            });
+
             // 裁剪相关按钮
             this.elements.confirmCropBtn.addEventListener('click', () => {
                 this.handleCropConfirm();
@@ -337,9 +537,14 @@ require_once ROOT_PATH . '/views/layout.php';
                 this.handleCropCancel();
             });
 
+            // 背景去除按钮
+            this.elements.removeBgBtn.addEventListener('click', () => {
+                this.handleRemoveBackground();
+            });
+
             const uploadSection = document.querySelector('.upload-section');
 
-            // 阻止默认拖放行为（非常重要！）
+            // 阻止默认拖放行为
             ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
                 uploadSection.addEventListener(eventName, this.preventDefaults, false);
             });
@@ -374,13 +579,12 @@ require_once ROOT_PATH . '/views/layout.php';
             e.stopPropagation();
         }
 
-        // 检查是否为有效的图片文件（仅允许 jpg、jpeg、png，且不超过 10MB）
+        // 检查是否为有效的图片文件
         isValidImageFile(file) {
             if (!file) {
                 return false;
             }
 
-            // 只允许以下 MIME 类型
             const allowedMimeTypes = ['image/jpeg', 'image/jpg', 'image/png'];
             const isAllowedType = allowedMimeTypes.includes(file.type);
 
@@ -388,7 +592,6 @@ require_once ROOT_PATH . '/views/layout.php';
                 return false;
             }
 
-            // 文件大小限制：10MB
             const maxSize = 10 * 1024 * 1024; // 10MB
             const isWithinSizeLimit = file.size <= maxSize;
 
@@ -396,8 +599,38 @@ require_once ROOT_PATH . '/views/layout.php';
                 return false;
             }
 
-            // 所有校验通过
             return true;
+        }
+
+        switchMode(mode) {
+            this.state.currentMode = mode;
+
+            // 更新导航标签状态
+            document.querySelectorAll('.nav-tab').forEach(tab => {
+                tab.classList.toggle('active', tab.dataset.mode === mode);
+            });
+
+            // 切换布局
+            if (mode === 'crop') {
+                this.elements.cropLayout.style.display = 'grid';
+                this.elements.removeBgLayout.style.display = 'none';
+                this.elements.confirmCropBtn.textContent = '确认识别';
+                this.elements.confirmCropBtn.style.display = 'inline-block';
+            } else if (mode === 'remove-bg') {
+                this.elements.cropLayout.style.display = 'none';
+                this.elements.removeBgLayout.style.display = 'block';
+                this.elements.confirmCropBtn.textContent = '使用去背景图片识别';
+                this.elements.confirmCropBtn.style.display = 'inline-block';
+            }
+
+            // 如果已有图片，重新初始化对应模式的界面
+            if (this.state.originalFile) {
+                if (mode === 'crop') {
+                    this.initCropper();
+                } else if (mode === 'remove-bg') {
+                    this.setupRemoveBgView();
+                }
+            }
         }
 
         handleDroppedFile(file) {
@@ -410,7 +643,7 @@ require_once ROOT_PATH . '/views/layout.php';
             }
 
             this.state.originalFile = file;
-            this.loadImageForCropping(file);
+            this.loadImageForProcessing(file);
         }
 
         handleFileSelect(event) {
@@ -421,16 +654,32 @@ require_once ROOT_PATH . '/views/layout.php';
             }
 
             this.state.originalFile = file;
-            this.loadImageForCropping(file);
+            this.loadImageForProcessing(file);
         }
 
-        loadImageForCropping(file) {
+        loadImageForProcessing(file) {
             const reader = new FileReader();
 
             reader.onload = (e) => {
-                this.elements.imagePreview.src = e.target.result;
+                const imageUrl = e.target.result;
+
+                if (this.state.currentMode === 'crop') {
+                    this.elements.imagePreview.src = imageUrl;
+                    this.elements.mainImage.src = imageUrl;
+                } else if (this.state.currentMode === 'remove-bg') {
+                    this.elements.mainImage.src = imageUrl;
+                    this.elements.imageTitle.textContent = '原图';
+                    this.elements.imagePlaceholder.style.display = 'none';
+                }
+
                 this.showCropInterface();
-                this.initCropper();
+
+                // 根据当前模式初始化对应界面
+                if (this.state.currentMode === 'crop') {
+                    this.initCropper();
+                } else if (this.state.currentMode === 'remove-bg') {
+                    this.setupRemoveBgView();
+                }
             };
 
             reader.onerror = () => {
@@ -438,6 +687,14 @@ require_once ROOT_PATH . '/views/layout.php';
             };
 
             reader.readAsDataURL(file);
+        }
+
+        setupRemoveBgView() {
+            // 重置去背景界面的状态
+            this.elements.imageTitle.textContent = '原图';
+            this.elements.imagePlaceholder.style.display = this.elements.mainImage.src && this.elements.mainImage.src !== '#' ? 'none' : 'flex';
+            this.elements.progressContainer.style.display = 'none';
+            this.elements.removeBgBtn.disabled = !this.state.originalFile;
         }
 
         showCropInterface() {
@@ -451,7 +708,17 @@ require_once ROOT_PATH . '/views/layout.php';
                 this.state.cropper.destroy();
             }
 
-            // 初始化新的Cropper实例[6](@ref)
+            // 确保图片已加载完成
+            if (this.elements.imagePreview.complete) {
+                this.initializeCropperInstance();
+            } else {
+                this.elements.imagePreview.onload = () => {
+                    this.initializeCropperInstance();
+                };
+            }
+        }
+
+        initializeCropperInstance() {
             this.state.cropper = new Cropper(this.elements.imagePreview, {
                 aspectRatio: NaN,
                 viewMode: 1,
@@ -467,19 +734,88 @@ require_once ROOT_PATH . '/views/layout.php';
             });
         }
 
-        async handleCropConfirm() {
-            if (!this.state.cropper || this.state.isUploading) {
+        async handleRemoveBackground() {
+            if (!this.state.originalFile || this.state.isUploading) {
                 return;
             }
 
             try {
                 this.setLoadingState(true);
-                const croppedCanvas = this.state.cropper.getCroppedCanvas();
-                const blob = await this.canvasToBlob(croppedCanvas);
+                this.elements.removeBgBtn.disabled = true;
+                this.elements.progressContainer.style.display = 'block';
+                this.elements.progressBar.style.width = '0%';
+                this.elements.imagePlaceholder.style.display = 'none';
+
+                const config = {
+                    device: 'gpu',
+                    model: 'large',
+                    output: {
+                        format: 'image/png',
+                        quality: 0.8
+                    },
+                    progress: (key, current, total) => {
+                        const progress = (current / total) * 100;
+                        this.elements.progressBar.style.width = `${progress}%`;
+                        console.log(`下载进度 ${key}: ${current} / ${total}`);
+                    }
+                };
+
+                const blob = await removeBackground(this.state.originalFile, config);
+                const url = URL.createObjectURL(blob);
+
+                // 直接替换主图片的src为去背景后的图片
+                this.elements.mainImage.src = url;
+                this.elements.imageTitle.textContent = '去背景结果';
+                this.elements.progressContainer.style.display = 'none';
+                this.elements.removeBgBtn.disabled = false;
+
+            } catch (error) {
+                console.error('背景去除失败:', error);
+                this.showError('背景去除失败，请重试或更换图片');
+                this.elements.removeBgBtn.disabled = false;
+                this.elements.progressContainer.style.display = 'none';
+                this.elements.imagePlaceholder.style.display = this.elements.mainImage.src && this.elements.mainImage.src !== '#' ? 'none' : 'flex';
+            } finally {
+                this.setLoadingState(false);
+            }
+        }
+
+        async handleCropConfirm() {
+            if (this.state.isUploading) {
+                return;
+            }
+
+            try {
+                this.setLoadingState(true);
+
+                let blob;
+
+                if (this.state.currentMode === 'crop') {
+                    if (!this.state.cropper) {
+                        throw new Error('请先选择图片');
+                    }
+                    const croppedCanvas = this.state.cropper.getCroppedCanvas();
+                    blob = await this.canvasToBlob(croppedCanvas);
+                } else if (this.state.currentMode === 'remove-bg') {
+                    // 从去背景结果获取图片
+                    if (!this.elements.mainImage.src || this.elements.mainImage.src === '#') {
+                        throw new Error('请先进行背景去除');
+                    }
+
+                    // 检查是否是去背景结果（通过标题判断）
+                    if (this.elements.imageTitle.textContent !== '去背景结果') {
+                        throw new Error('请先进行背景去除处理');
+                    }
+
+                    // 将结果显示图片转换为blob
+                    const response = await fetch(this.elements.mainImage.src);
+                    blob = await response.blob();
+                }
+
                 await this.uploadImage(blob);
 
             } catch (error) {
-                this.showError(`裁剪处理失败: ${error.message}`);
+                this.showError(`${this.state.currentMode === 'crop' ? '裁剪' : '处理'}失败: ${error.message}`);
             } finally {
                 this.setLoadingState(false);
             }
@@ -498,39 +834,21 @@ require_once ROOT_PATH . '/views/layout.php';
             this.elements.fileInput.value = '';
         }
 
-        async handleUpload() {
-            if (this.state.isUploading) {
-                return;
-            }
-
-            if (!this.state.originalFile) {
-                this.showError('请先选择图片文件');
-                return;
-            }
-
-            try {
-                this.setLoadingState(true);
-                await this.uploadImage(this.state.originalFile);
-
-            } catch (error) {
-                this.showError(`上传失败: ${error.message}`);
-            } finally {
-                this.setLoadingState(false);
-            }
-        }
-
         async uploadImage(blob) {
             this.state.isUploading = true;
             this.elements.confirmCropBtn.disabled = true;
 
             const formData = new FormData();
-            const file = new File([blob], `cropped_${this.state.originalFile.name}`, {
+            const fileName = this.state.currentMode === 'remove-bg' ?
+                `no_bg_${this.state.originalFile.name}` :
+                `cropped_${this.state.originalFile.name}`;
+
+            const file = new File([blob], fileName, {
                 type: blob.type
             });
             formData.append('file', file);
 
             try {
-                // const response = await fetch('https://api.322337.xyz/upload', {
                 const response = await fetch('http://127.0.0.1:13138/upload', {
                     method: 'POST',
                     body: formData,
@@ -545,17 +863,9 @@ require_once ROOT_PATH . '/views/layout.php';
 
                 const data = await response.json();
 
-                // 假设后端返回格式为：
-                // {
-                //   "status": "queued",
-                //   "task_id": "6093950a-4dab-4289-96ad-ed6eb901700c"
-                // }
                 if (data.status === 'queued' && data.task_id) {
-                    const task_id = data.task_id;
-                    // this.showLoadingResult(); // 可选：显示“推理中...”
-                    await this.pollTaskResult(task_id); // 开始轮询任务结果
+                    await this.pollTaskResult(data.task_id);
                 } else {
-                    // 后端返回了错误或未知格式
                     throw new Error(data.error || '上传成功，但未返回任务ID');
                 }
 
@@ -564,22 +874,8 @@ require_once ROOT_PATH . '/views/layout.php';
             }
         }
 
-        handleResponse(data) {
-            if (data.error) {
-                this.showError(data.error);
-                return;
-            }
-
-            if (data.success) {
-                this.showResult(data);
-                return;
-            }
-
-            this.showError('未知响应格式');
-        }
-
         async pollTaskResult(task_id) {
-            const maxAttempts = 30; // 最多轮询 30 次（约 1 分钟，假设每 2 秒一次）
+            const maxAttempts = 15;
             let attempt = 0;
 
             const poll = async () => {
@@ -593,19 +889,16 @@ require_once ROOT_PATH . '/views/layout.php';
                     const data = await response.json();
 
                     if (data.status === 'completed') {
-                        // this.hideLoadingResult(); // 隐藏“推理中”提示（如有）
-                        this.showResult(data); // 展示结果
+                        this.showResult(data);
                         return;
                     } else if (data.status === 'pending') {
-                        // 结果还未返回，继续轮询
                         if (attempt < maxAttempts) {
-                            await new Promise(resolve => setTimeout(resolve, 2000)); // 等待 2 秒
-                            await poll(); // 递归调用自身
+                            await new Promise(resolve => setTimeout(resolve, 2000));
+                            await poll();
                         } else {
                             throw new Error('推理超时，请稍后再试');
                         }
                     } else {
-                        // 其它错误状态
                         throw new Error(data.message || '获取结果失败');
                     }
                 } catch (error) {
@@ -613,21 +906,20 @@ require_once ROOT_PATH . '/views/layout.php';
                         await new Promise(resolve => setTimeout(resolve, 2000));
                         await poll();
                     } else {
-                        // this.hideLoadingResult();
                         this.showError(error.message || '获取推理结果失败，请稍后重试');
                     }
                 }
             };
 
             await new Promise(resolve => setTimeout(resolve, 2000));
-            await poll(); // 开始轮询
+            await poll();
         }
 
         showResult(data) {
             const html = `
             <div class="result-content">
                 <h3>识别结果: ${data.result.label.split("/")[1]}</h3>
-                <a href="https://zh.moegirl.org.cn/index.php?title=${data.result.label.split("/")[1]}" Target="_blank"“">${data.result.label.split("/")[1]} - 萌娘百科</a>
+                <a href="https://zh.moegirl.org.cn/index.php?title=${data.result.label.split("/")[1]}" Target="_blank">${data.result.label.split("/")[1]} - 萌娘百科</a>
                 <p class="confidence"><strong>置信度:</strong> ${data.result.confidence}%</p>
                 
                 <div class="probability-list">
@@ -679,6 +971,7 @@ require_once ROOT_PATH . '/views/layout.php';
 
             this.elements.cropContainer.style.display = 'none';
             this.elements.imagePreview.src = '#';
+            this.elements.mainImage.src = '#';
             this.hideResult();
 
             this.state.originalFile = null;

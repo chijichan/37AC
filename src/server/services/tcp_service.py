@@ -1,5 +1,6 @@
 ﻿# services/tcp_service.py
 
+import os
 import socket
 import threading
 import logging
@@ -8,12 +9,10 @@ import time
 from datetime import datetime
 import pymysql
 from pymysql import Error
-from config import *
+from config import TSAC_DEBUG, DB_CONFIG, LOGS_PATH, TCP_PORT
 import struct
 from concurrent.futures import ThreadPoolExecutor
 from queue import Queue
-
-# import asyncio
 
 # =============================================
 # 日志配置
@@ -398,100 +397,100 @@ def get_db_connection():
         return None
 
 
-# 自定义消息头长度前缀协议
-def send_json(sock, msg_dict, header="server"):
-    """
-    发送一条 JSON 消息到 socket，使用自定义消息头的长度前缀协议
-    格式: <消息头>@<内容长度><JSON内容>
+class JsonProtocol:
+    """JSON 消息发送和接收类，使用自定义消息头长度前缀协议"""
 
-    Args:
-        sock: socket对象
-        msg_dict: 要发送的字典数据
-        header: 消息头标识，默认为"server"
-    """
-    try:
-        json_str = json.dumps(msg_dict)
-        json_bytes = json_str.encode("utf-8")
+    def __init__(self):
+        self.send_header = "server"
+        self.expected_headers = ["node"]  # 在初始化时设置默认值
 
-        # 计算总长度（消息头 + @ + 数字长度 + 实际内容长度）
-        content_length = len(json_bytes)
-        header_str = f"{header}@{content_length}"
-        header_bytes = header_str.encode("utf-8")
+    def send_json(self, sock, msg_dict):
+        """发送一条 JSON 消息到 socket"""
+        try:
+            json_str = json.dumps(msg_dict)
+            json_bytes = json_str.encode("utf-8")
 
-        # 组合发送：header + json_bytes
-        full_message = header_bytes + json_bytes
-        sock.sendall(full_message)
+            content_length = len(json_bytes)
+            header_str = f"{self.send_header}@{content_length}"
+            header_bytes = header_str.encode("utf-8")
 
-        logger.debug(
-            f"[send_json] 发送成功: 头部='{header_str}', 内容长度={content_length}"
-        )
+            full_message = header_bytes + json_bytes
+            sock.sendall(full_message)
 
-    except Exception as e:
-        logger.error(f"[send_json] 发送失败: {e}")
-        raise
+            logger.debug(
+                f"[send_json] 发送成功: 头部='{header_str}', 内容长度={content_length}"
+            )
 
+        except Exception as e:
+            logger.error(f"[send_json] 发送失败: {e}")
+            raise
 
-def recv_json(sock, expected_headers=["node"]):
-    """
-    从 socket 接收一条完整的 JSON 消息（自定义消息头长度前缀协议）
-    格式: <消息头>@<内容长度><JSON内容>
+    def recv_json(self, sock):
+        """从 socket 接收一条完整的 JSON 消息"""
+        try:
+            # 1. 查找消息标记
+            found_marker, found_header, buffer = self._find_message_marker(sock)
+            if not found_marker:
+                return None
 
-    Args:
-        sock: socket对象
-        expected_headers: 期望的消息头列表，默认为["node"]
-    """
-    if expected_headers is None:
-        expected_headers = ["node"]
-    elif isinstance(expected_headers, str):
-        expected_headers = [expected_headers]
+            # 2. 解析内容长度
+            content_length, content_start = self._parse_content_length(
+                found_marker, buffer
+            )
+            if content_length is None:
+                return None
 
-    try:
-        # 构建所有可能的标记
-        expected_markers = [f"{header}@".encode("utf-8") for header in expected_headers]
+            # 3. 接收完整内容
+            data = self._receive_full_content(
+                sock, buffer, content_start, content_length
+            )
+            if data is None:
+                return None
 
-        # 1. 先接收直到找到任意一个期望的标记
+            # 4. 解码并返回JSON
+            return self._decode_json(data, found_header)
+
+        except (ConnectionError, ValueError, struct.error) as e:
+            logger.debug(
+                f"[recv_json] 接收 JSON 失败 (期望标记: {self.expected_headers}): {e}"
+            )
+            return None
+
+    def _find_message_marker(self, sock):
+        """查找消息标记"""
+        expected_markers = [
+            f"{header}@".encode("utf-8") for header in self.expected_headers
+        ]
         buffer = b""
-        marker_found = False
-        found_marker = None
-        found_header = None
+        max_marker_len = max(len(marker) for marker in expected_markers)
 
-        while not marker_found:
+        while True:
             chunk = sock.recv(1024)
             if not chunk:
-                return None
+                return None, None, None
 
             buffer += chunk
 
-            # 查找所有期望的标记
+            # 检查所有可能的标记
             for marker in expected_markers:
                 marker_pos = buffer.find(marker)
                 if marker_pos != -1:
-                    # 移除标记前的无效数据
                     buffer = buffer[marker_pos:]
-                    marker_found = True
-                    found_marker = marker
-                    found_header = marker[:-1].decode("utf-8")  # 去掉@符号
-                    break
+                    found_header = marker[:-1].decode("utf-8")
+                    return marker, found_header, buffer
 
-            if (
-                not marker_found
-                and len(buffer) > max(len(marker) for marker in expected_markers) * 2
-            ):
-                # 如果没有找到任何期望标记，清空缓冲区重新开始
+            # 检查缓冲区是否过大
+            if len(buffer) > max_marker_len * 2:
                 logger.warning(
-                    f"[recv_json] 未找到期望标记 {expected_headers}，清空缓冲区重新搜索"
+                    f"[recv_json] 未找到期望标记 {self.expected_headers}，清空缓冲区重新搜索"
                 )
                 buffer = b""
 
-        if not marker_found:
-            logger.error(f"[recv_json] 未找到任何期望标记: {expected_headers}")
-            return None
-
-        # 2. 提取长度数字部分
-        length_start = len(found_marker)
+    def _parse_content_length(self, marker, buffer):
+        """解析内容长度"""
+        length_start = len(marker)
         num_buffer = b""
 
-        # 从标记后面开始读取数字
         for i in range(length_start, len(buffer)):
             char_byte = buffer[i : i + 1]
             try:
@@ -504,21 +503,23 @@ def recv_json(sock, expected_headers=["node"]):
                 break
 
         if not num_buffer:
-            logger.error(f"[recv_json] 无法解析长度数字，找到标记: '{found_header}@'")
-            return None
+            logger.error(
+                f"[recv_json] 无法解析长度数字，找到标记: '{marker[:-1].decode('utf-8')}@'"
+            )
+            return None, None
 
         content_length = int(num_buffer.decode("utf-8"))
         content_start = length_start + len(num_buffer)
 
         logger.debug(
-            f"[recv_json] 解析到内容长度: {content_length}, 起始位置: {content_start}, "
-            f"找到标记: '{found_header}', 期望标记: {expected_headers}"
+            f"[recv_json] 解析到内容长度: {content_length}, 起始位置: {content_start}"
         )
+        return content_length, content_start
 
-        # 3. 提取完整的内容数据
+    def _receive_full_content(self, sock, buffer, content_start, content_length):
+        """接收完整内容"""
         data = buffer[content_start:]
 
-        # 如果缓冲区数据不足，继续接收
         while len(data) < content_length:
             remaining = content_length - len(data)
             part = sock.recv(min(remaining, 4096))
@@ -526,28 +527,21 @@ def recv_json(sock, expected_headers=["node"]):
                 raise ConnectionError("连接中断，未能接收完整 JSON 数据")
             data += part
 
-        # 4. 解码并解析 JSON
-        text = data[:content_length].decode("utf-8")
-        result = json.loads(text)
+        return data[:content_length]
 
-        # 可以添加来源信息
+    def _decode_json(self, data, found_header):
+        """解码JSON并添加来源信息"""
+        text = data.decode("utf-8")
+        result = json.loads(text)
         result["_source_header"] = found_header
         return result
 
-    except (
-        ConnectionError,
-        json.JSONDecodeError,
-        UnicodeDecodeError,
-        ValueError,
-        struct.error,
-    ) as e:
-        logger.error(f"[recv_json] 接收 JSON 失败 (期望标记: {expected_headers}): {e}")
-        return None
+
+# 全局 JSON 协议实例
+json_protocol = JsonProtocol()
 
 
 # 异步处理函数
-
-
 def async_handle_register(conn, addr, msg):
     """异步处理注册消息"""
     node_id = msg.get("node_id")
@@ -561,7 +555,7 @@ def async_handle_register(conn, addr, msg):
             "status": "error",
             "message": "node_id、token和max_tasks必须提供且有效",
         }
-        send_json(conn, register_ack)
+        json_protocol.send_json(conn, register_ack)
         return
 
     conn_db = get_db_connection()
@@ -571,7 +565,7 @@ def async_handle_register(conn, addr, msg):
             "status": "error",
             "message": "数据库连接失败",
         }
-        send_json(conn, register_ack)
+        json_protocol.send_json(conn, register_ack)
         return
 
     try:
@@ -588,10 +582,11 @@ def async_handle_register(conn, addr, msg):
             if node_id in node_manager.nodes:
                 register_ack = {
                     "type": "register_ack",
-                    "status": "error",
+                    "status": "success",
                     "message": "节点已注册",
+                    "max_tasks": max_tasks,
                 }
-                send_json(conn, register_ack)
+                json_protocol.send_json(conn, register_ack)
                 return
 
             # 修复2：添加max_tasks范围验证
@@ -609,7 +604,7 @@ def async_handle_register(conn, addr, msg):
                 "message": f"节点注册成功，最大任务数: {max_tasks}",
                 "max_tasks": max_tasks,
             }
-            send_json(conn, register_ack)
+            json_protocol.send_json(conn, register_ack)
             logger.info(
                 f"[注册成功] node_id={node_id}, addr={addr}, max_tasks={max_tasks}"
             )
@@ -619,7 +614,7 @@ def async_handle_register(conn, addr, msg):
                 "status": "error",
                 "message": "节点未激活或凭证无效",
             }
-            send_json(conn, register_ack)
+            json_protocol.send_json(conn, register_ack)
     except Exception as e:
         logger.error(f"[注册错误] 处理注册时出错: {e}")
         register_ack = {
@@ -627,7 +622,7 @@ def async_handle_register(conn, addr, msg):
             "status": "error",
             "message": "服务器内部错误",
         }
-        send_json(conn, register_ack)
+        json_protocol.send_json(conn, register_ack)
     finally:
         if "cursor" in locals():
             cursor.close()
@@ -643,7 +638,7 @@ def async_handle_heartbeat(conn, addr, msg, node_id):
         "status": "success",
         "message": "心跳已更新",
     }
-    send_json(conn, heartbeat_ack)
+    json_protocol.send_json(conn, heartbeat_ack)
 
 
 def async_handle_task_status_update(conn, addr, msg, node_id):
@@ -678,7 +673,7 @@ def async_handle_task_status_update(conn, addr, msg, node_id):
             "message": "无效的操作类型",
         }
 
-    send_json(conn, status_update)
+    json_protocol.send_json(conn, status_update)
 
 
 def async_handle_task_result(conn, addr, msg):
@@ -737,7 +732,6 @@ def dispatch_task(image_path: str, image_data, task_id: str):
     使用统一的 JSON 协议，避免粘包问题
     """
     # === 可选：备份逻辑 ===
-    import os
 
     # uploads_dir = "./uploads"
     # os.makedirs(uploads_dir, exist_ok=True)
@@ -799,7 +793,7 @@ def dispatch_task(image_path: str, image_data, task_id: str):
         }
 
         # 使用统一的 send_json 发送（包含图片数据）
-        send_json(socket_obj, task_msg, header="server")
+        json_protocol.send_json(socket_obj, task_msg)
 
         logger.info(
             f"[dispatch_task] 任务已发送: task_id={task_id}, 图片={image_filename}, "
@@ -839,7 +833,7 @@ def handle_client(conn, addr):
 
     try:
         while True:
-            msg = recv_json(conn)
+            msg = json_protocol.recv_json(conn)
             if msg is None:
                 break  # 客户端断开或数据错误
 
@@ -847,8 +841,10 @@ def handle_client(conn, addr):
 
             if msg_type == "register":
                 node_id = msg.get("node_id")
+                """
                 token = msg.get("token")
                 max_tasks = msg.get("max_tasks", 5)
+                """
                 # 异步处理注册消息
                 message_processor.submit_message_task(
                     "register", async_handle_register, conn, addr, msg
@@ -866,7 +862,7 @@ def handle_client(conn, addr):
                         "status": "error",
                         "message": "未注册的节点",
                     }
-                    send_json(conn, heartbeat_ack)
+                    json_protocol.send_json(conn, heartbeat_ack)
 
             elif msg_type == "task_status_update":
                 # 异步处理任务状态更新消息
@@ -876,7 +872,7 @@ def handle_client(conn, addr):
                         "status": "error",
                         "message": "未注册的节点",
                     }
-                    send_json(conn, status_update)
+                    json_protocol.send_json(conn, status_update)
                     continue
 
                 message_processor.submit_message_task(

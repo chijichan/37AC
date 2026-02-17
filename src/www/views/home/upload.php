@@ -54,7 +54,7 @@ require_once ROOT_PATH . '/views/layout.php';
                 <div class="remove-bg-content">
                     <div class="single-image-container">
                         <div class="image-box">
-                            <h4 id="imageTitle">原图</h4>
+                            <h4 id="imageTitle">待处理</h4>
                             <div class="image-wrapper">
                                 <img id="mainImage" src="#" alt="处理后图片" class="bg-image" />
                                 <div class="image-placeholder" id="imagePlaceholder">
@@ -668,7 +668,8 @@ require_once ROOT_PATH . '/views/layout.php';
                     this.elements.mainImage.src = imageUrl;
                 } else if (this.state.currentMode === 'remove-bg') {
                     this.elements.mainImage.src = imageUrl;
-                    this.elements.imageTitle.textContent = '原图';
+                    this.elements.imageTitle.textContent = '待处理';
+                    this.elements.imageTitle.style.color = '';
                     this.elements.imagePlaceholder.style.display = 'none';
                 }
 
@@ -691,7 +692,11 @@ require_once ROOT_PATH . '/views/layout.php';
 
         setupRemoveBgView() {
             // 重置去背景界面的状态
-            this.elements.imageTitle.textContent = '原图';
+            if (this.elements.imageTitle.textContent == '成功') {
+                return;
+            }
+            this.elements.imageTitle.textContent = '待处理';
+            this.elements.imageTitle.style.color = '';
             this.elements.imagePlaceholder.style.display = this.elements.mainImage.src && this.elements.mainImage.src !== '#' ? 'none' : 'flex';
             this.elements.progressContainer.style.display = 'none';
             this.elements.removeBgBtn.disabled = !this.state.originalFile;
@@ -765,7 +770,8 @@ require_once ROOT_PATH . '/views/layout.php';
 
                 // 直接替换主图片的src为去背景后的图片
                 this.elements.mainImage.src = url;
-                this.elements.imageTitle.textContent = '去背景结果';
+                this.elements.imageTitle.textContent = '成功';
+                this.elements.imageTitle.style.color = '#00c853';
                 this.elements.progressContainer.style.display = 'none';
                 this.elements.removeBgBtn.disabled = false;
 
@@ -803,7 +809,7 @@ require_once ROOT_PATH . '/views/layout.php';
                     }
 
                     // 检查是否是去背景结果（通过标题判断）
-                    if (this.elements.imageTitle.textContent !== '去背景结果') {
+                    if (this.elements.imageTitle.textContent !== '成功') {
                         throw new Error('请先进行背景去除处理');
                     }
 

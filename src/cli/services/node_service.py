@@ -195,6 +195,8 @@ def start_node_service():
     last_heartbeat_response_time = 0  # 响应时间
     connection_alive = True  # 连接状态标志
     reconnect_attempts = 0
+    current_tasks = 0
+    tasks = []
 
     # === 连接并注册函数（辅助函数）===
     def connect_and_register():
@@ -210,11 +212,24 @@ def start_node_service():
                     pass
                 s = None
 
-            # 修改2：创建新socket时不绑定固定端口
+            # 修改2：创建新socket并（可选）绑定到本地端口
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # 允许地址重用
 
-            # 修改3：移除本地端口绑定
+            # 如果配置了 LOCAL_PORT（非 0/None），则尝试绑定到该端口；否则绑定到端口 0（由系统分配随机可用端口）
+            try:
+                if LOCAL_PORT:
+                    s.bind(("", LOCAL_PORT))
+                    logger.info(f"[节点] 已绑定本地端口: {LOCAL_PORT}")
+                else:
+                    s.bind(("", 0))
+                    assigned_port = s.getsockname()[1]
+                    logger.info(
+                        f"[节点] 未配置 LOCAL_PORT，使用随机本地端口: {assigned_port}"
+                    )
+            except Exception as bind_err:
+                logger.warning(f"[节点] 本地端口绑定失败: {bind_err}（继续尝试连接）")
+
             s.connect((TCP_HOST, TCP_PORT))
             logger.info(f"[节点] 已连接到服务器 {TCP_HOST}:{TCP_PORT}")
 
@@ -223,14 +238,16 @@ def start_node_service():
             heartbeat_missed_count = 0
             last_heartbeat_send_time = 0
             last_heartbeat_response_time = 0
-            reconnect_attempts = 0  # 重置重连计数
+            reconnect_attempts = 0
 
             # 注册节点
             register_msg = {
                 "type": "register",
                 "node_id": NODE_ID,
                 "token": TOKEN,
+                "tasks": tasks,
                 "max_tasks": MAX_TASKS,
+                "current_tasks": current_tasks,
             }
             json_protocol.send_json(s, register_msg)
             logger.info(f"[节点] 已发送注册消息 {TCP_HOST}:{TCP_PORT}")
@@ -259,7 +276,12 @@ def start_node_service():
             while connection_alive and s:
                 time.sleep(HEARTBEAT_INTERVAL_SEC)
                 try:
-                    hb_msg = {"type": "heartbeat"}
+                    hb_msg = {
+                        "type": "heartbeat",
+                        "node_id": NODE_ID,
+                        "tasks": tasks,
+                        "current_tasks": current_tasks,
+                    }
                     json_protocol.send_json(s, hb_msg)
                     last_heartbeat_send_time = time.time()
                     logger.debug("[节点] 发送心跳")
@@ -346,6 +368,10 @@ def start_node_service():
                             f"大小: {image_size} 字节, 时间戳: {timestamp}"
                         )
 
+                        # 更新当前任务列表和计数
+                        tasks.append(task_id)
+                        current_tasks += 1
+
                         # 节点开始处理任务时
                         status_update_increment = {
                             "type": "task_status_update",
@@ -391,6 +417,8 @@ def start_node_service():
                             }
                             json_protocol.send_json(s, response_msg)
                             logger.info(f"[节点] 已返回任务 {task_id} 的推理结果")
+                            tasks.remove(task_id)
+                            current_tasks -= 1
 
                         except Exception as decode_error:
                             logger.error(f"[节点] 图片数据解码失败: {decode_error}")
@@ -402,6 +430,9 @@ def start_node_service():
                                 "error": f"图片数据解码失败: {decode_error}",
                             }
                             json_protocol.send_json(s, error_msg)
+                            json_protocol.send_json(s, status_update_decrement)
+                            tasks.remove(task_id)
+                            current_tasks -= 1
 
                         # 节点完成任务
                         json_protocol.send_json(s, status_update_decrement)

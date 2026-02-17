@@ -1,9 +1,9 @@
 ﻿
 # 37AC 二次元美少女识别
 
-**37AC**（**A**nime **C**haracter recognition）是一个基于深度学习的二次元角色识别，支持**模型训练、在线预测**。
+**37AC**（**A**nime **C**haracter recognition）是一个基于深度学习的二次元角色识别系统，支持**模型训练、在线预测**。
 
-系统采用**分布式边缘推理节点架构（开发中）**，将推理任务分发至边缘设备执行，有效提升推理效率与实时性。
+系统采用**C/S架构**，包含服务端和多个边缘推理节点。
 
 ---
 
@@ -22,7 +22,7 @@
 - 支持 **异步推理**：上传后自动分发任务至边缘节点，轮询获取推理结果
 - 展示识别结果：**角色名称、置信度、各类别概率分布（含可视化进度条）**
 
-### 分布式边缘推理（架构开发中）
+### 分布式边缘推理（开发中）
 - 用户上传的图片由 **Flask 后端通过 TCP 转发至边缘节点**
 - 边缘节点负责实际模型推理，减轻中心服务器压力
 - 支持 **节点注册、心跳检测、任务派发、结果回传**
@@ -55,124 +55,194 @@
 
 ---
 
-## 🧠 TCP 通信协议（节点接口）
+## 🔌 37AC 接口规范（v1.0）
 
-TAC 系统采用 **TCP 长连接** 实现边缘推理节点（运行 `node_server.py` 的机器）与中心 Flask 服务（运行 `runserver.py` 的机器）之间的通信。协议支持 **多种消息类型**，包括 **控制指令（JSON 文本）** 与 **任务数据（二进制数据）**，节点与服务器通过 **Socket 长连接** 进行交互。
+37AC 系统采用 **TCP协议** 实现推理节点与中心服务之间的通信。支持多种消息类型，包括控制指令和任务数据。
+
+### 📡 接口概述
+
+- **传输协议**：TCP
+- **连接方式**：长连接（节点主动连接）
+- **编码方案**：
+  - **文本协议**：JSON 格式，UTF-8 编码
+  - **二进制协议**：原始字节流
+- **消息边界**：长度前缀模式
+
+### 📊 协议分类
+
+#### 🟢 文本协议（JSON格式）
+- 节点注册（register）
+- 节点心跳（heartbeat）  
+- 推理结果回传（RESULT_UPLOAD）
+
+#### 🔵 二进制协议（原始字节）
+- 任务下发（TASK_DISPATCH）
 
 ---
 
-### 📡 一、通信方式
+### 📨 协议消息规范
 
-- **协议**：TCP
-- **连接方式**：长连接（节点主动连接并保持）
-- **编码格式**：
-  - **控制消息（如注册、心跳）**：使用 **UTF-8 编码的 JSON 文本**
-  - **任务数据（如图片、推理结果）**：使用 **二进制格式（bytes）**，**严禁使用 `decode('utf-8')` 解码！**
-- **消息边界**：由具体实现控制（如固定头部、长度前缀或协议解析）
+#### 1. 🟢 节点注册
 
----
-
-### 📨 二、支持的通信消息类型
-
----
-
-#### 1. 🟢 节点注册（Register）
-
-- **方向**：节点 → 服务器
-- **用途**：边缘节点启动后向中心注册，加入任务调度池
-- **消息类型**：JSON（文本）
-- **请求格式：**
-```
-json
+**请求格式（节点 → 服务器）：**
+```json
 {
-"type": "register",
-"token": "你的节点密钥",
-"name": "节点名称"
-}
-- **成功返回：**
-json
-{
-"status": "success",
-"message": "节点注册成功"
+  "type": "register",
+  "version": "1.0", 
+  "timestamp": "2024-01-01T12:00:00Z",
+  "data": {
+    "node_id": "node_001",
+    "token": "your_secret_token",
+    "name": "边缘节点01", 
+    "capabilities": ["inference", "training"],
+    "status": "ready"
+  }
 }
 ```
+
+**响应格式（服务器 → 节点）：**
+```json
+{
+  "type": "register_ack",
+  "version": "1.0",
+  "timestamp": "2024-01-01T12:00:01Z", 
+  "data": {
+    "status": "success",
+    "message": "节点注册成功",
+    "assigned_id": "node_001_v2",
+    "heartbeat_interval": 30
+  }
+}
+```
+
+#### 2. 🟢 节点心跳
+
+**请求格式（节点 → 服务器）：**
+```json
+{
+  "type": "heartbeat",
+  "version": "1.0",
+  "timestamp": "2024-01-01T12:00:30Z",
+  "data": {
+    "node_id": "node_001_v2",
+    "token": "your_secret_token", 
+    "status": "active",
+    "load": 0.65,
+    "memory_usage": "45%"
+  }
+}
+```
+
+**响应格式（服务器 → 节点）：**
+```json
+{
+  "type": "heartbeat_ack",
+  "version": "1.0",
+  "timestamp": "2024-01-01T12:00:31Z",
+  "data": {
+    "status": "success", 
+    "message": "心跳确认"
+  }
+}
+```
+
+#### 3. 🔵 任务下发
+
+**请求格式（服务器 → 节点）：**
+```json
+{
+    "type": "task",
+    "version": "1.0",
+    "timestamp": "2024-01-01T12:01:00Z",
+    "data": {
+        "task_id": "uuid_string",
+        "model_type": "resnet18", 
+        "priority": "normal"
+    }
+}
+```
+
+#### 4. 🟢 推理结果回传
+
+**响应格式（节点 → 服务器）：**
+```json
+{
+  "type": "task_ack",
+  "version": "1.0",
+  "timestamp": "2024-01-01T12:01:00Z",
+  "data": {
+    "task_id": "6093950a-4dab-4289-96ad-ed6eb901700c",
+    "node_id": "node_001_v2",
+    "status": "success",
+    "result": {
+      "label": "春日野穹",
+      "confidence": 96.5,
+      "inference_time": 125,
+      "class_probs": [
+        {"name": "春日野穹", "prob": 96.5},
+        {"name": "雪之下雪乃", "prob": 2.1},
+        {"name": "霞之丘诗羽", "prob": 1.4}
+      ]
+    },
+    "metadata": {
+      "model_version": "v1.2.0",
+      "hardware": "GPU-NVIDIA-RTX3080"
+    }
+  }
+}
+```
+
+**响应格式（服务器 → 节点）：**
+```json
+{
+  "type": "RESULT_ack",
+  "version": "1.0",
+  "timestamp": "2024-01-01T12:01:01Z",
+  "data": {
+    "status": "success",
+    "message": "结果接收成功", 
+    "next_task_available": true
+  }
+}
+```
+
+### ⚠️ 协议安全与错误处理
+
+#### 安全规则
+- 所有文本协议必须包含 `timestamp` 字段
+- 敏感数据传输需使用加密通道
+- 节点身份验证通过 `token` 字段
+
+#### 错误码规范
+```json
+{
+  "error_codes": {
+    "1000": "认证失败",
+    "1001": "协议版本不兼容", 
+    "2000": "任务处理失败",
+    "2001": "图片格式错误",
+    "3000": "系统内部错误"
+  }
+}
+```
+
+#### 超时与重试
+- 心跳超时：60秒
+- 任务处理超时：300秒  
+- 最大重试次数：3次
+
 ---
 
-#### 2. 🟢 节点心跳（Heartbeat）
+### 🛡️ 数据安全规范
 
-- **方向**：节点 → 服务器
-- **用途**：节点定期发送心跳，维持在线状态
-- **消息类型**：JSON（文本）
-- **请求格式：**
-```
-json
-{
-"type": "heartbeat",
-"token": "你的节点密钥"
-}
-- **成功返回：**
-json
-{
-"status": "success",
-"message": "心跳收到"
-}
-```
----
+#### 文本 vs 二进制数据
+| 数据类型 | 解码方式 | 说明 |
+|----------|----------|------|
+| ✅ JSON 协议 | 需 `decode('utf-8')` | 注册、心跳、结果回传 |
+| ❌ 二进制数据 | **禁止** `decode('utf-8')` | 图片、任务数据 |
 
-#### 3. 🟣 任务下发（Task Dispatch）[核心功能]
-
-- **方向**：服务器 → 节点
-- **用途**：将用户上传的图片（二进制）及任务 ID 下发给边缘节点进行推理
-- **消息类型**：**二进制数据（bytes），不是文本！**
-- **数据组成（由实际代码决定，可能包括）：**
-  - 任务 ID（字符串）
-  - 图片二进制数据（如 JPG / PNG 文件内容）
-- **重要提醒：**
-  - 图片为原始二进制，**严禁调用 `data.decode('utf-8')`**
-  - 节点应直接将接收到的二进制数据保存为图片或输入模型推理
-- **说明：** 任务下发协议详见 `tcp_server.py` 与 `node_server.py` 实现
-
----
-
-#### 4. 🟣 推理结果回传（Result Upload）[核心功能]
-
-- **方向**：节点 → 服务器
-- **用途**：节点完成推理后，将结果以 **JSON 文本** 通过 TCP 回传给 Flask 后端
-- **消息类型**：JSON（文本）
-- **返回格式示例：**
-```
-json
-{
-"status": "success",
-"task_id": "6093950a-4dab-4289-96ad-ed6eb901700c",
-"result": {
-"label": "角色A",
-"confidence": 96.5,
-"class_probs": [
-{"name": "角色A", "prob": 96.5},
-{"name": "角色B", "prob": 2.1}
-]
-}
-}
-```
-- **字段说明：**
-  - `task_id`: 与任务对应的唯一标识，用于存储结果及前端查询
-  - `label`: 推理得到的角色名称
-  - `confidence`: 置信度（0~100）
-  - `class_probs`: 各类别概率，用于前端展示
-
----
-
-### ⚠️ 三、重要提醒：文本 vs 二进制
-
-| 数据类型 | 是否能 `decode('utf-8')` | 说明 |
-|----------|--------------------------|------|
-| ✅ 控制消息（注册、心跳） | ✅ 可以 | 是 JSON 格式文本，编码为 UTF-8 |
-| ❌ 图片 / 推理输入 / 二进制任务数据 | ❌ 不能 | 是原始二进制（如 `.jpg` / `.png`），强行解码会导致 `'utf-8' codec can't decode byte 0xff` |
-| ✅ 推理结果（回传 JSON） | ✅ 可以 | 是 JSON 文本，需先 `decode('utf-8')` 再 `json.loads()` |
-
-🔒 **核心原则：**
-> 收到数据后，若含有 `0xff` 等字节，说明是 **图片或二进制数据，不要解码为文本！**
+**核心原则：**
+> 接收数据时，检查是否包含无法UTF-8解码的字节（如 `0xff`），如有则按二进制协议处理
 
 ---
 
@@ -195,8 +265,8 @@ json
 
 ### 1. 克隆项目
 bash
-git clone https://github.com/chijichan/TAC.git
-cd TAC
+git clone https://github.com/chijichan/37AC.git
+cd 37AC
 ### 2. 创建并激活虚拟环境（推荐）
 bash
 python -m venv venv
@@ -219,16 +289,16 @@ pip install -r requirements.txt
 ### 一、训练模型
 运行主程序，选择菜单选项 **1** 开始训练：
 bash
-python TAC/anime_character_app.py
+python 37AC/anime_character_app.py
 - 按提示选择功能：训练 / 预测 / 图片校验 / 退出
-- 训练完成后，模型保存在 `TAC/models/character_resnet18.pth`
-- 类别文件保存在 `TAC/models/classes.txt`
+- 训练完成后，模型保存在 `37AC/models/character_resnet18.pth`
+- 类别文件保存在 `37AC/models/classes.txt`
 
 ### 二、启动 Web 界面
 确保模型文件存在后，启动 Flask 服务：
 bash
 python AC_web/runserver.py
-- 默认访问地址：`http://localhost:13137`
+- 默认访问地址：`http://localhost:13138`
 - 上传图片，系统自动分发任务至边缘节点，返回推理结果
 
 ---

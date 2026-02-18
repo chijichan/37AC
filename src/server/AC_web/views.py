@@ -92,9 +92,13 @@ def upload_and_predict():
         if request.headers.get("X-Requested-With") == "XMLHttpRequest":
             return jsonify(
                 {
-                    "status": "queued",
-                    "task_id": task_id,
-                    "message": "图片已上传，等待推理...",
+                    "type": "dispatch_task",
+                    "timestamp": int(datetime.now().timestamp()),
+                    "data": {
+                        "status": "queued",
+                        "task_id": task_id,
+                        "message": "图片已上传，等待推理...",
+                    },
                 }
             )
 

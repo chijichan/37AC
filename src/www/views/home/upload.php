@@ -867,12 +867,12 @@ require_once ROOT_PATH . '/views/layout.php';
                     throw new Error(`服务器错误: ${response.status}`);
                 }
 
-                const data = await response.json();
+                const data = await response.json().data;
 
                 if (data.status === 'queued' && data.task_id) {
                     await this.pollTaskResult(data.task_id);
                 } else {
-                    throw new Error(data.error || '上传成功，但未返回任务ID');
+                    throw new Error(data.message || '上传成功，但未返回任务ID');
                 }
 
             } catch (error) {
@@ -892,7 +892,7 @@ require_once ROOT_PATH . '/views/layout.php';
                         throw new Error(`查询失败: ${response.status}`);
                     }
 
-                    const data = await response.json();
+                    const data = await response.json().data;
 
                     if (data.status === 'completed') {
                         this.showResult(data);

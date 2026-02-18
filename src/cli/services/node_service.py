@@ -195,7 +195,6 @@ def start_node_service():
     last_heartbeat_response_time = 0  # 响应时间
     connection_alive = True  # 连接状态标志
     reconnect_attempts = 0
-    current_tasks = 0
     tasks = []
 
     # === 连接并注册函数（辅助函数）===
@@ -243,11 +242,13 @@ def start_node_service():
             # 注册节点
             register_msg = {
                 "type": "register",
-                "node_id": NODE_ID,
-                "token": TOKEN,
-                "tasks": tasks,
-                "max_tasks": MAX_TASKS,
-                "current_tasks": current_tasks,
+                "data": {
+                    "node_id": NODE_ID,
+                    "token": TOKEN,
+                    "tasks": tasks,
+                    "max_tasks": MAX_TASKS,
+                    "status": "ready",
+                },
             }
             json_protocol.send_json(s, register_msg)
             logger.info(f"[节点] 已发送注册消息 {TCP_HOST}:{TCP_PORT}")
@@ -278,9 +279,11 @@ def start_node_service():
                 try:
                     hb_msg = {
                         "type": "heartbeat",
-                        "node_id": NODE_ID,
-                        "tasks": tasks,
-                        "current_tasks": current_tasks,
+                        "timestamp": int(time.time()),
+                        "data": {
+                            "node_id": NODE_ID,
+                            "tasks": tasks,
+                        },
                     }
                     json_protocol.send_json(s, hb_msg)
                     last_heartbeat_send_time = time.time()
@@ -328,36 +331,37 @@ def start_node_service():
                     continue
 
                 msg_type = msg.get("type")
+                msg_data = msg.get("data", {})
                 logger.info(f"[节点] 收到消息类型: {msg_type}")
 
                 # === 心跳响应处理 ====
                 if msg_type == "heartbeat_ack":
-                    logger.info(f"[节点] 收到心跳响应: {msg.get('message', '')}")
+                    logger.info(f"[节点] 收到心跳响应: {msg_data.get('message', '')}")
                     heartbeat_missed_count = 0  # 重置丢失计数
                     last_heartbeat_response_time = time.time()  # 记录响应时间
                     last_heartbeat_send_time = 0  # 重置发送时间，准备下一次发送
 
                 # === 注册响应 ===
                 elif msg_type == "register_ack":
-                    status = msg.get("status")
-                    message = msg.get("message")
+                    status = msg_data.get("status")
+                    message = msg_data.get("message")
                     logger.info(f"[注册结果] {status}: {message}")
 
                 # === 任务状态响应 ===
                 elif msg_type == "status_update_ack":
-                    status = msg.get("status")
-                    message = msg.get("message")
-                    task_id = msg.get("task_id")
+                    status = msg_data.get("status")
+                    message = msg_data.get("message")
+                    task_id = msg_data.get("task_id")
                     logger.info(f"[任务状态更新] 任务ID: {task_id}, 动作: {message}")
 
                 # === 任务处理 ===
                 elif msg_type == "task":
                     try:
-                        task_id = msg.get("task_id")
-                        image_filename = msg.get("image_filename")
-                        image_size = msg.get("image_size")
-                        image_data_b64 = msg.get("image_data")
-                        timestamp = msg.get("timestamp")
+                        task_id = msg_data.get("task_id")
+                        image_filename = msg_data.get("image_filename")
+                        image_size = msg_data.get("image_size")
+                        image_data_b64 = msg_data.get("image_data")
+                        timestamp = msg_data.get("timestamp")
 
                         if not all([task_id, image_filename, image_data_b64]):
                             logger.warning("[节点] 任务数据不完整")
@@ -370,20 +374,19 @@ def start_node_service():
 
                         # 更新当前任务列表和计数
                         tasks.append(task_id)
-                        current_tasks += 1
 
                         # 节点开始处理任务时
-                        status_update_increment = {
-                            "type": "task_status_update",
-                            "action": "increment",
-                            "task_id": task_id,
-                        }
-                        status_update_decrement = {
-                            "type": "task_status_update",
-                            "action": "decrement",
-                            "task_id": task_id,
-                        }
-                        json_protocol.send_json(s, status_update_increment)
+                        # status_update_increment = {
+                        #     "type": "task_status_update",
+                        #     "action": "increment",
+                        #     "task_id": task_id,
+                        # }
+                        # status_update_decrement = {
+                        #     "type": "task_status_update",
+                        #     "action": "decrement",
+                        #     "task_id": task_id,
+                        # }
+                        # json_protocol.send_json(s, status_update_increment)
 
                         # 解码 base64 图片数据
                         try:
@@ -418,7 +421,6 @@ def start_node_service():
                             json_protocol.send_json(s, response_msg)
                             logger.info(f"[节点] 已返回任务 {task_id} 的推理结果")
                             tasks.remove(task_id)
-                            current_tasks -= 1
 
                         except Exception as decode_error:
                             logger.error(f"[节点] 图片数据解码失败: {decode_error}")
@@ -430,12 +432,11 @@ def start_node_service():
                                 "error": f"图片数据解码失败: {decode_error}",
                             }
                             json_protocol.send_json(s, error_msg)
-                            json_protocol.send_json(s, status_update_decrement)
+                            # json_protocol.send_json(s, status_update_decrement)
                             tasks.remove(task_id)
-                            current_tasks -= 1
 
                         # 节点完成任务
-                        json_protocol.send_json(s, status_update_decrement)
+                        # json_protocol.send_json(s, status_update_decrement)
 
                     except Exception as e:
                         logger.error(f"[节点] 处理带图片任务出错: {e}")
@@ -449,7 +450,7 @@ def start_node_service():
                         json_protocol.send_json(s, error_msg)
 
                         # 节点完成任务
-                        json_protocol.send_json(s, status_update_decrement)
+                        # json_protocol.send_json(s, status_update_decrement)
 
                 # === 其它消息 ===
                 elif msg_type in ["msg", "error"]:

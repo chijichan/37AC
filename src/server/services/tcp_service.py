@@ -544,16 +544,18 @@ json_protocol = JsonProtocol()
 # 异步处理函数
 def async_handle_register(conn, addr, msg):
     """异步处理注册消息"""
-    node_id = msg.get("node_id")
-    token = msg.get("token")
-    max_tasks = msg.get("max_tasks", 5)
+    node_id = msg["data"].get("node_id")
+    token = msg["data"].get("token")
+    max_tasks = msg["data"].get("max_tasks", 5)
 
     # 参数检查（新增：验证max_tasks是否为有效数字）
     if not node_id or not token or not isinstance(max_tasks, (int, float)):
         register_ack = {
             "type": "register_ack",
-            "status": "error",
-            "message": "node_id、token和max_tasks必须提供且有效",
+            "data": {
+                "status": "error",
+                "message": "node_id、token和max_tasks必须提供且有效",
+            },
         }
         json_protocol.send_json(conn, register_ack)
         return
@@ -562,8 +564,10 @@ def async_handle_register(conn, addr, msg):
     if not conn_db:
         register_ack = {
             "type": "register_ack",
-            "status": "error",
-            "message": "数据库连接失败",
+            "data": {
+                "status": "error",
+                "message": "数据库连接失败",
+            },
         }
         json_protocol.send_json(conn, register_ack)
         return
@@ -582,9 +586,11 @@ def async_handle_register(conn, addr, msg):
             if node_id in node_manager.nodes:
                 register_ack = {
                     "type": "register_ack",
-                    "status": "success",
-                    "message": f"节点已注册，最大任务数: {node_manager.get_node_max_tasks(node_id)}",
-                    "max_tasks": max_tasks,
+                    "data": {
+                        "status": "success",
+                        "message": f"节点已注册，最大任务数: {node_manager.get_node_max_tasks(node_id)}",
+                        "max_tasks": max_tasks,
+                    },
                 }
                 json_protocol.send_json(conn, register_ack)
                 return
@@ -600,9 +606,11 @@ def async_handle_register(conn, addr, msg):
 
             register_ack = {
                 "type": "register_ack",
-                "status": "success",
-                "message": f"节点注册成功，最大任务数: {max_tasks}",
-                "max_tasks": max_tasks,
+                "data": {
+                    "status": "success",
+                    "message": f"节点注册成功，最大任务数: {max_tasks}",
+                    "max_tasks": max_tasks,
+                },
             }
             json_protocol.send_json(conn, register_ack)
             logger.info(
@@ -611,16 +619,20 @@ def async_handle_register(conn, addr, msg):
         else:
             register_ack = {
                 "type": "register_ack",
-                "status": "error",
-                "message": "节点未激活或凭证无效",
+                "data": {
+                    "status": "error",
+                    "message": "节点未激活或凭证无效",
+                },
             }
             json_protocol.send_json(conn, register_ack)
     except Exception as e:
         logger.error(f"[注册错误] 处理注册时出错: {e}")
         register_ack = {
             "type": "register_ack",
-            "status": "error",
-            "message": "服务器内部错误",
+            "data": {
+                "status": "error",
+                "message": "服务器内部错误",
+            },
         }
         json_protocol.send_json(conn, register_ack)
     finally:
@@ -635,8 +647,11 @@ def async_handle_heartbeat(conn, addr, msg, node_id):
     node_manager.update_heartbeat(node_id)
     heartbeat_ack = {
         "type": "heartbeat_ack",
-        "status": "success",
-        "message": "心跳已更新",
+        "timestamp": int(time.time()),
+        "data": {
+            "status": "success",
+            "message": "心跳已更新",
+        },
     }
     json_protocol.send_json(conn, heartbeat_ack)
 
@@ -733,26 +748,42 @@ def dispatch_task(image_path: str, image_data, task_id: str):
     """
     # === 可选：备份逻辑 ===
 
-    # uploads_dir = "./uploads"
-    # os.makedirs(uploads_dir, exist_ok=True)
-    # backup_image_path = os.path.join(uploads_dir, os.path.basename(image_path))
-    # with open(backup_image_path, "wb") as f:
-    #     if hasattr(image_data, "read"):  # 比如 request.files 的 FileStorage 对象
-    #         f.write(image_data.read())
-    #     else:  # 如果是二进制数据，比如 bytes
-    #         f.write(image_data)
-    # logger.info(f"[服务端] 图片已备份到本地: {backup_image_path}")
+    """ 
+    uploads_dir = "./uploads"
+    os.makedirs(uploads_dir, exist_ok=True)
+    backup_image_path = os.path.join(uploads_dir, os.path.basename(image_path))
+    with open(backup_image_path, "wb") as f:
+        if hasattr(image_data, "read"):  # 比如 request.files 的 FileStorage 对象
+            f.write(image_data.read())
+        else:  # 如果是二进制数据，比如 bytes
+            f.write(image_data)
+    logger.info(f"[服务端] 图片已备份到本地: {backup_image_path}")
+    """
 
     # === 优先：通过 TCP 传输图片给节点（使用统一 JSON 协议）===
 
+    dispatch_task_response = {
+        "type": "dispatch_task",
+        "timestamp": int(time.time()),
+        "data": {
+            "task_id": task_id,
+            "message": "任务正在分发",
+            "status": "pending",
+        },
+    }
+
     node_id, node_info = node_manager.get_idle_node()
     if not node_id:
-        return {"status": "waiting", "task_id": task_id, "message": "没有空闲节点"}
+        dispatch_task_response["data"]["message"] = "没有空闲节点"
+        dispatch_task_response["data"]["status"] = "waiting"
+        return dispatch_task_response
 
     socket_obj = node_info.get("socket")
     if not socket_obj:
         node_manager.set_node_idle(node_id)
-        return {"status": "failed", "task_id": task_id, "error": "节点未连接"}
+        dispatch_task_response["data"]["message"] = "节点未连接"
+        dispatch_task_response["data"]["status"] = "failed"
+        return dispatch_task_response
 
     try:
         image_filename = os.path.basename(image_path)
@@ -777,22 +808,23 @@ def dispatch_task(image_path: str, image_data, task_id: str):
                 f"[dispatch_task] 图片过大: {len(image_bytes)} 字节，超过10MB限制"
             )
             node_manager.set_node_idle(node_id)
-            return {"status": "failed", "task_id": task_id, "error": "图片文件过大"}
+            dispatch_task_response["data"]["message"] = "图片文件过大"
+            dispatch_task_response["data"]["status"] = "failed"
+            return dispatch_task_response
 
-        # 将图片数据编码为 base64 字符串
         image_base64 = base64.b64encode(image_bytes).decode("utf-8")
 
-        # 构造包含图片数据的完整任务消息
         task_msg = {
             "type": "task",
-            "task_id": task_id,
-            "image_filename": image_filename,
-            "image_size": len(image_bytes),
-            "image_data": image_base64,  # base64 编码的图片数据
-            "timestamp": time.time(),  # 添加时间戳
+            "timestamp": int(time.time()),
+            "data": {
+                "task_id": task_id,
+                "image_filename": image_filename,
+                "image_size": len(image_bytes),
+                "image_data": image_base64,
+            },
         }
 
-        # 使用统一的 send_json 发送（包含图片数据）
         json_protocol.send_json(socket_obj, task_msg)
 
         logger.info(
@@ -800,15 +832,21 @@ def dispatch_task(image_path: str, image_data, task_id: str):
             f"大小={len(image_bytes)}字节, base64大小={len(image_base64)}字节"
         )
 
-        # 标记节点为忙碌
         node_manager.set_node_busy(node_id)
-
-        return {"status": "dispatched", "task_id": task_id, "node_id": node_id}
+        node_manager.increment_task_count(node_id)
+        dispatch_task_response["data"]["message"] = "任务已分发到节点"
+        dispatch_task_response["data"]["status"] = "dispatched"
+        dispatch_task_response["data"]["task_id"] = task_id
+        dispatch_task_response["data"]["node_id"] = node_id
+        return dispatch_task_response
 
     except Exception as e:
         logger.error(f"[dispatch_task] 发送任务失败: {e}")
         node_manager.set_node_idle(node_id)
-        return {"status": "failed", "task_id": task_id, "error": str(e)}
+        dispatch_task_response["data"]["message"] = str(e)
+        dispatch_task_response["data"]["status"] = "failed"
+        dispatch_task_response["data"]["task_id"] = task_id
+        return dispatch_task_response
 
     """
     【已废弃】现在任务由用户直接连接节点发送，此方法仅作备用
@@ -840,7 +878,7 @@ def handle_client(conn, addr):
             msg_type = msg.get("type")
 
             if msg_type == "register":
-                node_id = msg.get("node_id")
+                node_id = msg["data"].get("node_id")
                 """
                 token = msg.get("token")
                 max_tasks = msg.get("max_tasks", 5)
@@ -859,30 +897,33 @@ def handle_client(conn, addr):
                 else:
                     heartbeat_ack = {
                         "type": "heartbeat_ack",
-                        "status": "error",
-                        "message": "未注册的节点",
+                        "timestamp": int(time.time()),
+                        "data": {
+                            "status": "error",
+                            "message": "未注册的节点",
+                        },
                     }
                     json_protocol.send_json(conn, heartbeat_ack)
 
-            elif msg_type == "task_status_update":
-                # 异步处理任务状态更新消息
-                if not node_id:
-                    status_update = {
-                        "type": "status_update_ack",
-                        "status": "error",
-                        "message": "未注册的节点",
-                    }
-                    json_protocol.send_json(conn, status_update)
-                    continue
+            # elif msg_type == "task_status_update":
+            #     # 异步处理任务状态更新消息
+            #     if not node_id:
+            #         status_update = {
+            #             "type": "status_update_ack",
+            #             "status": "error",
+            #             "message": "未注册的节点",
+            #         }
+            #         json_protocol.send_json(conn, status_update)
+            #         continue
 
-                message_processor.submit_message_task(
-                    "task_status_update",
-                    async_handle_task_status_update,
-                    conn,
-                    addr,
-                    msg,
-                    node_id,
-                )
+            #     message_processor.submit_message_task(
+            #         "task_status_update",
+            #         async_handle_task_status_update,
+            #         conn,
+            #         addr,
+            #         msg,
+            #         node_id,
+            #     )
 
             elif msg_type == "task_result":
                 # 异步处理任务结果消息

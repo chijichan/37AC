@@ -87,31 +87,29 @@
 **请求格式（节点 → 服务器）：**
 ```json
 {
-  "type": "register",
-  "version": "1.0", 
-  "timestamp": "2024-01-01T12:00:00Z",
-  "data": {
-    "node_id": "node_001",
-    "token": "your_secret_token",
-    "name": "边缘节点01", 
-    "capabilities": ["inference", "training"],
-    "status": "ready"
-  }
+    "type": "register",
+    "timestamp": "2024-01-01T12:00:00Z",
+    "data": {
+        "node_id": "1",
+        "token": "your_secret_token",
+        "tasks": [],
+        "max_tasks": 5,
+        "status": "ready"
+    }
 }
 ```
 
 **响应格式（服务器 → 节点）：**
 ```json
 {
-  "type": "register_ack",
-  "version": "1.0",
-  "timestamp": "2024-01-01T12:00:01Z", 
-  "data": {
-    "status": "success",
-    "message": "节点注册成功",
-    "assigned_id": "node_001_v2",
-    "heartbeat_interval": 30
-  }
+    "type": "register_ack",
+    "timestamp": "2024-01-01T12:00:01Z", 
+    "data": {
+        "status": "success",
+        "message": "节点注册成功",
+        "assigned_id": "node_001_v2",
+        "heartbeat_interval": 30
+    }
 }
 ```
 
@@ -120,29 +118,27 @@
 **请求格式（节点 → 服务器）：**
 ```json
 {
-  "type": "heartbeat",
-  "version": "1.0",
-  "timestamp": "2024-01-01T12:00:30Z",
-  "data": {
-    "node_id": "node_001_v2",
-    "token": "your_secret_token", 
-    "status": "active",
-    "load": 0.65,
-    "memory_usage": "45%"
-  }
+    "type": "heartbeat",
+    "timestamp": "2024-01-01T12:00:30Z",
+    "data": {
+        "node_id": "node_001_v2",
+        "token": "your_secret_token", 
+        "status": "active",
+        "load": 0.65,
+        "memory_usage": "45%"
+    }
 }
 ```
 
 **响应格式（服务器 → 节点）：**
 ```json
 {
-  "type": "heartbeat_ack",
-  "version": "1.0",
-  "timestamp": "2024-01-01T12:00:31Z",
-  "data": {
-    "status": "success", 
-    "message": "心跳确认"
-  }
+    "type": "heartbeat_ack",
+    "timestamp": "2024-01-01T12:00:31Z",
+    "data": {
+        "status": "success", 
+        "message": "心跳确认"
+    }
 }
 ```
 
@@ -152,7 +148,6 @@
 ```json
 {
     "type": "task",
-    "version": "1.0",
     "timestamp": "2024-01-01T12:01:00Z",
     "data": {
         "task_id": "uuid_string",
@@ -167,42 +162,27 @@
 **响应格式（节点 → 服务器）：**
 ```json
 {
-  "type": "task_ack",
-  "version": "1.0",
-  "timestamp": "2024-01-01T12:01:00Z",
-  "data": {
-    "task_id": "6093950a-4dab-4289-96ad-ed6eb901700c",
-    "node_id": "node_001_v2",
-    "status": "success",
-    "result": {
-      "label": "春日野穹",
-      "confidence": 96.5,
-      "inference_time": 125,
-      "class_probs": [
-        {"name": "春日野穹", "prob": 96.5},
-        {"name": "雪之下雪乃", "prob": 2.1},
-        {"name": "霞之丘诗羽", "prob": 1.4}
-      ]
-    },
-    "metadata": {
-      "model_version": "v1.2.0",
-      "hardware": "GPU-NVIDIA-RTX3080"
+    "type": "task_result",
+    "timestamp": "2024-01-01T12:01:00Z",
+    "data": {
+        "task_id": "6093950a-4dab-4289-96ad-ed6eb901700c",
+        "node_id": "node_001_v2",
+        "status": "success",
+        "result": {
+        "label": "春日野穹",
+        "confidence": 96.5,
+        "inference_time": 125,
+        "class_probs": [
+            {"name": "春日野穹", "prob": 96.5},
+            {"name": "雪之下雪乃", "prob": 2.1},
+            {"name": "霞之丘诗羽", "prob": 1.4}
+        ]
+        },
+        "metadata": {
+        "model_version": "v1.2.0",
+        "hardware": "GPU-NVIDIA-RTX3080"
+        }
     }
-  }
-}
-```
-
-**响应格式（服务器 → 节点）：**
-```json
-{
-  "type": "RESULT_ack",
-  "version": "1.0",
-  "timestamp": "2024-01-01T12:01:01Z",
-  "data": {
-    "status": "success",
-    "message": "结果接收成功", 
-    "next_task_available": true
-  }
 }
 ```
 
@@ -216,13 +196,13 @@
 #### 错误码规范
 ```json
 {
-  "error_codes": {
-    "1000": "认证失败",
-    "1001": "协议版本不兼容", 
-    "2000": "任务处理失败",
-    "2001": "图片格式错误",
-    "3000": "系统内部错误"
-  }
+    "error_codes": {
+        "1000": "认证失败",
+        "1001": "协议版本不兼容", 
+        "2000": "任务处理失败",
+        "2001": "图片格式错误",
+        "3000": "系统内部错误"
+    }
 }
 ```
 

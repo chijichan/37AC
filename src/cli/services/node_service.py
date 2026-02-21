@@ -375,19 +375,6 @@ def start_node_service():
                         # 更新当前任务列表和计数
                         tasks.append(task_id)
 
-                        # 节点开始处理任务时
-                        # status_update_increment = {
-                        #     "type": "task_status_update",
-                        #     "action": "increment",
-                        #     "task_id": task_id,
-                        # }
-                        # status_update_decrement = {
-                        #     "type": "task_status_update",
-                        #     "action": "decrement",
-                        #     "task_id": task_id,
-                        # }
-                        # json_protocol.send_json(s, status_update_increment)
-
                         # 解码 base64 图片数据
                         try:
                             import base64
@@ -441,9 +428,6 @@ def start_node_service():
                             # json_protocol.send_json(s, status_update_decrement)
                             tasks.remove(task_id)
 
-                        # 节点完成任务
-                        # json_protocol.send_json(s, status_update_decrement)
-
                     except Exception as e:
                         logger.error(f"[节点] 处理带图片任务出错: {e}")
                         error_msg = {
@@ -457,9 +441,6 @@ def start_node_service():
                             },
                         }
                         json_protocol.send_json(s, error_msg)
-
-                        # 节点完成任务
-                        # json_protocol.send_json(s, status_update_decrement)
 
                 # === 其它消息 ===
                 elif msg_type in ["msg", "error"]:

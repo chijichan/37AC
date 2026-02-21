@@ -76,7 +76,6 @@ class MessageTypeProcessor:
         self.processors = {
             "register": ThreadPoolExecutor(max_workers=3),
             "heartbeat": ThreadPoolExecutor(max_workers=15),
-            "task_status_update": ThreadPoolExecutor(max_workers=5),
             "task_result": ThreadPoolExecutor(max_workers=5),
             "default": ThreadPoolExecutor(max_workers=3),
         }
@@ -85,7 +84,6 @@ class MessageTypeProcessor:
         self.message_queues = {
             "register": Queue(),
             "heartbeat": Queue(),
-            "task_status_update": Queue(),
             "task_result": Queue(),
             "default": Queue(),
         }
@@ -393,7 +391,7 @@ def get_db_connection():
         conn = pymysql.connect(**DB_CONFIG)
         return conn
     except Error as e:
-        print(f"[DB] 数据库连接失败: {e}")
+        print(f"[数据库操作] 数据库连接失败: {e}")
         return None
 
 
@@ -656,41 +654,6 @@ def async_handle_heartbeat(conn, addr, msg, node_id):
     json_protocol.send_json(conn, heartbeat_ack)
 
 
-def async_handle_task_status_update(conn, addr, msg, node_id):
-    """异步处理任务状态更新消息"""
-    action = msg.get("action")  # "increment" 或 "decrement"
-    task_id = msg.get("task_id")
-
-    if action == "increment":
-        node_manager.increment_task_count(node_id)
-        status_update = {
-            "type": "status_update_ack",
-            "task_id": task_id,
-            "status": "success",
-            "message": "任务计数增加成功",
-            "current_tasks": node_manager.get_node_current_tasks(node_id),
-            "max_tasks": node_manager.get_node_max_tasks(node_id),
-        }
-    elif action == "decrement":
-        node_manager.decrement_task_count(node_id)
-        status_update = {
-            "type": "status_update_ack",
-            "task_id": task_id,
-            "status": "success",
-            "message": "任务计数减少成功",
-            "current_tasks": node_manager.get_node_current_tasks(node_id),
-            "max_tasks": node_manager.get_node_max_tasks(node_id),
-        }
-    else:
-        status_update = {
-            "type": "status_update_ack",
-            "status": "error",
-            "message": "无效的操作类型",
-        }
-
-    json_protocol.send_json(conn, status_update)
-
-
 def async_handle_task_result(conn, addr, msg):
     """异步处理任务结果消息 - 整合了数据库保存和任务计数减少"""
     node_id = msg["data"].get("node_id")
@@ -712,7 +675,7 @@ def async_handle_task_result(conn, addr, msg):
                 """
                 cursor.execute(sql, (task_id, json.dumps(result), "completed"))
             conn.commit()
-            logger.info(f"[DB] 任务结果已保存: task_id={task_id}")
+            logger.info(f"[数据库操作] 任务结果已保存: task_id={task_id}")
 
             # 如果有node_id，减少任务计数
             if node_id:
@@ -722,7 +685,7 @@ def async_handle_task_result(conn, addr, msg):
                 )
 
         except Exception as e:
-            logger.error(f"[DB] 异步保存失败: {e}")
+            logger.error(f"[数据库操作] 异步保存失败: {e}")
         finally:
             if "conn" in locals() and conn:
                 conn.close()
@@ -904,26 +867,6 @@ def handle_client(conn, addr):
                         },
                     }
                     json_protocol.send_json(conn, heartbeat_ack)
-
-            # elif msg_type == "task_status_update":
-            #     # 异步处理任务状态更新消息
-            #     if not node_id:
-            #         status_update = {
-            #             "type": "status_update_ack",
-            #             "status": "error",
-            #             "message": "未注册的节点",
-            #         }
-            #         json_protocol.send_json(conn, status_update)
-            #         continue
-
-            #     message_processor.submit_message_task(
-            #         "task_status_update",
-            #         async_handle_task_status_update,
-            #         conn,
-            #         addr,
-            #         msg,
-            #         node_id,
-            #     )
 
             elif msg_type == "task_result":
                 # 异步处理任务结果消息

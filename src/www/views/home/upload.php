@@ -889,7 +889,7 @@ require_once ROOT_PATH . '/views/layout.php';
             const poll = async () => {
                 attempt++;
                 try {
-                    const response = await fetch(`https://api.322337.xyz/task-result/${task_id}`);
+                    const response = await fetch(`http://127.0.0.1:13138/tasks/${task_id}`);
                     if (!response.ok) {
                         throw new Error(`查询失败: ${response.status}`);
                     }

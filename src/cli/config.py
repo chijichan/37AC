@@ -38,12 +38,10 @@ MAX_TASKS = 5  # 节点最大任务处理数
 
 # 暂存
 IMAGE_PATH = ROOT_PATH / "saves" / "uploads"
-os.makedirs(IMAGE_PATH, exist_ok=True)
+IMAGE_PATH.mkdir(exist_ok=True)
 
 # 日志
 LOGS_PATH = ROOT_PATH / "saves" / "logs"
-
-# 如果需要确保目录存在，可以添加：
 LOGS_PATH.mkdir(exist_ok=True)
 
 if AUTO_DEVICE == False:

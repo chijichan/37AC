@@ -28,7 +28,9 @@ TCP_PORT = 13137
 
 # 暂存
 IMAGE_PATH = ROOT_PATH / "saves" / "uploads"
+IMAGE_PATH.mkdir(exist_ok=True)
 
 # - 日志配置
 LOGS_PATH = ROOT_PATH / "saves" / "logs"
+LOGS_PATH.mkdir(exist_ok=True)
 monitor_counter = 0

@@ -198,10 +198,11 @@ def predict_image(image_path, model_path=None, classes_file=None, use_cache=True
                 label = CLASS_NAMES[predicted_idx.item()]
                 confidence_value = confidence.item() * 100
 
-                # 构建各类别概率列表
+                # 构建各类别概率列表，排除概率为0的项
                 class_probs = [
                     {"name": CLASS_NAMES[i], "prob": round(prob.item() * 100, 2)}
                     for i, prob in enumerate(probs[0])
+                    if round(prob.item() * 100, 2) > 0
                 ]
 
                 # 成功返回结果

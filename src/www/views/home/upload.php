@@ -867,7 +867,9 @@ require_once ROOT_PATH . '/views/layout.php';
                     throw new Error(`服务器错误: ${response.status}`);
                 }
 
-                const data = await response.json().data;
+                // 兼容旧/新接口：有些版本把实际信息放在 data 字段里
+                const raw = await response.json();
+                const data = raw.data || raw;
 
                 if (data.status === 'queued' && data.task_id) {
                     await this.pollTaskResult(data.task_id);
@@ -892,7 +894,8 @@ require_once ROOT_PATH . '/views/layout.php';
                         throw new Error(`查询失败: ${response.status}`);
                     }
 
-                    const data = await response.json().data;
+                    const raw = await response.json();
+                    const data = raw.data || raw;
 
                     if (data.status === 'completed') {
                         this.showResult(data);

@@ -413,10 +413,13 @@ def start_node_service():
                             # 返回结果
                             response_msg = {
                                 "type": "task_result",
-                                "node_id": NODE_ID,
-                                "task_id": task_id,
-                                "result": result,
-                                "processed_image_path": local_image_path,
+                                "timestamp": int(time.time()),
+                                "data": {
+                                    "node_id": NODE_ID,
+                                    "task_id": task_id,
+                                    "result": result,
+                                    "processed_image_path": local_image_path,
+                                },
                             }
                             json_protocol.send_json(s, response_msg)
                             logger.info(f"[节点] 已返回任务 {task_id} 的推理结果")
@@ -426,10 +429,13 @@ def start_node_service():
                             logger.error(f"[节点] 图片数据解码失败: {decode_error}")
                             error_msg = {
                                 "type": "task_result",
-                                "node_id": NODE_ID,
-                                "task_id": task_id,
-                                "result": None,
-                                "error": f"图片数据解码失败: {decode_error}",
+                                "timestamp": int(time.time()),
+                                "data": {
+                                    "node_id": NODE_ID,
+                                    "task_id": task_id,
+                                    "result": None,
+                                    "error": f"图片数据解码失败: {decode_error}",
+                                },
                             }
                             json_protocol.send_json(s, error_msg)
                             # json_protocol.send_json(s, status_update_decrement)
@@ -442,10 +448,13 @@ def start_node_service():
                         logger.error(f"[节点] 处理带图片任务出错: {e}")
                         error_msg = {
                             "type": "task_result",
-                            "node_id": NODE_ID,
-                            "task_id": "unknown",
-                            "result": None,
-                            "error": f"处理任务出错: {e}",
+                            "timestamp": int(time.time()),
+                            "data": {
+                                "node_id": NODE_ID,
+                                "task_id": "unknown",
+                                "result": None,
+                                "error": f"处理任务出错: {e}",
+                            },
                         }
                         json_protocol.send_json(s, error_msg)
 

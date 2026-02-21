@@ -693,9 +693,9 @@ def async_handle_task_status_update(conn, addr, msg, node_id):
 
 def async_handle_task_result(conn, addr, msg):
     """异步处理任务结果消息 - 整合了数据库保存和任务计数减少"""
-    node_id = msg.get("node_id")
-    task_id = msg.get("task_id")
-    result = msg.get("result")
+    node_id = msg["data"].get("node_id")
+    task_id = msg["data"].get("task_id")
+    result = msg["data"].get("result")
 
     # 定义完整的异步处理任务
     def process_task_result():

@@ -7,7 +7,7 @@ from flask import render_template, request, redirect, url_for, flash, jsonify
 from AC_web import app
 import threading
 from config import IMAGE_PATH
-from services.tcp_service import get_db_connection
+from services.tcp_service import get_db_connection, node_manager
 
 # ======================
 # === 配置项 ===
@@ -52,7 +52,7 @@ def save_uploaded_file(file):
 
 
 # ======================
-# === 上传与调度路由 ===
+# === 接口路由 ===
 # ======================
 @app.route("/upload", methods=["GET", "POST"])
 def upload_and_predict():
@@ -165,3 +165,55 @@ def get_task_result(task_id):
     finally:
         if "conn" in locals():
             conn.close()
+
+
+@app.route("/nodes", methods=["GET"])
+def get_all_nodes():
+    """节点查询接口。
+
+    * 如果通过浏览器直接访问，则渲染 `nodes.html` 页面；
+    * 如果通过 AJAX 或希望获取 JSON 格式数据，会返回一份标准的 JSON 响应。
+
+    返回 JSON 时的数据结构参考 `NodeManager.get_available_nodes()`。
+    """
+    is_ajax = request.headers.get("X-Requested-With") == "XMLHttpRequest"
+    wants_json = is_ajax or request.accept_mimetypes.accept_json
+
+    try:
+        nodes = node_manager.get_available_nodes()
+
+        if wants_json:
+            return (
+                jsonify(
+                    {
+                        "type": "nodes_list",
+                        "timestamp": int(datetime.now().timestamp()),
+                        "data": nodes,
+                    }
+                ),
+                200,
+            )
+        else:
+            # 普通浏览器访问，渲染页面，由 JS 进行刷新
+            return render_template(
+                "nodes.html", title="节点管理", year=datetime.now().year
+            )
+
+    except Exception as e:
+        if wants_json:
+            return (
+                jsonify(
+                    {
+                        "type": "nodes_list",
+                        "timestamp": int(datetime.now().timestamp()),
+                        "data": [],
+                        "error": str(e),
+                    }
+                ),
+                500,
+            )
+        else:
+            flash(f"获取节点信息失败: {e}")
+            return render_template(
+                "nodes.html", title="节点管理", year=datetime.now().year
+            )

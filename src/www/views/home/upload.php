@@ -752,6 +752,7 @@ require_once ROOT_PATH . '/views/layout.php';
                 this.elements.imagePlaceholder.style.display = 'none';
 
                 const config = {
+                    publicPath: 'https://static.322337.xyz/file/package/dist/',
                     device: 'gpu',
                     model: 'large',
                     output: {

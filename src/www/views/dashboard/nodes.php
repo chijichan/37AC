@@ -10,17 +10,17 @@ if (!$isAjax) {
 
 <style>
     .node-card {
-        background: var(--card-background-color);
+        background: var(--pico-card-background-color);
         padding: 1.5rem;
         border-radius: var(--pico-border-radius);
-        box-shadow: var(--card-box-shadow);
+        box-shadow: var(--pico-box-shadow);
         margin-bottom: 1.5rem;
         transition: transform 0.3s ease, box-shadow 0.3s ease;
     }
 
     .node-card:hover {
         transform: translateY(-3px);
-        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+        box-shadow: var(--pico-box-shadow);
     }
 
     .node-header {
@@ -36,16 +36,17 @@ if (!$isAjax) {
         border-radius: 5rem;
         font-size: 0.875rem;
         font-weight: 600;
+        color: var(--pico-background-color);
     }
 
     .node-status.online {
-        background: #d4edda;
-        color: #155724;
+        background: var(--pico-ins-color);
+        color: var(--pico-background-color);
     }
 
     .node-status.offline {
-        background: #f8d7da;
-        color: #721c24;
+        background: var(--pico-del-color);
+        color: var(--pico-background-color);
     }
 
     .node-info {
@@ -62,12 +63,12 @@ if (!$isAjax) {
     .node-info-value {
         font-size: 1.5rem;
         font-weight: bold;
-        color: var(--primary);
+        color: var(--pico-primary);
     }
 
     .node-info-label {
         font-size: 0.875rem;
-        color: var(--muted-color);
+        color: var(--pico-muted-color);
     }
 </style>
 

@@ -80,7 +80,7 @@ if (!$isAjax) {
     <article>
         <h2>🔔 通知设置</h2>
         <p>选择你希望接收的通知类型。</p>
-        
+
         <label>
             <input type="checkbox" role="switch" checked />
             节点状态变更通知
@@ -104,20 +104,20 @@ if (!$isAjax) {
 
 <!-- 危险区域 -->
 <section style="margin-top: 2rem;">
-    <article style="border: 2px solid var(--del-color);">
-        <h2 style="color: var(--del-color);">⚠️ 危险区域</h2>
+    <article style="border: 2px solid var(--pico-del-color);">
+        <h2 style="color: var(--pico-del-color);">⚠️ 危险区域</h2>
         <p>这些操作不可逆，请谨慎操作。</p>
-        
+
         <hr />
-        
+
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
             <div>
                 <strong>撤销所有API密钥</strong>
-                <p style="margin: 0.25rem 0 0 0; font-size: 0.875rem; color: var(--muted-color);">
+                <p style="margin: 0.25rem 0 0 0; font-size: 0.875rem; color: var(--pico-muted-color);">
                     立即禁用所有现有的API密钥
                 </p>
             </div>
-            <button class="outline" style="color: var(--del-color);">撤销全部</button>
+            <button class="outline" style="color: var(--pico-del-color);">撤销全部</button>
         </div>
 
         <hr />
@@ -125,11 +125,11 @@ if (!$isAjax) {
         <div style="display: flex; justify-content: space-between; align-items: center;">
             <div>
                 <strong>删除账户</strong>
-                <p style="margin: 0.25rem 0 0 0; font-size: 0.875rem; color: var(--muted-color);">
+                <p style="margin: 0.25rem 0 0 0; font-size: 0.875rem; color: var(--pico-muted-color);">
                     永久删除你的账户和所有数据
                 </p>
             </div>
-            <button class="outline" style="color: var(--del-color);">删除账户</button>
+            <button class="outline" style="color: var(--pico-del-color);">删除账户</button>
         </div>
     </article>
 </section>

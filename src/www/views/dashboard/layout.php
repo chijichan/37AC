@@ -5,12 +5,11 @@ require_once ROOT_PATH . '/views/layout.php';
 <style>
     /* 仪表盘二级导航 */
     .dashboard-subnav {
-        background: var(--color-background-color);
-        border-bottom: 1px solid var(--muted-border-color);
+        background: var(--pico-card-background-color);
+        border-bottom: 1px solid var(--pico-muted-border-color);
         border-radius: var(--pico-border-radius);
         margin-bottom: 2rem;
         padding: 1rem 0;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
     }
 
     /* 桌面导航 */
@@ -27,29 +26,29 @@ require_once ROOT_PATH . '/views/layout.php';
         gap: 0.5rem;
         padding: 0.625rem 1.25rem;
         text-decoration: none;
-        color: var(--color);
+        color: var(--pico-color);
         border-radius: var(--pico-border-radius);
-        transition: all 0.3s ease;
-        background: var(--card-background-color);
-        border: 1px solid var(--muted-border-color);
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+        transition: all var(--pico-transition);
+        background: var(--pico-card-background-color);
+        border: 1px solid var(--pico-muted-border-color);
+        box-shadow: var(--pico-box-shadow);
         font-size: 0.95rem;
         font-weight: 500;
     }
 
     .dashboard-nav-desktop a:hover {
-        background: var(--card-sectionning-background-color);
-        border-color: var(--primary);
+        background: var(--pico-card-sectioning-background-color);
+        border-color: var(--pico-primary-hover);
         transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+        box-shadow: var(--pico-box-shadow);
     }
 
     .dashboard-nav-desktop a.active {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
+        background: var(--pico-primary-background);
+        color: var(--pico-primary-inverse);
         border-color: transparent;
         font-weight: 600;
-        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        box-shadow: var(--pico-box-shadow);
     }
 
     .dashboard-nav-desktop a span {
@@ -69,25 +68,41 @@ require_once ROOT_PATH . '/views/layout.php';
         justify-content: space-between;
         width: 100%;
         padding: 0.75rem 1rem;
-        background: var(--card-background-color);
-        border: 1px solid var(--muted-border-color);
+        background: var(--pico-card-background-color);
+        border: 1px solid var(--pico-muted-border-color);
         border-radius: var(--pico-border-radius);
         cursor: pointer;
         font-size: 1rem;
         font-weight: 600;
-        color: var(--color);
-        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
-        transition: all 0.2s ease;
+        color: var(--pico-mark-color);
+        box-shadow: var(--pico-box-shadow);
+        transition: all var(--pico-transition);
     }
 
     .dashboard-nav-toggle:hover {
-        border-color: var(--primary);
-        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+        border-color: var(--pico-primary-hover);
+        box-shadow: var(--pico-box-shadow);
     }
 
     .dashboard-nav-toggle .icon {
         font-size: 1.2em;
         margin-right: 0.5rem;
+    }
+
+    /* image versions of the same icons */
+    .dashboard-nav-toggle img.icon {
+        width: 1.2em;
+        height: 1.2em;
+        margin-right: 0.5rem;
+    }
+
+    .dashboard-nav-desktop a .icon,
+    .dashboard-nav-dropdown a .icon,
+    .dashboard-nav-link-mobile .icon {
+        width: 1.2em;
+        height: auto;
+        margin-right: 0.5rem;
+        vertical-align: middle;
     }
 
     .dashboard-nav-toggle .arrow {
@@ -106,9 +121,9 @@ require_once ROOT_PATH . '/views/layout.php';
         left: 0;
         right: 0;
         background: var(--pico-background-color);
-        border: 1px solid var(--muted-border-color);
+        border: 1px solid var(--pico-muted-border-color);
         border-radius: var(--pico-border-radius);
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+        box-shadow: var(--pico-box-shadow);
         z-index: 1000;
         animation: slideDown 0.3s ease;
     }
@@ -135,9 +150,9 @@ require_once ROOT_PATH . '/views/layout.php';
         gap: 0.75rem;
         padding: 0.875rem 1.25rem;
         text-decoration: none;
-        color: var(--color);
-        transition: all 0.2s ease;
-        border-bottom: 1px solid var(--muted-border-color);
+        color: var(--pico-color);
+        transition: all var(--pico-transition);
+        border-bottom: 1px solid var(--pico-muted-border-color);
         font-weight: 500;
     }
 
@@ -146,15 +161,15 @@ require_once ROOT_PATH . '/views/layout.php';
     }
 
     .dashboard-nav-dropdown a:hover {
-        background: var(--card-sectionning-background-color);
+        background: var(--pico-card-sectioning-background-color);
         padding-left: 1.5rem;
     }
 
     .dashboard-nav-dropdown a.active {
-        background: linear-gradient(135deg, rgba(102, 126, 234, 0.15) 0%, rgba(118, 75, 162, 0.15) 100%);
-        color: var(--primary);
+        background: var(--pico-primary-background);
+        color: var(--pico-primary-inverse);
         font-weight: 600;
-        border-left: 3px solid var(--primary);
+        border-left: 3px solid var(--pico-primary);
     }
 
     .dashboard-nav-dropdown a span {
@@ -194,8 +209,8 @@ require_once ROOT_PATH . '/views/layout.php';
         display: inline-block;
         width: 2rem;
         height: 2rem;
-        border: 3px solid var(--muted-border-color);
-        border-top-color: var(--primary);
+        border: 3px solid var(--pico-muted-border-color);
+        border-top-color: var(--pico-primary);
         border-radius: 50%;
         animation: spin 0.8s linear infinite;
     }
@@ -221,19 +236,19 @@ require_once ROOT_PATH . '/views/layout.php';
         <!-- 桌面端导航 -->
         <nav class="dashboard-nav-desktop">
             <a href="/dashboard" data-page="overview" class="dashboard-nav-link active">
-                <span>📊</span>总览
+                <img src="https://static.322337.xyz/assets/img/overview.svg" alt="总览" class="icon" />总览
             </a>
             <a href="/dashboard/nodes" data-page="nodes" class="dashboard-nav-link">
-                <span>🖥️</span>节点管理
+                <img src="https://static.322337.xyz/assets/img/nodes.svg" alt="节点管理" class="icon" />节点管理
             </a>
             <a href="/dashboard/apikeys" data-page="apikeys" class="dashboard-nav-link">
-                <span>🔑</span>API密钥
+                <img src="https://static.322337.xyz/assets/img/apikeys.svg" alt="API密钥" class="icon" />API密钥
             </a>
             <a href="/dashboard/history" data-page="history" class="dashboard-nav-link">
-                <span>📜</span>使用记录
+                <img src="https://static.322337.xyz/assets/img/history.svg" alt="使用记录" class="icon" />使用记录
             </a>
             <a href="/dashboard/settings" data-page="settings" class="dashboard-nav-link">
-                <span>⚙️</span>设置
+                <img src="https://static.322337.xyz/assets/img/settings.svg" alt="设置" class="icon" />设置
             </a>
         </nav>
 
@@ -241,26 +256,28 @@ require_once ROOT_PATH . '/views/layout.php';
         <div class="dashboard-nav-mobile">
             <button class="dashboard-nav-toggle" id="dashboardNavToggle" type="button">
                 <span>
-                    <span class="icon" id="currentNavIcon">📊</span>
+                    <span class="icon" id="currentNavIcon">
+                        <img src="https://static.322337.xyz/assets/img/overview.svg" alt="总览" class="icon" />
+                    </span>
                     <span id="currentNavText">总览</span>
                 </span>
                 <span class="arrow">▼</span>
             </button>
             <div class="dashboard-nav-dropdown" id="dashboardNavDropdown">
                 <a href="/dashboard" data-page="overview" class="dashboard-nav-link-mobile active">
-                    <span>📊</span>总览
+                    <img src="https://static.322337.xyz/assets/img/overview.svg" alt="总览" class="icon" />总览
                 </a>
                 <a href="/dashboard/nodes" data-page="nodes" class="dashboard-nav-link-mobile">
-                    <span>🖥️</span>节点管理
+                    <img src="https://static.322337.xyz/assets/img/nodes.svg" alt="节点管理" class="icon" />节点管理
                 </a>
                 <a href="/dashboard/apikeys" data-page="apikeys" class="dashboard-nav-link-mobile">
-                    <span>🔑</span>API密钥
+                    <img src="https://static.322337.xyz/assets/img/apikeys.svg" alt="API密钥" class="icon" />API密钥
                 </a>
                 <a href="/dashboard/history" data-page="history" class="dashboard-nav-link-mobile">
-                    <span>📜</span>使用记录
+                    <img src="https://static.322337.xyz/assets/img/history.svg" alt="使用记录" class="icon" />使用记录
                 </a>
                 <a href="/dashboard/settings" data-page="settings" class="dashboard-nav-link-mobile">
-                    <span>⚙️</span>设置
+                    <img src="https://static.322337.xyz/assets/img/settings.svg" alt="设置" class="icon" />设置
                 </a>
             </div>
         </div>
@@ -299,23 +316,23 @@ require_once ROOT_PATH . '/views/layout.php';
         // 页面信息映射
         const pageInfo = {
             'overview': {
-                icon: '📊',
+                icon: '<img src="https://static.322337.xyz/assets/img/overview.svg" alt="总览" class="icon" />',
                 text: '总览'
             },
             'nodes': {
-                icon: '🖥️',
+                icon: '<img src="https://static.322337.xyz/assets/img/nodes.svg" alt="节点管理" class="icon" />',
                 text: '节点管理'
             },
             'apikeys': {
-                icon: '🔑',
+                icon: '<img src="https://static.322337.xyz/assets/img/apikeys.svg" alt="API密钥" class="icon" />',
                 text: 'API密钥'
             },
             'history': {
-                icon: '📜',
+                icon: '<img src="https://static.322337.xyz/assets/img/history.svg" alt="使用记录" class="icon" />',
                 text: '使用记录'
             },
             'settings': {
-                icon: '⚙️',
+                icon: '<img src="https://static.322337.xyz/assets/img/settings.svg" alt="设置" class="icon" />',
                 text: '设置'
             }
         };
@@ -448,7 +465,7 @@ require_once ROOT_PATH . '/views/layout.php';
         // 更新移动端下拉按钮显示
         function updateMobileNav(page) {
             if (pageInfo[page]) {
-                currentNavIcon.textContent = pageInfo[page].icon;
+                currentNavIcon.innerHTML = pageInfo[page].icon;
                 currentNavText.textContent = pageInfo[page].text;
             }
         }

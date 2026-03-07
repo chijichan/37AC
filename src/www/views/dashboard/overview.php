@@ -1,8 +1,8 @@
 <style>
-    /* 仪表盘自定义样式 */
+    /* 仪表盘自定义样式，尽可能使用 Pico 变量 */
     .dashboard-header {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
+        background: var(--pico-primary-background);
+        color: var(--pico-primary-inverse);
         padding: 2rem;
         margin-bottom: 2rem;
         border-radius: var(--pico-border-radius);
@@ -10,7 +10,7 @@
     }
 
     .dashboard-header h1 {
-        color: white;
+        color: inherit;
         margin-bottom: 0.5rem;
     }
 
@@ -27,23 +27,23 @@
     }
 
     .stat-card {
-        background: var(--card-background-color);
+        background: var(--pico-card-background-color);
         padding: 1.5rem;
         border-radius: var(--pico-border-radius);
-        box-shadow: var(--card-box-shadow);
+        box-shadow: var(--pico-box-shadow);
         transition: transform 0.3s ease, box-shadow 0.3s ease;
     }
 
     .stat-card:hover {
         transform: translateY(-5px);
-        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+        box-shadow: var(--pico-box-shadow);
     }
 
     .stat-card h3 {
         margin-top: 0;
         font-size: 0.875rem;
         text-transform: uppercase;
-        color: var(--muted-color);
+        color: var(--pico-muted-color);
         font-weight: 600;
     }
 
@@ -51,30 +51,27 @@
         font-size: 2.5rem;
         font-weight: bold;
         margin: 0.5rem 0;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
+        color: var(--pico-primary);
     }
 
     .stat-change {
         font-size: 0.875rem;
-        color: var(--muted-color);
+        color: var(--pico-muted-color);
     }
 
     .stat-change.positive {
-        color: #28a745;
+        color: var(--pico-ins-color);
     }
 
     .stat-change.negative {
-        color: #dc3545;
+        color: var(--pico-del-color);
     }
 
     .chart-container {
-        background: var(--card-background-color);
+        background: var(--pico-card-background-color);
         padding: 1.5rem;
         border-radius: var(--pico-border-radius);
-        box-shadow: var(--card-box-shadow);
+        box-shadow: var(--pico-box-shadow);
         margin-bottom: 2rem;
     }
 
@@ -88,12 +85,12 @@
         display: flex;
         align-items: center;
         padding: 1rem;
-        border-bottom: 1px solid var(--muted-border-color);
+        border-bottom: 1px solid var(--pico-muted-border-color);
         transition: background-color 0.2s ease;
     }
 
     .activity-item:hover {
-        background-color: var(--card-sectionning-background-color);
+        background-color: var(--pico-card-sectioning-background-color);
     }
 
     .activity-item:last-child {
@@ -109,19 +106,19 @@
         justify-content: center;
         margin-right: 1rem;
         font-weight: bold;
-        color: white;
+        color: var(--pico-background-color);
     }
 
     .activity-icon.upload {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: var(--pico-primary-background);
     }
 
     .activity-icon.user {
-        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        background: var(--pico-secondary-background);
     }
 
     .activity-icon.system {
-        background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        background: var(--pico-contrast-background);
     }
 
     .activity-content {
@@ -135,7 +132,7 @@
 
     .activity-time {
         font-size: 0.875rem;
-        color: var(--muted-color);
+        color: var(--pico-muted-color);
     }
 
     .quick-actions {
@@ -154,13 +151,13 @@
         text-decoration: none;
         border-radius: var(--pico-border-radius);
         transition: all 0.3s ease;
-        background: var(--card-background-color);
-        box-shadow: var(--card-box-shadow);
+        background: var(--pico-card-background-color);
+        box-shadow: var(--pico-box-shadow);
     }
 
     .action-button:hover {
         transform: translateY(-5px);
-        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+        box-shadow: var(--pico-box-shadow);
     }
 
     .action-icon {
@@ -255,7 +252,7 @@
     <section>
         <article class="chart-container">
             <h2>💻 系统状态</h2>
-            
+
             <div class="progress-container">
                 <div class="progress-label">
                     <span>CPU 使用率</span>

@@ -10,10 +10,10 @@ if (!$isAjax) {
 
 <style>
     .api-key-card {
-        background: var(--card-background-color);
+        background: var(--pico-card-background-color);
         padding: 1.5rem;
         border-radius: var(--pico-border-radius);
-        box-shadow: var(--card-box-shadow);
+        box-shadow: var(--pico-box-shadow);
         margin-bottom: 1.5rem;
     }
 
@@ -21,7 +21,7 @@ if (!$isAjax) {
         display: flex;
         gap: 1rem;
         align-items: center;
-        background: var(--card-sectionning-background-color);
+        background: var(--pico-card-sectioning-background-color);
         padding: 1rem;
         border-radius: var(--pico-border-radius);
         font-family: monospace;
@@ -38,6 +38,26 @@ if (!$isAjax) {
     .key-actions {
         display: flex;
         gap: 0.5rem;
+    }
+
+    /* 状态徽章 */
+    .status-badge {
+        display: inline-block;
+        padding: 0.25rem 0.75rem;
+        border-radius: 5rem;
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: var(--pico-background-color);
+    }
+
+    .status-badge.active {
+        background: var(--pico-ins-color);
+        color: var(--pico-background-color);
+    }
+
+    .status-badge.paused {
+        background: var(--pico-secondary-background);
+        color: var(--pico-secondary-inverse);
     }
 </style>
 
@@ -73,14 +93,14 @@ if (!$isAjax) {
 <!-- 现有密钥列表 -->
 <section>
     <h2>现有密钥</h2>
-    
+
     <article class="api-key-card">
-        <div style="display: flex; justify-content: space-between; align-items: start;">
+        <div class="d-flex" style="justify-content: space-between; align-items: start;">
             <div>
                 <h4 style="margin-top: 0;">生产环境节点</h4>
-                <small style="color: var(--muted-color);">创建于 2026-01-15</small>
+                <small style="color: var(--pico-muted-color);">创建于 2026-01-15</small>
             </div>
-            <span style="padding: 0.25rem 0.75rem; background: #d4edda; color: #155724; border-radius: 5rem; font-size: 0.875rem;">
+            <span class="status-badge active">
                 ✓ 活跃
             </span>
         </div>
@@ -107,7 +127,7 @@ if (!$isAjax) {
 
         <footer style="margin-top: 1rem; text-align: right;">
             <button class="secondary outline">编辑</button>
-            <button class="outline" style="color: var(--del-color);">撤销</button>
+            <button class="outline" style="color: var(--pico-del-color);">撤销</button>
         </footer>
     </article>
 
@@ -115,9 +135,9 @@ if (!$isAjax) {
         <div style="display: flex; justify-content: space-between; align-items: start;">
             <div>
                 <h4 style="margin-top: 0;">测试环境</h4>
-                <small style="color: var(--muted-color);">创建于 2026-01-20</small>
+                <small style="color: var(--pico-muted-color);">创建于 2026-01-20</small>
             </div>
-            <span style="padding: 0.25rem 0.75rem; background: #fff3cd; color: #856404; border-radius: 5rem; font-size: 0.875rem;">
+            <span class="status-badge paused">
                 ⏸ 暂停
             </span>
         </div>
@@ -144,20 +164,20 @@ if (!$isAjax) {
 
         <footer style="margin-top: 1rem; text-align: right;">
             <button class="secondary outline">编辑</button>
-            <button class="outline" style="color: var(--del-color);">撤销</button>
+            <button class="outline" style="color: var(--pico-del-color);">撤销</button>
         </footer>
     </article>
 </section>
 
 <script>
-function copyToClipboard(btn) {
-    const keyText = btn.closest('.key-display').querySelector('.key-text').textContent;
-    navigator.clipboard.writeText(keyText).then(() => {
-        const originalText = btn.innerHTML;
-        btn.innerHTML = '✓';
-        setTimeout(() => {
-            btn.innerHTML = originalText;
-        }, 2000);
-    });
-}
+    function copyToClipboard(btn) {
+        const keyText = btn.closest('.key-display').querySelector('.key-text').textContent;
+        navigator.clipboard.writeText(keyText).then(() => {
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '✓';
+            setTimeout(() => {
+                btn.innerHTML = originalText;
+            }, 2000);
+        });
+    }
 </script>

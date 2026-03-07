@@ -8,6 +8,16 @@ if (!$isAjax) {
 }
 ?>
 
+<style>
+    .history-status.success {
+        color: var(--pico-ins-color);
+    }
+
+    .history-status.failure {
+        color: var(--pico-del-color);
+    }
+</style>
+
 <!-- 页面标题 -->
 <header style="margin-bottom: 2rem;">
     <h1>📜 使用记录</h1>
@@ -51,19 +61,19 @@ if (!$isAjax) {
 <!-- 统计概览 -->
 <div class="grid" style="margin-bottom: 2rem;">
     <article style="text-align: center; padding: 1.5rem;">
-        <h2 style="margin: 0; color: var(--primary);">2,345</h2>
+        <h2 style="margin: 0; color: var(--pico-primary);">2,345</h2>
         <small>总请求数</small>
     </article>
     <article style="text-align: center; padding: 1.5rem;">
-        <h2 style="margin: 0; color: #28a745;">2,289</h2>
+        <h2 style="margin: 0; color: var(--pico-ins-color);">2,289</h2>
         <small>成功</small>
     </article>
     <article style="text-align: center; padding: 1.5rem;">
-        <h2 style="margin: 0; color: #dc3545;">56</h2>
+        <h2 style="margin: 0; color: var(--pico-del-color);">56</h2>
         <small>失败</small>
     </article>
     <article style="text-align: center; padding: 1.5rem;">
-        <h2 style="margin: 0; color: var(--primary);">97.6%</h2>
+        <h2 style="margin: 0; color: var(--pico-primary);">97.6%</h2>
         <small>成功率</small>
     </article>
 </div>
@@ -90,7 +100,7 @@ if (!$isAjax) {
                     <td>图片识别</td>
                     <td>image_001.jpg</td>
                     <td>初音未来 (95%)</td>
-                    <td><span style="color: #28a745;">✓ 成功</span></td>
+                    <td><span class="history-status success">✓ 成功</span></td>
                 </tr>
                 <tr>
                     <td>2026-01-31 14:22:48</td>
@@ -98,7 +108,7 @@ if (!$isAjax) {
                     <td>图片上传</td>
                     <td>character_002.png</td>
                     <td>雷电将军 (88%)</td>
-                    <td><span style="color: #28a745;">✓ 成功</span></td>
+                    <td><span class="history-status success">✓ 成功</span></td>
                 </tr>
                 <tr>
                     <td>2026-01-31 14:20:31</td>
@@ -106,7 +116,7 @@ if (!$isAjax) {
                     <td>图片识别</td>
                     <td>anime_003.jpg</td>
                     <td>--</td>
-                    <td><span style="color: #dc3545;">✗ 失败</span></td>
+                    <td><span class="history-status failure">✗ 失败</span></td>
                 </tr>
                 <tr>
                     <td>2026-01-31 14:18:05</td>
@@ -114,7 +124,7 @@ if (!$isAjax) {
                     <td>批量上传</td>
                     <td>batch_001.zip</td>
                     <td>156个文件</td>
-                    <td><span style="color: #28a745;">✓ 成功</span></td>
+                    <td><span class="history-status success">✓ 成功</span></td>
                 </tr>
                 <tr>
                     <td>2026-01-31 14:15:22</td>

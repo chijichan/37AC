@@ -8,12 +8,7 @@ require_once ROOT_PATH . '/views/layout.php';
     <div class="upload-section">
         <div class="file-input-wrapper">
             <label for="fileInput" class="file-input-label">
-                <i class="upload-icon"><svg t="1759466481798" class="icon" viewBox="0 0 1024 1024" version="1.1"
-                        xmlns="http://www.w3.org/2000/svg" p-id="4741" width="32" height="32">
-                        <path
-                            d="M855.04 385.024q19.456 2.048 38.912 10.24t33.792 23.04 21.504 37.376 2.048 54.272q-2.048 8.192-8.192 40.448t-14.336 74.24-18.432 86.528-19.456 76.288q-5.12 18.432-14.848 37.888t-25.088 35.328-36.864 26.112-51.2 10.24l-567.296 0q-21.504 0-44.544-9.216t-42.496-26.112-31.744-40.96-12.288-53.76l0-439.296q0-62.464 33.792-97.792t95.232-35.328l503.808 0q22.528 0 46.592 8.704t43.52 24.064 31.744 35.84 12.288 44.032l0 11.264-53.248 0q-40.96 0-95.744-0.512t-116.736-0.512-115.712-0.512-92.672-0.512l-47.104 0q-26.624 0-41.472 16.896t-23.04 44.544q-8.192 29.696-18.432 62.976t-18.432 61.952q-10.24 33.792-20.48 65.536-2.048 8.192-2.048 13.312 0 17.408 11.776 29.184t29.184 11.776q31.744 0 43.008-39.936l54.272-198.656q133.12 1.024 243.712 1.024l286.72 0z"
-                            p-id="4742"></path>
-                    </svg></i>
+                <img src="https://static.322337.xyz/assets/img/upload-w.svg" alt="上传图片" class="icon" />
                 <span>选择图片文件</span>
             </label>
             <input type="file" id="fileInput" accept="image/*" class="file-input" />
@@ -97,60 +92,71 @@ require_once ROOT_PATH . '/views/layout.php';
     .anime-detector-container {
         max-width: 900px;
         margin: 0 auto;
-        padding: 20px;
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        padding: var(--pico-spacing);
     }
 
     .upload-section {
-        background: #f8f9fa;
-        border: 2px dashed #dee2e6;
-        border-radius: 12px;
-        padding: 30px;
+        background: var(--pico-card-sectioning-background-color);
+        border: var(--pico-border-width) dashed var(--pico-form-element-border-color);
+        border-radius: var(--pico-border-radius);
+        padding: calc(var(--pico-spacing) * 1.5);
         text-align: center;
-        margin-bottom: 24px;
-        transition: all 0.3s ease;
+        margin-bottom: var(--pico-spacing);
+        transition: all var(--pico-transition);
         position: relative;
     }
 
     .upload-section:hover {
-        border-color: #007bff;
-        background: #f1f8ff;
+        border-color: var(--pico-primary);
+        background: var(--pico-form-element-background-color);
     }
 
     .upload-section.drag-over {
-        border-color: #007bff;
-        background-color: #e3f2fd;
+        border-color: var(--pico-primary);
+        background-color: var(--pico-primary-focus);
         transform: scale(1.02);
-        box-shadow: 0 8px 25px rgba(0, 123, 255, 0.2);
+        box-shadow: var(--pico-card-box-shadow);
     }
 
     .upload-section.drag-invalid {
-        border-color: #dc3545;
-        background-color: #ffebee;
+        border-color: var(--pico-form-element-invalid-border-color);
+        background-color: var(--pico-form-element-invalid-background-color);
+    }
+
+    .upload-section .icon {
+        font-size: 1.2em;
+        margin-right: 0.5rem;
+    }
+
+    .upload-section div .icon {
+        width: 1.2em;
+        height: auto;
+        margin-right: 0.5rem;
+        vertical-align: middle;
     }
 
     .file-input-wrapper {
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 12px;
+        gap: calc(var(--pico-spacing) * 0.5);
     }
 
     .file-input-label {
         display: inline-flex;
         align-items: center;
-        gap: 8px;
-        padding: 12px 24px;
-        background: #007bff;
-        color: white;
-        border-radius: 6px;
+        gap: calc(var(--pico-spacing) * 0.25);
+        padding: var(--pico-form-element-spacing-vertical) var(--pico-form-element-spacing-horizontal);
+        background: var(--pico-primary-background);
+        color: var(--pico-primary-inverse);
+        border-radius: var(--pico-border-radius);
         cursor: pointer;
-        transition: background 0.3s ease;
-        font-weight: 500;
+        transition: background var(--pico-transition);
+        font-weight: var(--pico-font-weight);
     }
 
     .file-input-label:hover {
-        background: #0056b3;
+        background: var(--pico-primary-hover-background);
     }
 
     .file-input {
@@ -158,25 +164,25 @@ require_once ROOT_PATH . '/views/layout.php';
     }
 
     .file-hint {
-        color: #6c757d;
-        font-size: 14px;
+        color: var(--pico-muted-color);
+        font-size: 0.875em;
         margin: 0;
     }
 
     .crop-container {
         display: none;
-        background: white;
-        border: 1px solid #e9ecef;
-        border-radius: 12px;
-        padding: 24px;
-        margin-bottom: 24px;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        background: var(--pico-card-background-color);
+        border: var(--pico-border-width) solid var(--pico-card-border-color);
+        border-radius: var(--pico-border-radius);
+        padding: var(--pico-spacing);
+        margin-bottom: var(--pico-spacing);
+        box-shadow: var(--pico-card-box-shadow);
     }
 
     /* 新增导航栏样式 */
     .crop-navigation {
-        margin-bottom: 20px;
-        border-bottom: 1px solid #e9ecef;
+        margin-bottom: calc(var(--pico-spacing) * 0.5);
+        border-bottom: var(--pico-border-width) solid var(--pico-muted-border-color);
     }
 
     .nav-tabs {
@@ -185,45 +191,46 @@ require_once ROOT_PATH . '/views/layout.php';
     }
 
     .nav-tab {
-        padding: 12px 24px;
+        padding: var(--pico-form-element-spacing-vertical) var(--pico-form-element-spacing-horizontal);
         border: none;
         background: none;
         cursor: pointer;
-        font-size: 16px;
-        font-weight: 500;
-        color: #6c757d;
-        border-bottom: 2px solid transparent;
-        transition: all 0.3s ease;
+        font-size: var(--pico-font-size);
+        font-weight: var(--pico-font-weight);
+        color: var(--pico-muted-color);
+        border-bottom: var(--pico-border-width) solid transparent;
+        transition: all var(--pico-transition);
     }
 
     .nav-tab:hover {
-        color: #007bff;
-        background-color: #f8f9fa;
+        color: var(--pico-primary);
+        background-color: var(--pico-card-sectioning-background-color);
     }
 
     .nav-tab.active {
-        color: #007bff;
-        border-bottom-color: #007bff;
-        background-color: #fff;
+        color: var(--pico-primary);
+        border-bottom-color: var(--pico-primary-border);
+        background-color: var(--pico-card-background-color);
     }
 
     .crop-layout {
         display: grid;
         grid-template-columns: 1fr auto;
-        gap: 24px;
+        gap: var(--pico-spacing);
         align-items: start;
     }
 
     .crop-main h3,
     .crop-preview-section h3 {
-        margin-bottom: 16px;
-        color: #343a40;
-        font-size: 18px;
+        margin-bottom: calc(var(--pico-spacing) * 0.5);
+        color: var(--pico-h3-color);
+        font-size: var(--pico-h3-font-size, 1.5rem);
+        font-weight: var(--pico-h3-font-weight, bold);
     }
 
     .image-wrapper {
-        border: 1px solid #dee2e6;
-        border-radius: 8px;
+        border: var(--pico-border-width) solid var(--pico-muted-border-color);
+        border-radius: var(--pico-border-radius);
         overflow: hidden;
         max-width: 500px;
         position: relative;
@@ -231,7 +238,7 @@ require_once ROOT_PATH . '/views/layout.php';
         display: flex;
         align-items: center;
         justify-content: center;
-        background-color: #f8f9fa;
+        background-color: var(--pico-card-sectioning-background-color);
     }
 
     .crop-image {
@@ -253,16 +260,16 @@ require_once ROOT_PATH . '/views/layout.php';
     .preview-box {
         width: 120px;
         height: 120px;
-        border: 2px solid #007bff;
-        border-radius: 8px;
+        border: var(--pico-border-width) solid var(--pico-primary-border);
+        border-radius: var(--pico-border-radius);
         overflow: hidden;
-        background: #f8f9fa;
+        background: var(--pico-card-sectioning-background-color);
     }
 
     .preview-hint {
-        font-size: 12px;
-        color: #6c757d;
-        margin-top: 8px;
+        font-size: 0.75em;
+        color: var(--pico-muted-color);
+        margin-top: calc(var(--pico-spacing) * 0.25);
     }
 
     /* 背景去除布局样式 */
@@ -271,9 +278,9 @@ require_once ROOT_PATH . '/views/layout.php';
     }
 
     .remove-bg-main h3 {
-        margin-bottom: 20px;
-        color: #343a40;
-        font-size: 18px;
+        margin-bottom: calc(var(--pico-spacing) * 0.5);
+        color: var(--pico-h3-color);
+        font-size: var(--pico-h3-font-size, 1.5rem);
     }
 
     .remove-bg-content {
@@ -282,7 +289,7 @@ require_once ROOT_PATH . '/views/layout.php';
 
     .single-image-container {
         width: 100%;
-        margin-bottom: 20px;
+        margin-bottom: calc(var(--pico-spacing) * 0.5);
     }
 
     .image-box {
@@ -293,10 +300,10 @@ require_once ROOT_PATH . '/views/layout.php';
     }
 
     .image-box h4 {
-        margin-bottom: 10px;
-        color: #495057;
-        font-size: 16px;
-        font-weight: 500;
+        margin-bottom: calc(var(--pico-spacing) * 0.25);
+        color: var(--pico-h4-color);
+        font-size: var(--pico-h4-font-size, 1.25rem);
+        font-weight: var(--pico-h4-font-weight, bold);
     }
 
     .image-placeholder {
@@ -304,101 +311,104 @@ require_once ROOT_PATH . '/views/layout.php';
         align-items: center;
         justify-content: center;
         min-height: 200px;
-        color: #6c757d;
-        font-size: 14px;
+        color: var(--pico-muted-color);
+        font-size: 0.875em;
         text-align: center;
-        padding: 20px;
+        padding: var(--pico-spacing);
     }
 
     .remove-bg-controls {
         text-align: center;
-        margin-top: 20px;
+        margin-top: calc(var(--pico-spacing) * 0.5);
     }
 
     .progress {
         width: 100%;
         height: 20px;
-        background-color: #f0f0f0;
-        border-radius: 10px;
-        margin: 15px 0;
+        background-color: var(--pico-progress-background-color);
+        border-radius: var(--pico-border-radius);
+        margin: calc(var(--pico-spacing) * 0.375) 0;
         display: none;
     }
 
     .progress-bar {
         height: 100%;
-        background-color: #007bff;
-        border-radius: 10px;
+        background-color: var(--pico-progress-color);
+        border-radius: var(--pico-border-radius);
         width: 0%;
-        transition: width 0.3s ease;
+        transition: width var(--pico-transition);
     }
 
     .processing-hint {
-        font-size: 12px;
-        color: #6c757d;
-        margin-top: 10px;
+        font-size: 0.75em;
+        color: var(--pico-muted-color);
+        margin-top: calc(var(--pico-spacing) * 0.25);
         font-style: italic;
     }
 
     .crop-controls {
         display: flex;
-        gap: 12px;
+        gap: calc(var(--pico-spacing) * 0.5);
         justify-content: center;
-        margin-top: 20px;
-        padding-top: 20px;
-        border-top: 1px solid #e9ecef;
+        margin-top: calc(var(--pico-spacing) * 0.5);
+        padding-top: calc(var(--pico-spacing) * 0.5);
+        border-top: var(--pico-border-width) solid var(--pico-muted-border-color);
     }
 
     .action-section {
         text-align: center;
-        margin: 24px 0;
+        margin: var(--pico-spacing) 0;
     }
 
     .btn {
-        padding: 12px 24px;
-        border: none;
-        border-radius: 6px;
-        font-size: 16px;
-        font-weight: 500;
+        padding: var(--pico-form-element-spacing-vertical) var(--pico-form-element-spacing-horizontal);
+        border: var(--pico-border-width) solid transparent;
+        border-radius: var(--pico-border-radius);
+        font-size: 1rem;
+        font-weight: var(--pico-font-weight);
         cursor: pointer;
-        transition: all 0.3s ease;
+        transition: all var(--pico-transition);
         min-width: 140px;
     }
 
     .btn-primary {
-        background: #007bff;
-        color: white;
+        background: var(--pico-primary-background);
+        color: var(--pico-primary-inverse);
+        border-color: var(--pico-primary-border);
     }
 
     .btn-primary:hover:not(:disabled) {
-        background: #0056b3;
-        transform: translateY(-1px);
+        background: var(--pico-primary-hover-background);
+        border-color: var(--pico-primary-hover-border);
     }
 
     .btn-primary:disabled {
-        background: #6c757d;
+        background: var(--pico-secondary-background);
         cursor: not-allowed;
-        transform: none;
+        opacity: var(--pico-form-element-disabled-opacity);
     }
 
     .btn-secondary {
-        background: #6c757d;
-        color: white;
+        background: var(--pico-secondary-background);
+        color: var(--pico-secondary-inverse);
+        border-color: var(--pico-secondary-border);
     }
 
     .btn-secondary:hover {
-        background: #545b62;
+        background: var(--pico-secondary-hover-background);
+        border-color: var(--pico-secondary-hover-border);
     }
 
     .loading-spinner {
         display: none;
         text-align: center;
-        padding: 40px;
+        padding: calc(var(--pico-spacing) * 2);
     }
 
     .spinner {
         width: 40px;
         height: 40px;
-        margin: 0 auto 16px;
+        margin: 0 auto calc(var(--pico-spacing) * 0.5);
     }
 
     @keyframes spin {
@@ -412,10 +422,10 @@ require_once ROOT_PATH . '/views/layout.php';
     }
 
     .result-container {
-        margin-top: 24px;
-        padding: 20px;
-        background: #f8f9fa;
-        border-radius: 8px;
+        margin-top: var(--pico-spacing);
+        padding: var(--pico-spacing);
+        background: var(--pico-card-sectioning-background-color);
+        border-radius: var(--pico-border-radius);
         display: none;
     }
 
@@ -440,7 +450,7 @@ require_once ROOT_PATH . '/views/layout.php';
     @media (max-width: 768px) {
         .crop-layout {
             grid-template-columns: 1fr;
-            gap: 16px;
+            gap: calc(var(--pico-spacing) * 0.5);
         }
 
         .preview-box {
@@ -462,13 +472,13 @@ require_once ROOT_PATH . '/views/layout.php';
 
         .nav-tab {
             text-align: left;
-            border-bottom: 1px solid #e9ecef;
+            border-bottom: var(--pico-border-width) solid var(--pico-muted-border-color);
             border-right: none;
         }
 
         .nav-tab.active {
-            border-bottom-color: #e9ecef;
-            border-left: 3px solid #007bff;
+            border-bottom-color: var(--pico-muted-border-color);
+            border-left: var(--pico-border-width) solid var(--pico-primary-border);
         }
 
         .image-wrapper {
@@ -812,7 +822,9 @@ require_once ROOT_PATH . '/views/layout.php';
             const config = {
                 publicPath: 'https://static.322337.xyz/file/package/dist/',
                 device: 'gpu',
-                model: 'large',
+                // model: 'large',
+                // model: 'medium',
+                model: 'small',
                 output: {
                     format: 'image/png',
                     quality: 0.8
@@ -830,7 +842,7 @@ require_once ROOT_PATH . '/views/layout.php';
         finishRemoveBgProcess(url) {
             this.elements.mainImage.src = url;
             this.elements.imageTitle.textContent = '成功';
-            this.elements.imageTitle.style.color = '#00c853';
+            this.elements.imageTitle.style.color = 'var(--pico-success-color)';
             this.elements.progressContainer.style.display = 'none';
             this.elements.removeBgBtn.disabled = false;
         }
@@ -1043,7 +1055,7 @@ require_once ROOT_PATH . '/views/layout.php';
         showError(message) {
             this.elements.resultDiv.innerHTML = `
             <div class="error-message">
-                <span style="color: #dc3545;">
+                <span style="color: var(--pico-form-element-invalid-border-color);">
                     <svg t="1759466683420" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="7411" width="24" height="24">
                         <path d="M886.784 746.496q29.696 30.72 43.52 56.32t-4.608 58.368q-4.096 6.144-11.264 14.848t-14.848 16.896-15.36 14.848-12.8 9.728q-25.6 15.36-60.416 8.192t-62.464-34.816l-43.008-43.008-57.344-57.344-67.584-67.584-73.728-73.728-131.072 131.072q-60.416 60.416-98.304 99.328-38.912 38.912-77.312 48.128t-68.096-17.408l-7.168-7.168-11.264-11.264-11.264-11.264q-6.144-6.144-7.168-8.192-11.264-14.336-13.312-29.184t2.56-29.184 13.824-27.648 20.48-24.576q9.216-8.192 32.768-30.72l55.296-57.344q33.792-32.768 75.264-73.728t86.528-86.016q-49.152-49.152-93.696-93.184t-79.872-78.848-57.856-56.832-27.648-27.136q-26.624-26.624-27.136-52.736t17.92-52.736q8.192-10.24 23.552-24.064t21.504-17.92q30.72-20.48 55.296-17.92t49.152 28.16l31.744 31.744q23.552 23.552 58.368 57.344t78.336 76.288 90.624 88.576q38.912-38.912 76.288-75.776t69.632-69.12 58.368-57.856 43.52-43.008q24.576-23.552 53.248-31.232t55.296 12.8q1.024 1.024 6.656 5.12t11.264 9.216 10.752 9.728 7.168 5.632q27.648 26.624 27.136 57.856t-27.136 57.856q-18.432 18.432-45.568 46.08t-60.416 60.416-70.144 69.632l-77.824 77.824q37.888 36.864 74.24 72.192t67.584 66.048 56.32 56.32 41.472 41.984z" p-id="7412"></path>
                     </svg> ${message}

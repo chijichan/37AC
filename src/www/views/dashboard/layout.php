@@ -193,33 +193,20 @@ require_once ROOT_PATH . '/views/layout.php';
         transition: opacity 0.3s ease;
     }
 
-    /* 加载动画 */
+    /* 加载指示器，使用 PicoCSS aria-busy 特性 */
     .dashboard-loading {
         display: none;
         text-align: center;
         padding: 3rem;
     }
 
-    .dashboard-loading.active {
+    /* 当 aria-busy 为 true 时显示指示器 */
+    .dashboard-loading[aria-busy="true"] {
         display: block;
     }
 
-    .dashboard-loading::before {
-        content: "";
-        display: inline-block;
-        width: 2rem;
-        height: 2rem;
-        border: 3px solid var(--pico-muted-border-color);
-        border-top-color: var(--pico-primary);
-        border-radius: 50%;
-        animation: spin 0.8s linear infinite;
-    }
-
-    @keyframes spin {
-        to {
-            transform: rotate(360deg);
-        }
-    }
+    /* 保留简洁样式，如有自定义内容可以在 HTML 内添加 */
+    /* 无需自定义动画，PicoCSS 会处理 aria-busy 的视觉效果 */
 </style>
 
 <div style="
@@ -286,8 +273,8 @@ require_once ROOT_PATH . '/views/layout.php';
 
 <!-- 仪表盘内容区域 -->
 <main class="container">
-    <!-- 加载动画 -->
-    <div class="dashboard-loading" id="dashboard-loading"></div>
+    <!-- 加载指示器（PicoCSS aria-busy） -->
+    <div class="dashboard-loading" id="dashboard-loading" aria-busy="false"></div>
 
     <!-- 动态内容容器 -->
     <div id="dashboard-content">
@@ -392,8 +379,8 @@ require_once ROOT_PATH . '/views/layout.php';
                 return;
             }
 
-            // 显示加载动画
-            loadingIndicator.classList.add('active');
+            // 开始加载：启用 aria-busy 并加淡内容
+            loadingIndicator.setAttribute('aria-busy', 'true');
             contentContainer.style.opacity = '0.5';
 
             // 构建请求URL
@@ -433,8 +420,8 @@ require_once ROOT_PATH . '/views/layout.php';
                     `;
                 })
                 .finally(() => {
-                    // 隐藏加载动画
-                    loadingIndicator.classList.remove('active');
+                    // 结束加载：移除 aria-busy
+                    loadingIndicator.setAttribute('aria-busy', 'false');
                     contentContainer.style.opacity = '1';
                 });
         }

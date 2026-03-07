@@ -10,4 +10,3 @@ if ($isAjax) {
 
 // 否则返回完整页面
 require_once ROOT_PATH . '/views/dashboard/layout.php';
-

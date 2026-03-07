@@ -118,6 +118,7 @@ require_once ROOT_PATH . '/views/layout.php';
             opacity: 0;
             transform: translateY(-10px);
         }
+
         to {
             opacity: 1;
             transform: translateY(0);
@@ -200,9 +201,19 @@ require_once ROOT_PATH . '/views/layout.php';
     }
 
     @keyframes spin {
-        to { transform: rotate(360deg); }
+        to {
+            transform: rotate(360deg);
+        }
     }
 </style>
+
+<div style="
+    display: flex;
+    color: #ffffff;
+    background: orange;
+    justify-content: center;
+">Demo
+</div>
 
 <!-- 仪表盘二级导航 -->
 <div class="dashboard-subnav container">
@@ -260,7 +271,7 @@ require_once ROOT_PATH . '/views/layout.php';
 <main class="container">
     <!-- 加载动画 -->
     <div class="dashboard-loading" id="dashboard-loading"></div>
-    
+
     <!-- 动态内容容器 -->
     <div id="dashboard-content">
         <!-- 页面内容将通过 AJAX 加载到这里 -->
@@ -278,29 +289,44 @@ require_once ROOT_PATH . '/views/layout.php';
         const navDropdown = document.getElementById('dashboardNavDropdown');
         const currentNavIcon = document.getElementById('currentNavIcon');
         const currentNavText = document.getElementById('currentNavText');
-        
+
         // 当前激活的页面
         let currentPage = 'overview';
-        
+
         // 页面缓存
         const pageCache = {};
-        
+
         // 页面信息映射
         const pageInfo = {
-            'overview': { icon: '📊', text: '总览' },
-            'nodes': { icon: '🖥️', text: '节点管理' },
-            'apikeys': { icon: '🔑', text: 'API密钥' },
-            'history': { icon: '📜', text: '使用记录' },
-            'settings': { icon: '⚙️', text: '设置' }
+            'overview': {
+                icon: '📊',
+                text: '总览'
+            },
+            'nodes': {
+                icon: '🖥️',
+                text: '节点管理'
+            },
+            'apikeys': {
+                icon: '🔑',
+                text: 'API密钥'
+            },
+            'history': {
+                icon: '📜',
+                text: '使用记录'
+            },
+            'settings': {
+                icon: '⚙️',
+                text: '设置'
+            }
         };
-        
+
         // 移动端下拉菜单切换
         navToggle.addEventListener('click', function(e) {
             e.stopPropagation();
             navDropdown.classList.toggle('show');
             navToggle.classList.toggle('open');
         });
-        
+
         // 点击页面其他地方关闭下拉菜单
         document.addEventListener('click', function(e) {
             if (!navDropdown.contains(e.target) && !navToggle.contains(e.target)) {
@@ -308,14 +334,14 @@ require_once ROOT_PATH . '/views/layout.php';
                 navToggle.classList.remove('open');
             }
         });
-        
+
         // 初始化：加载当前页面
         function init() {
             const path = window.location.pathname;
             const page = getPageFromPath(path);
             loadPage(page, false);
         }
-        
+
         // 从路径获取页面名称
         function getPageFromPath(path) {
             if (path === '/dashboard' || path === '/dashboard/') {
@@ -324,38 +350,38 @@ require_once ROOT_PATH . '/views/layout.php';
             const match = path.match(/\/dashboard\/(.+)/);
             return match ? match[1] : 'overview';
         }
-        
+
         // 加载页面内容
         function loadPage(page, addToHistory = true) {
             // 防止重复加载
             if (page === currentPage && pageCache[page]) {
                 return;
             }
-            
+
             // 更新导航激活状态
             updateNavActive(page);
-            
+
             // 更新移动端下拉按钮显示
             updateMobileNav(page);
-            
+
             // 关闭移动端下拉菜单
             navDropdown.classList.remove('show');
             navToggle.classList.remove('open');
-            
+
             // 如果断网且有缓存，直接使用
             if (!navigator.onLine && pageCache[page]) {
                 contentContainer.innerHTML = pageCache[page];
                 currentPage = page;
                 return;
             }
-            
+
             // 显示加载动画
             loadingIndicator.classList.add('active');
             contentContainer.style.opacity = '0.5';
-            
+
             // 构建请求URL
             const url = page === 'overview' ? '/dashboard?ajax=1' : `/dashboard/${page}?ajax=1`;
-            
+
             // 发起 AJAX 请求
             fetch(url)
                 .then(response => {
@@ -367,15 +393,17 @@ require_once ROOT_PATH . '/views/layout.php';
                 .then(html => {
                     // 缓存内容
                     pageCache[page] = html;
-                    
+
                     // 更新内容
                     contentContainer.innerHTML = html;
                     currentPage = page;
-                    
+
                     // 更新浏览器历史
                     if (addToHistory) {
                         const url = page === 'overview' ? '/dashboard' : `/dashboard/${page}`;
-                        history.pushState({ page }, '', url);
+                        history.pushState({
+                            page
+                        }, '', url);
                     }
                 })
                 .catch(error => {
@@ -393,7 +421,7 @@ require_once ROOT_PATH . '/views/layout.php';
                     contentContainer.style.opacity = '1';
                 });
         }
-        
+
         // 更新导航激活状态（桌面端）
         function updateNavActive(page) {
             // 更新桌面端导航
@@ -405,7 +433,7 @@ require_once ROOT_PATH . '/views/layout.php';
                     link.classList.remove('active');
                 }
             });
-            
+
             // 更新移动端导航
             navLinksMobile.forEach(link => {
                 const linkPage = link.getAttribute('data-page');
@@ -416,7 +444,7 @@ require_once ROOT_PATH . '/views/layout.php';
                 }
             });
         }
-        
+
         // 更新移动端下拉按钮显示
         function updateMobileNav(page) {
             if (pageInfo[page]) {
@@ -424,7 +452,7 @@ require_once ROOT_PATH . '/views/layout.php';
                 currentNavText.textContent = pageInfo[page].text;
             }
         }
-        
+
         // 绑定桌面端导航点击事件
         navLinksDesktop.forEach(link => {
             link.addEventListener('click', (e) => {
@@ -433,7 +461,7 @@ require_once ROOT_PATH . '/views/layout.php';
                 loadPage(page, true);
             });
         });
-        
+
         // 绑定移动端导航点击事件
         navLinksMobile.forEach(link => {
             link.addEventListener('click', (e) => {
@@ -442,7 +470,7 @@ require_once ROOT_PATH . '/views/layout.php';
                 loadPage(page, true);
             });
         });
-        
+
         // 处理浏览器前进/后退
         window.addEventListener('popstate', (e) => {
             if (e.state && e.state.page) {
@@ -452,7 +480,7 @@ require_once ROOT_PATH . '/views/layout.php';
                 loadPage(page, false);
             }
         });
-        
+
         // 页面加载完成后初始化
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', init);

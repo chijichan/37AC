@@ -122,7 +122,7 @@
         </div>
     </div>
 
-    <div style="transition: top 0.3s ease-in-out;">
+    <div class="container" style="transition: top 0.3s ease-in-out;">
         <nav class="container-nav">
             <ul>
                 <li>

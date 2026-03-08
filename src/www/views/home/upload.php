@@ -11,7 +11,7 @@ require_once ROOT_PATH . '/views/layout.php';
                 <img src="https://static.322337.xyz/assets/img/upload-w.svg" alt="上传图片" class="icon" />
                 <span>选择图片文件</span>
             </label>
-            <input type="file" id="fileInput" accept="image/*" class="file-input" />
+            <input type="file" id="fileInput" accept="image/jpeg,image/png" class="file-input" />
             <p class="file-hint">支持 JPG、PNG 格式，最大 10MB</p>
         </div>
     </div>

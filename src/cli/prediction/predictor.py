@@ -59,7 +59,7 @@ def predict_character():
         if not os.path.exists(user_input):
             logger.info(f"找不到图片: {user_input}，请检查路径是否正确~")
             continue
-        if not user_input.lower().endswith((".jpg", ".jpeg", ".png")):
+        if not user_input.lower().endswith((".jpg", ".jpeg", ".png", ".jfif")):
             logger.info("请上传图片文件（如 .jpg / .png），当前格式可能不支持~")
             continue
 
@@ -135,7 +135,7 @@ def predict_image(image_path, model_path=None, classes_file=None, use_cache=True
             result["error"] = f"图片文件不存在: {image_path}"
             return result
 
-        if not image_path.lower().endswith((".jpg", ".jpeg", ".png")):
+        if not image_path.lower().endswith((".jpg", ".jpeg", ".png", ".jfif")):
             result["error"] = f"不支持的图片格式: {image_path}"
             return result
 

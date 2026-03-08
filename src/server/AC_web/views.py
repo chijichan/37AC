@@ -19,7 +19,7 @@ from services.tcp_service import get_db_connection, node_manager
 # === 工具函数：保存上传的图片 ===
 # ======================
 def save_uploaded_file(file):
-    if file and file.filename.lower().endswith((".png", ".jpg", ".jpeg")):
+    if file and file.filename.lower().endswith((".png", ".jpg", ".jpeg", ".jfif")):
         filename = str(uuid.uuid4()) + "." + file.filename.rsplit(".", 1)[1].lower()
         filepath = os.path.join(IMAGE_PATH, filename)
         file.save(filepath)

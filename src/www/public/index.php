@@ -1,4 +1,5 @@
 <?php
+
 /**
  * 入口文件
  */
@@ -36,9 +37,9 @@ $router->get('/dashboard/history', 'dashboard_controller@history');
 $router->get('/dashboard/settings', 'dashboard_controller@settings');
 
 // 用户路由
-$router->get('/users', 'user_controller@index');
-$router->get('/user/{id}', 'user_controller@show');
-$router->post('/user/create', 'user_controller@create');
+// $router->get('/users', 'user_controller@index');
+// $router->get('/user/{id}', 'user_controller@show');
+// $router->post('/user/create', 'user_controller@create');
 
 // 执行路由分发
 $router->dispatch();

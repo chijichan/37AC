@@ -206,7 +206,20 @@ require_once ROOT_PATH . '/views/layout.php';
     }
 
     /* 保留简洁样式，如有自定义内容可以在 HTML 内添加 */
-    /* 无需自定义动画，PicoCSS 会处理 aria-busy 的视觉效果 */
+
+    /* danger-outline buttons */
+    button.outline.danger {
+        color: var(--pico-del-color);
+        border-color: var(--pico-del-color);
+        /* hover/active */
+        --pico-button-hover-box-shadow: 0 0 0 var(--pico-outline-width) var(--pico-del-color);
+        --pico-box-shadow: 0 0 0 var(--pico-outline-width) var(--pico-del-color);
+    }
+
+    button.outline.danger:focus {
+        /* focus */
+        --pico-box-shadow: 0 0 0 var(--pico-outline-width) var(--pico-del-color);
+    }
 </style>
 
 <div style="

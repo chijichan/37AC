@@ -79,7 +79,7 @@ if (!$isAjax) {
 </div>
 
 <!-- 历史记录表格 -->
-<section>
+<section class="overflow-auto">
     <h2>详细记录</h2>
     <figure>
         <table role="grid">

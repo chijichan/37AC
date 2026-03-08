@@ -342,7 +342,7 @@
 </div>
 
 <!-- 数据表格示例 -->
-<section>
+<section class="overflow-auto">
     <h2>📊 最近上传记录</h2>
     <figure>
         <table role="grid">

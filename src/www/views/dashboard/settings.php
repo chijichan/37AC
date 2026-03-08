@@ -117,7 +117,7 @@ if (!$isAjax) {
                     立即禁用所有现有的API密钥
                 </p>
             </div>
-            <button class="outline" style="color: var(--pico-del-color);">撤销全部</button>
+            <button class="outline danger">撤销全部</button>
         </div>
 
         <hr />
@@ -129,7 +129,7 @@ if (!$isAjax) {
                     永久删除你的账户和所有数据
                 </p>
             </div>
-            <button class="outline" style="color: var(--pico-del-color);">删除账户</button>
+            <button class="outline danger">删除账户</button>
         </div>
     </article>
 </section>

@@ -85,8 +85,16 @@ require_once ROOT_PATH . '/views/layout.php';
     }
 
     .dashboard-nav-toggle .icon {
-        font-size: 1.2em;
+        display: inline-flex;
+        align-items: center;
         margin-right: 0.5rem;
+        vertical-align: middle;
+    }
+
+    .dashboard-nav-toggle .icon svg {
+        width: 1.2em;
+        height: 1.2em;
+        vertical-align: middle;
     }
 
     /* image versions of the same icons */
@@ -236,19 +244,20 @@ require_once ROOT_PATH . '/views/layout.php';
         <!-- 桌面端导航 -->
         <nav class="dashboard-nav-desktop">
             <a href="/dashboard" data-page="overview" class="dashboard-nav-link active">
-                <img src="https://static.322337.xyz/assets/img/overview.svg" alt="总览" class="icon" />总览
+                <?php require ROOT_PATH . '/views/components/icons/overview.php'; ?>
+                总览
             </a>
             <a href="/dashboard/nodes" data-page="nodes" class="dashboard-nav-link">
-                <img src="https://static.322337.xyz/assets/img/nodes.svg" alt="节点管理" class="icon" />节点管理
+                <?php require ROOT_PATH . '/views/components/icons/nodes.php'; ?>节点管理
             </a>
             <a href="/dashboard/apikeys" data-page="apikeys" class="dashboard-nav-link">
-                <img src="https://static.322337.xyz/assets/img/apikeys.svg" alt="API密钥" class="icon" />API密钥
+                <?php require ROOT_PATH . '/views/components/icons/apikeys.php'; ?>API密钥
             </a>
             <a href="/dashboard/history" data-page="history" class="dashboard-nav-link">
-                <img src="https://static.322337.xyz/assets/img/history.svg" alt="使用记录" class="icon" />使用记录
+                <?php require ROOT_PATH . '/views/components/icons/history.php'; ?>使用记录
             </a>
             <a href="/dashboard/settings" data-page="settings" class="dashboard-nav-link">
-                <img src="https://static.322337.xyz/assets/img/settings.svg" alt="设置" class="icon" />设置
+                <?php require ROOT_PATH . '/views/components/icons/settings.php'; ?>设置
             </a>
         </nav>
 
@@ -257,7 +266,7 @@ require_once ROOT_PATH . '/views/layout.php';
             <button class="dashboard-nav-toggle" id="dashboardNavToggle" type="button">
                 <span>
                     <span class="icon" id="currentNavIcon">
-                        <img src="https://static.322337.xyz/assets/img/overview.svg" alt="总览" class="icon" />
+                        <?php require ROOT_PATH . '/views/components/icons/overview.php'; ?>
                     </span>
                     <span id="currentNavText">总览</span>
                 </span>
@@ -265,19 +274,20 @@ require_once ROOT_PATH . '/views/layout.php';
             </button>
             <div class="dashboard-nav-dropdown" id="dashboardNavDropdown">
                 <a href="/dashboard" data-page="overview" class="dashboard-nav-link-mobile active">
-                    <img src="https://static.322337.xyz/assets/img/overview.svg" alt="总览" class="icon" />总览
+                    <?php require ROOT_PATH . '/views/components/icons/overview.php'; ?>
+                    总览
                 </a>
                 <a href="/dashboard/nodes" data-page="nodes" class="dashboard-nav-link-mobile">
-                    <img src="https://static.322337.xyz/assets/img/nodes.svg" alt="节点管理" class="icon" />节点管理
+                    <?php require ROOT_PATH . '/views/components/icons/nodes.php'; ?>节点管理
                 </a>
                 <a href="/dashboard/apikeys" data-page="apikeys" class="dashboard-nav-link-mobile">
-                    <img src="https://static.322337.xyz/assets/img/apikeys.svg" alt="API密钥" class="icon" />API密钥
+                    <?php require ROOT_PATH . '/views/components/icons/apikeys.php'; ?>API密钥
                 </a>
                 <a href="/dashboard/history" data-page="history" class="dashboard-nav-link-mobile">
-                    <img src="https://static.322337.xyz/assets/img/history.svg" alt="使用记录" class="icon" />使用记录
+                    <?php require ROOT_PATH . '/views/components/icons/history.php'; ?>使用记录
                 </a>
                 <a href="/dashboard/settings" data-page="settings" class="dashboard-nav-link-mobile">
-                    <img src="https://static.322337.xyz/assets/img/settings.svg" alt="设置" class="icon" />设置
+                    <?php require ROOT_PATH . '/views/components/icons/settings.php'; ?>设置
                 </a>
             </div>
         </div>
@@ -316,23 +326,23 @@ require_once ROOT_PATH . '/views/layout.php';
         // 页面信息映射
         const pageInfo = {
             'overview': {
-                icon: '<img src="https://static.322337.xyz/assets/img/overview.svg" alt="总览" class="icon" />',
+                icon: <?php echo json_encode(file_get_contents(ROOT_PATH . '/views/components/icons/overview.php')); ?>,
                 text: '总览'
             },
             'nodes': {
-                icon: '<img src="https://static.322337.xyz/assets/img/nodes.svg" alt="节点管理" class="icon" />',
+                icon: <?php echo json_encode(file_get_contents(ROOT_PATH . '/views/components/icons/nodes.php')); ?>,
                 text: '节点管理'
             },
             'apikeys': {
-                icon: '<img src="https://static.322337.xyz/assets/img/apikeys.svg" alt="API密钥" class="icon" />',
+                icon: <?php echo json_encode(file_get_contents(ROOT_PATH . '/views/components/icons/apikeys.php')); ?>,
                 text: 'API密钥'
             },
             'history': {
-                icon: '<img src="https://static.322337.xyz/assets/img/history.svg" alt="使用记录" class="icon" />',
+                icon: <?php echo json_encode(file_get_contents(ROOT_PATH . '/views/components/icons/history.php')); ?>,
                 text: '使用记录'
             },
             'settings': {
-                icon: '<img src="https://static.322337.xyz/assets/img/settings.svg" alt="设置" class="icon" />',
+                icon: <?php echo json_encode(file_get_contents(ROOT_PATH . '/views/components/icons/settings.php')); ?>,
                 text: '设置'
             }
         };

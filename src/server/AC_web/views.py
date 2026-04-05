@@ -91,11 +91,9 @@ def upload_and_predict():
                 {
                     "type": "dispatch_task",
                     "timestamp": int(datetime.now().timestamp()),
-                    "data": {
-                        "status": "queued",
-                        "task_id": task_id,
-                        "message": "图片已上传，等待推理...",
-                    },
+                    "status": "queued",
+                    "message": "图片已上传，等待推理...",
+                    "task_id": task_id,
                 }
             )
 
@@ -109,12 +107,10 @@ def get_task_result(task_id):
         json_response = {
             "type": "task_result",
             "timestamp": int(datetime.now().timestamp()),
-            "data": {
-                "status": "pending",
-                "task_id": task_id,
-                "result": [],
-                "message": "结果尚未返回",
-            },
+            "status": "pending",
+            "message": "结果尚未返回",
+            "task_id": task_id,
+            "result": [],
         }
 
         with conn.cursor() as cursor:
@@ -140,12 +136,10 @@ def get_task_result(task_id):
                     {
                         "type": "task_result",
                         "timestamp": int(datetime.now().timestamp()),
-                        "data": {
-                            "status": status,
-                            "task_id": task_id,
-                            "result": result,
-                            "message": "任务完成，结果已返回",
-                        },
+                        "status": status,
+                        "message": "任务完成，结果已返回",
+                        "task_id": task_id,
+                        "result": result,
                     }
                 ),
                 200,
@@ -158,8 +152,8 @@ def get_task_result(task_id):
             )
 
     except Exception as e:
-        json_response["data"]["status"] = "error"
-        json_response["data"]["message"] = f"查询失败: {str(e)}"
+        json_response["status"] = "error"
+        json_response["message"] = f"查询失败: {str(e)}"
         return jsonify(json_response), 500
 
     finally:

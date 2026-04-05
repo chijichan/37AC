@@ -242,12 +242,13 @@ def start_node_service():
             # 注册节点
             register_msg = {
                 "type": "register",
+                "timestamp": int(time.time()),
+                "status": "ready",
                 "data": {
                     "node_id": NODE_ID,
                     "token": TOKEN,
                     "tasks": tasks,
                     "max_tasks": MAX_TASKS,
-                    "status": "ready",
                 },
             }
             json_protocol.send_json(s, register_msg)
@@ -336,21 +337,21 @@ def start_node_service():
 
                 # === 心跳响应处理 ====
                 if msg_type == "heartbeat_ack":
-                    logger.info(f"[节点] 收到心跳响应: {msg_data.get('message', '')}")
+                    logger.info(f"[节点] 收到心跳响应: {msg.get('message', '')}")
                     heartbeat_missed_count = 0  # 重置丢失计数
                     last_heartbeat_response_time = time.time()  # 记录响应时间
                     last_heartbeat_send_time = 0  # 重置发送时间，准备下一次发送
 
                 # === 注册响应 ===
                 elif msg_type == "register_ack":
-                    status = msg_data.get("status")
-                    message = msg_data.get("message")
+                    status = msg.get("status")
+                    message = msg.get("message")
                     logger.info(f"[注册结果] {status}: {message}")
 
                 # === 任务状态响应 ===
                 elif msg_type == "status_update_ack":
-                    status = msg_data.get("status")
-                    message = msg_data.get("message")
+                    status = msg.get("status")
+                    message = msg.get("message")
                     task_id = msg_data.get("task_id")
                     logger.info(f"[任务状态更新] 任务ID: {task_id}, 动作: {message}")
 

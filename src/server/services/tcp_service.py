@@ -550,10 +550,9 @@ def async_handle_register(conn, addr, msg):
     if not node_id or not token or not isinstance(max_tasks, (int, float)):
         register_ack = {
             "type": "register_ack",
-            "data": {
-                "status": "error",
-                "message": "node_id、token和max_tasks必须提供且有效",
-            },
+            "timestamp": int(time.time()),
+            "status": "error",
+            "message": "node_id、token和max_tasks必须提供且有效",
         }
         json_protocol.send_json(conn, register_ack)
         return
@@ -562,10 +561,9 @@ def async_handle_register(conn, addr, msg):
     if not conn_db:
         register_ack = {
             "type": "register_ack",
-            "data": {
-                "status": "error",
-                "message": "数据库连接失败",
-            },
+            "timestamp": int(time.time()),
+            "status": "error",
+            "message": "数据库连接失败",
         }
         json_protocol.send_json(conn, register_ack)
         return
@@ -584,9 +582,10 @@ def async_handle_register(conn, addr, msg):
             if node_id in node_manager.nodes:
                 register_ack = {
                     "type": "register_ack",
+                    "timestamp": int(time.time()),
+                    "status": "success",
+                    "message": f"节点已注册，最大任务数: {node_manager.get_node_max_tasks(node_id)}",
                     "data": {
-                        "status": "success",
-                        "message": f"节点已注册，最大任务数: {node_manager.get_node_max_tasks(node_id)}",
                         "max_tasks": max_tasks,
                     },
                 }
@@ -604,9 +603,10 @@ def async_handle_register(conn, addr, msg):
 
             register_ack = {
                 "type": "register_ack",
+                "timestamp": int(time.time()),
+                "status": "success",
+                "message": f"节点注册成功，最大任务数: {max_tasks}",
                 "data": {
-                    "status": "success",
-                    "message": f"节点注册成功，最大任务数: {max_tasks}",
                     "max_tasks": max_tasks,
                 },
             }
@@ -617,20 +617,18 @@ def async_handle_register(conn, addr, msg):
         else:
             register_ack = {
                 "type": "register_ack",
-                "data": {
-                    "status": "error",
-                    "message": "节点未激活或凭证无效",
-                },
+                "timestamp": int(time.time()),
+                "status": "error",
+                "message": "节点未激活或凭证无效",
             }
             json_protocol.send_json(conn, register_ack)
     except Exception as e:
         logger.error(f"[注册错误] 处理注册时出错: {e}")
         register_ack = {
             "type": "register_ack",
-            "data": {
-                "status": "error",
-                "message": "服务器内部错误",
-            },
+            "timestamp": int(time.time()),
+            "status": "error",
+            "message": "服务器内部错误",
         }
         json_protocol.send_json(conn, register_ack)
     finally:
@@ -646,10 +644,8 @@ def async_handle_heartbeat(conn, addr, msg, node_id):
     heartbeat_ack = {
         "type": "heartbeat_ack",
         "timestamp": int(time.time()),
-        "data": {
-            "status": "success",
-            "message": "心跳已更新",
-        },
+        "status": "success",
+        "message": "心跳已更新",
     }
     json_protocol.send_json(conn, heartbeat_ack)
 
@@ -728,24 +724,24 @@ def dispatch_task(image_path: str, image_data, task_id: str):
     dispatch_task_response = {
         "type": "dispatch_task",
         "timestamp": int(time.time()),
+        "status": "pending",
+        "message": "任务正在分发",
         "data": {
             "task_id": task_id,
-            "message": "任务正在分发",
-            "status": "pending",
         },
     }
 
     node_id, node_info = node_manager.get_idle_node()
     if not node_id:
-        dispatch_task_response["data"]["message"] = "没有空闲节点"
-        dispatch_task_response["data"]["status"] = "waiting"
+        dispatch_task_response["message"] = "没有空闲节点"
+        dispatch_task_response["status"] = "waiting"
         return dispatch_task_response
 
     socket_obj = node_info.get("socket")
     if not socket_obj:
         node_manager.set_node_idle(node_id)
-        dispatch_task_response["data"]["message"] = "节点未连接"
-        dispatch_task_response["data"]["status"] = "failed"
+        dispatch_task_response["message"] = "节点未连接"
+        dispatch_task_response["status"] = "failed"
         return dispatch_task_response
 
     try:
@@ -771,8 +767,8 @@ def dispatch_task(image_path: str, image_data, task_id: str):
                 f"[dispatch_task] 图片过大: {len(image_bytes)} 字节，超过10MB限制"
             )
             node_manager.set_node_idle(node_id)
-            dispatch_task_response["data"]["message"] = "图片文件过大"
-            dispatch_task_response["data"]["status"] = "failed"
+            dispatch_task_response["message"] = "图片文件过大"
+            dispatch_task_response["status"] = "failed"
             return dispatch_task_response
 
         image_base64 = base64.b64encode(image_bytes).decode("utf-8")
@@ -797,17 +793,16 @@ def dispatch_task(image_path: str, image_data, task_id: str):
 
         node_manager.set_node_busy(node_id)
         node_manager.increment_task_count(node_id)
-        dispatch_task_response["data"]["message"] = "任务已分发到节点"
-        dispatch_task_response["data"]["status"] = "dispatched"
-        dispatch_task_response["data"]["task_id"] = task_id
+        dispatch_task_response["message"] = "任务已分发到节点"
+        dispatch_task_response["status"] = "dispatched"
         dispatch_task_response["data"]["node_id"] = node_id
         return dispatch_task_response
 
     except Exception as e:
         logger.error(f"[dispatch_task] 发送任务失败: {e}")
         node_manager.set_node_idle(node_id)
-        dispatch_task_response["data"]["message"] = str(e)
-        dispatch_task_response["data"]["status"] = "failed"
+        dispatch_task_response["message"] = str(e)
+        dispatch_task_response["status"] = "failed"
         dispatch_task_response["data"]["task_id"] = task_id
         return dispatch_task_response
 
@@ -861,10 +856,8 @@ def handle_client(conn, addr):
                     heartbeat_ack = {
                         "type": "heartbeat_ack",
                         "timestamp": int(time.time()),
-                        "data": {
-                            "status": "error",
-                            "message": "未注册的节点",
-                        },
+                        "status": "error",
+                        "message": "未注册的节点",
                     }
                     json_protocol.send_json(conn, heartbeat_ack)
 

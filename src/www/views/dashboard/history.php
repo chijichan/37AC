@@ -61,19 +61,19 @@ if (!$isAjax) {
 <!-- 统计概览 -->
 <div class="grid" style="margin-bottom: 2rem;">
     <article style="text-align: center; padding: 1.5rem;">
-        <h2 style="margin: 0; color: var(--pico-primary);">2,345</h2>
+        <h2 id="history-total-requests" style="margin: 0; color: var(--pico-primary);">--</h2>
         <small>总请求数</small>
     </article>
     <article style="text-align: center; padding: 1.5rem;">
-        <h2 style="margin: 0; color: var(--pico-ins-color);">2,289</h2>
+        <h2 id="history-success-count" style="margin: 0; color: var(--pico-ins-color);">--</h2>
         <small>成功</small>
     </article>
     <article style="text-align: center; padding: 1.5rem;">
-        <h2 style="margin: 0; color: var(--pico-del-color);">56</h2>
+        <h2 id="history-failure-count" style="margin: 0; color: var(--pico-del-color);">--</h2>
         <small>失败</small>
     </article>
     <article style="text-align: center; padding: 1.5rem;">
-        <h2 style="margin: 0; color: var(--pico-primary);">97.6%</h2>
+        <h2 id="history-success-rate" style="margin: 0; color: var(--pico-primary);">--%</h2>
         <small>成功率</small>
     </article>
 </div>
@@ -93,46 +93,9 @@ if (!$isAjax) {
                     <th>状态</th>
                 </tr>
             </thead>
-            <tbody>
+            <tbody id="history-table-body">
                 <tr>
-                    <td>2026-01-31 14:23:15</td>
-                    <td>节点 #1</td>
-                    <td>图片识别</td>
-                    <td>image_001.jpg</td>
-                    <td>初音未来 (95%)</td>
-                    <td><span class="history-status success">✓ 成功</span></td>
-                </tr>
-                <tr>
-                    <td>2026-01-31 14:22:48</td>
-                    <td>节点 #1</td>
-                    <td>图片上传</td>
-                    <td>character_002.png</td>
-                    <td>雷电将军 (88%)</td>
-                    <td><span class="history-status success">✓ 成功</span></td>
-                </tr>
-                <tr>
-                    <td>2026-01-31 14:20:31</td>
-                    <td>节点 #2</td>
-                    <td>图片识别</td>
-                    <td>anime_003.jpg</td>
-                    <td>--</td>
-                    <td><span class="history-status failure">✗ 失败</span></td>
-                </tr>
-                <tr>
-                    <td>2026-01-31 14:18:05</td>
-                    <td>节点 #1</td>
-                    <td>批量上传</td>
-                    <td>batch_001.zip</td>
-                    <td>156个文件</td>
-                    <td><span class="history-status success">✓ 成功</span></td>
-                </tr>
-                <tr>
-                    <td>2026-01-31 14:15:22</td>
-                    <td>节点 #1</td>
-                    <td>图片识别</td>
-                    <td>test_005.png</td>
-                    <td>纳西妲 (92%)</td>
-                    <td><span style="color: #28a745;">✓ 成功</span></td>
+                    <td colspan="6" style="text-align:center;">正在加载历史记录…</td>
                 </tr>
             </tbody>
         </table>

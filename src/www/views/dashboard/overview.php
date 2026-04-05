@@ -192,7 +192,7 @@
 <div class="stats-grid">
     <article class="stat-card">
         <h3>总访问量</h3>
-        <div class="stat-value">12,345</div>
+        <div class="stat-value" id="stats-total-visits">--</div>
         <div class="stat-change positive">
             ↑ 15.3% 较上月
         </div>
@@ -200,7 +200,7 @@
 
     <article class="stat-card">
         <h3>图片上传</h3>
-        <div class="stat-value">8,567</div>
+        <div class="stat-value" id="stats-total-uploads">--</div>
         <div class="stat-change positive">
             ↑ 23.1% 较上月
         </div>
@@ -208,7 +208,7 @@
 
     <article class="stat-card">
         <h3>活跃用户</h3>
-        <div class="stat-value">1,234</div>
+        <div class="stat-value" id="stats-active-users">--</div>
         <div class="stat-change positive">
             ↑ 8.2% 较上月
         </div>
@@ -216,7 +216,7 @@
 
     <article class="stat-card">
         <h3>识别准确率</h3>
-        <div class="stat-value">94.5%</div>
+        <div class="stat-value" id="stats-accuracy">--%</div>
         <div class="stat-change negative">
             ↓ 1.2% 较上月
         </div>
@@ -231,17 +231,17 @@
             <div class="action-icon">📤</div>
             <strong>上传图片</strong>
         </a>
-        <a href="/users" class="action-button">
+        <a href="/dashboard/nodes" class="action-button">
             <div class="action-icon">👥</div>
-            <strong>用户管理</strong>
+            <strong>节点管理</strong>
         </a>
-        <a href="/settings" class="action-button">
+        <a href="/dashboard/settings" class="action-button">
             <div class="action-icon">⚙️</div>
             <strong>系统设置</strong>
         </a>
-        <a href="/reports" class="action-button">
+        <a href="/dashboard/history" class="action-button">
             <div class="action-icon">📈</div>
-            <strong>数据报表</strong>
+            <strong>使用记录</strong>
         </a>
     </div>
 </section>
@@ -256,33 +256,33 @@
             <div class="progress-container">
                 <div class="progress-label">
                     <span>CPU 使用率</span>
-                    <strong>45%</strong>
+                    <strong id="system-cpu">--%</strong>
                 </div>
-                <progress value="45" max="100"></progress>
+                <progress id="system-cpu-progress" value="0" max="100"></progress>
             </div>
 
             <div class="progress-container">
                 <div class="progress-label">
                     <span>内存使用</span>
-                    <strong>68%</strong>
+                    <strong id="system-memory">--%</strong>
                 </div>
-                <progress value="68" max="100"></progress>
+                <progress id="system-memory-progress" value="0" max="100"></progress>
             </div>
 
             <div class="progress-container">
                 <div class="progress-label">
                     <span>磁盘空间</span>
-                    <strong>52%</strong>
+                    <strong id="system-disk">--%</strong>
                 </div>
-                <progress value="52" max="100"></progress>
+                <progress id="system-disk-progress" value="0" max="100"></progress>
             </div>
 
             <div class="progress-container">
                 <div class="progress-label">
                     <span>网络带宽</span>
-                    <strong>34%</strong>
+                    <strong id="system-network">--%</strong>
                 </div>
-                <progress value="34" max="100"></progress>
+                <progress id="system-network-progress" value="0" max="100"></progress>
             </div>
 
             <footer style="margin-top: 1.5rem;">
@@ -295,46 +295,12 @@
     <section>
         <article class="chart-container">
             <h2>📋 最近活动</h2>
-            <ul class="activity-list">
+            <ul id="recent-activity" class="activity-list">
                 <li class="activity-item">
-                    <div class="activity-icon upload">📤</div>
+                    <div class="activity-icon upload">⏳</div>
                     <div class="activity-content">
-                        <div class="activity-title">新图片上传</div>
-                        <div class="activity-time">用户 张三 上传了 3 张图片</div>
+                        <div class="activity-title">正在加载最近活动…</div>
                     </div>
-                    <small>2分钟前</small>
-                </li>
-                <li class="activity-item">
-                    <div class="activity-icon user">👤</div>
-                    <div class="activity-content">
-                        <div class="activity-title">新用户注册</div>
-                        <div class="activity-time">李四 注册了新账户</div>
-                    </div>
-                    <small>15分钟前</small>
-                </li>
-                <li class="activity-item">
-                    <div class="activity-icon system">⚙️</div>
-                    <div class="activity-content">
-                        <div class="activity-title">系统更新</div>
-                        <div class="activity-time">AI 模型已更新到 v2.1</div>
-                    </div>
-                    <small>1小时前</small>
-                </li>
-                <li class="activity-item">
-                    <div class="activity-icon upload">📤</div>
-                    <div class="activity-content">
-                        <div class="activity-title">批量识别完成</div>
-                        <div class="activity-time">成功识别 156 张图片</div>
-                    </div>
-                    <small>2小时前</small>
-                </li>
-                <li class="activity-item">
-                    <div class="activity-icon user">👤</div>
-                    <div class="activity-content">
-                        <div class="activity-title">权限变更</div>
-                        <div class="activity-time">管理员修改了用户权限</div>
-                    </div>
-                    <small>3小时前</small>
                 </li>
             </ul>
         </article>
@@ -356,45 +322,9 @@
                     <th scope="col">操作</th>
                 </tr>
             </thead>
-            <tbody>
+            <tbody id="recent-records">
                 <tr>
-                    <td>1001</td>
-                    <td>anime_char_01.jpg</td>
-                    <td><mark>初音未来</mark></td>
-                    <td>
-                        <progress value="95" max="100">95%</progress>
-                        <small>95%</small>
-                    </td>
-                    <td>2026-01-31 10:24</td>
-                    <td>
-                        <a href="#" role="button" class="secondary outline">查看</a>
-                    </td>
-                </tr>
-                <tr>
-                    <td>1002</td>
-                    <td>character_02.png</td>
-                    <td><mark>雷电将军</mark></td>
-                    <td>
-                        <progress value="88" max="100">88%</progress>
-                        <small>88%</small>
-                    </td>
-                    <td>2026-01-31 10:18</td>
-                    <td>
-                        <a href="#" role="button" class="secondary outline">查看</a>
-                    </td>
-                </tr>
-                <tr>
-                    <td>1003</td>
-                    <td>image_03.jpg</td>
-                    <td><mark>纳西妲</mark></td>
-                    <td>
-                        <progress value="92" max="100">92%</progress>
-                        <small>92%</small>
-                    </td>
-                    <td>2026-01-31 10:05</td>
-                    <td>
-                        <a href="#" role="button" class="secondary outline">查看</a>
-                    </td>
+                    <td colspan="6" style="text-align:center;">正在加载最近上传记录…</td>
                 </tr>
             </tbody>
         </table>

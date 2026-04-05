@@ -230,14 +230,6 @@ require_once ROOT_PATH . '/views/layout.php';
     }
 </style>
 
-<div style="
-    display: flex;
-    color: #ffffff;
-    background: orange;
-    justify-content: center;
-">Demo
-</div>
-
 <!-- 仪表盘二级导航 -->
 <div class="dashboard-subnav container">
     <div class="container">
@@ -322,6 +314,7 @@ require_once ROOT_PATH . '/views/layout.php';
 
         // 页面缓存
         const pageCache = {};
+        const API_BASE_URL = 'http://127.0.0.1:13138';
 
         // 页面信息映射
         const pageInfo = {
@@ -382,6 +375,8 @@ require_once ROOT_PATH . '/views/layout.php';
         function loadPage(page, addToHistory = true) {
             // 防止重复加载
             if (page === currentPage && pageCache[page]) {
+                contentContainer.innerHTML = pageCache[page];
+                renderPageData(page);
                 return;
             }
 
@@ -424,6 +419,7 @@ require_once ROOT_PATH . '/views/layout.php';
                     // 更新内容
                     contentContainer.innerHTML = html;
                     currentPage = page;
+                    renderPageData(page);
 
                     // 更新浏览器历史
                     if (addToHistory) {
@@ -447,6 +443,164 @@ require_once ROOT_PATH . '/views/layout.php';
                     loadingIndicator.setAttribute('aria-busy', 'false');
                     contentContainer.style.opacity = '1';
                 });
+        }
+
+        function fetchJson(url) {
+            return fetch(url, {
+                headers: {
+                    Accept: 'application/json'
+                }
+            }).then((response) => {
+                if (!response.ok) {
+                    throw new Error('接口请求失败');
+                }
+                return response.json();
+            });
+        }
+
+        function renderPageData(page) {
+            if (page === 'overview') {
+                fetchJson(`${API_BASE_URL}/dashboard/summary`)
+                    .then((payload) => {
+                        const data = payload.data || {};
+                        const stats = data.stats || {};
+                        const system = data.system || {};
+                        const activity = data.recent_activity || [];
+                        const records = data.recent_records || [];
+
+                        document.getElementById('stats-total-visits').textContent = stats.total_visits ?? '—';
+                        document.getElementById('stats-total-uploads').textContent = stats.total_uploads ?? '—';
+                        document.getElementById('stats-active-users').textContent = stats.active_users ?? '—';
+                        document.getElementById('stats-accuracy').textContent = `${stats.accuracy.toFixed(2) ?? '—'}%`;
+
+                        document.getElementById('system-cpu').textContent = `${system.cpu ?? '—'}%`;
+                        document.getElementById('system-memory').textContent = `${system.memory ?? '—'}%`;
+                        document.getElementById('system-disk').textContent = `${system.disk ?? '—'}%`;
+                        document.getElementById('system-network').textContent = `${system.network ?? '—'}%`;
+                        document.getElementById('system-cpu-progress').value = system.cpu ?? 0;
+                        document.getElementById('system-memory-progress').value = system.memory ?? 0;
+                        document.getElementById('system-disk-progress').value = system.disk ?? 0;
+                        document.getElementById('system-network-progress').value = system.network ?? 0;
+
+                        const activityList = document.getElementById('recent-activity');
+                        activityList.innerHTML = activity
+                            .map(
+                                (item) => `
+                                    <li class="activity-item">
+                                        <div class="activity-icon upload">${item.icon}</div>
+                                        <div class="activity-content">
+                                            <div class="activity-title">${item.title}</div>
+                                            <div class="activity-time">${item.description}</div>
+                                        </div>
+                                        <small>${item.time}</small>
+                                    </li>`
+                            )
+                            .join('');
+
+                        const recordBody = document.getElementById('recent-records');
+                        recordBody.innerHTML = records
+                            .map(
+                                (record) => `
+                                    <tr>
+                                        <td>${record.id}</td>
+                                        <td>${record.filename}</td>
+                                        <td><mark>${record.result}</mark></td>
+                                        <td>
+                                            <progress value="${record.confidence}" max="100"></progress>
+                                            <small>${record.confidence}%</small>
+                                        </td>
+                                        <td>${record.timestamp}</td>
+                                        <td><a href="#" class="secondary outline">查看</a></td>
+                                    </tr>`
+                            )
+                            .join('');
+                    })
+                    .catch((error) => {
+                        console.error(error);
+                    });
+            } else if (page === 'nodes') {
+                fetchJson(`${API_BASE_URL}/dashboard/nodes`)
+                    .then((payload) => {
+                        const nodes = payload.data || [];
+                        const container = document.getElementById('nodes-list');
+                        if (!nodes.length) {
+                            container.innerHTML = '<p>当前暂无节点数据。</p>';
+                            return;
+                        }
+                        container.innerHTML = nodes
+                            .map(
+                                (node) => `
+                                    <article class="node-card">
+                                        <div class="node-header">
+                                            <div>
+                                                <h3 style="margin: 0;">节点 ${node.name}</h3>
+                                                <small>${node.addr ?? '地址未知'}</small>
+                                            </div>
+                                            <span class="node-status ${node.status === 'online' ? 'online' : 'offline'}">● ${node.status === 'online' ? '在线' : '离线'}</span>
+                                        </div>
+                                        <div class="node-info">
+                                            <div class="node-info-item">
+                                                <div class="node-info-value">${node.load_percentage ?? 0}%</div>
+                                                <div class="node-info-label">负载</div>
+                                            </div>
+                                            <div class="node-info-item">
+                                                <div class="node-info-value">${node.current_tasks ?? 0}</div>
+                                                <div class="node-info-label">当前任务</div>
+                                            </div>
+                                            <div class="node-info-item">
+                                                <div class="node-info-value">${node.max_tasks ?? 0}</div>
+                                                <div class="node-info-label">最大任务</div>
+                                            </div>
+                                        </div>
+                                        <footer style="margin-top: 1rem; text-align: right;">
+                                            <a href="#" role="button" class="secondary outline">查看详情</a>
+                                            <a href="#" role="button" class="outline">配置</a>
+                                        </footer>
+                                    </article>`
+                            )
+                            .join('');
+                    })
+                    .catch((error) => {
+                        console.error(error);
+                    });
+            } else if (page === 'history') {
+                fetchJson(`${API_BASE_URL}/dashboard/tasks`)
+                    .then((payload) => {
+                        const tasks = payload.data || [];
+                        const body = document.getElementById('history-table-body');
+
+                        const total = tasks.length;
+                        const successCount = tasks.filter((task) => task.status === 'success').length;
+                        const failureCount = total - successCount;
+                        const successRate = total > 0 ? Math.round((successCount / total) * 1000) / 10 : 0;
+
+                        document.getElementById('history-total-requests').textContent = total;
+                        document.getElementById('history-success-count').textContent = successCount;
+                        document.getElementById('history-failure-count').textContent = failureCount;
+                        document.getElementById('history-success-rate').textContent = `${successRate}%`;
+
+                        if (!tasks.length) {
+                            body.innerHTML = '<tr><td colspan="6" style="text-align:center;">暂无历史记录</td></tr>';
+                            return;
+                        }
+                        body.innerHTML = tasks
+                            .map(
+                                (task) => `
+                                    <tr>
+                                        <td>${task.task_id}</td>
+                                        <td>${task.label || '--'}</td>
+                                        <td>图片识别</td>
+                                        <td>image_${task.task_id.slice(0, 8)}.jpg</td>
+                                        <td>${task.label || '--'}</td>
+                                        <td><span class="history-status ${task.status === 'success' ? 'success' : 'failure'}">${task.status === 'success' ? '✓ 成功' : '✗ 失败'}</span></td>
+                                    </tr>`
+                            )
+                            .join('');
+                    })
+                    .catch((error) => {
+                        console.error(error);
+                    });
+            }
         }
 
         // 更新导航激活状态（桌面端）

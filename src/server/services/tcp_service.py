@@ -361,15 +361,24 @@ class NodeManager:
                 )
             logger.debug("=" * 80 + "\n")
 
-    def update_db_node_status(self, node_id, status):
+    def update_db_node_status(self, node_id, status, addr=None):
         try:
             conn = get_db_connection()
             if not conn:
                 logger.error(f"[数据库] 无法连接数据库，无法更新节点 {node_id} 状态")
                 return False
             with conn.cursor() as cursor:
-                sql = "UPDATE nodes SET status = %s, updated_at = NOW() WHERE id = %s"
-                cursor.execute(sql, (status, node_id))
+                sql = "UPDATE nodes SET status = %s, updated_at = NOW()"
+                params = [status]
+                if addr is not None:
+                    sql += ", addr = %s"
+                    if isinstance(addr, tuple):
+                        params.append(f"{addr[0]}:{addr[1]}")
+                    else:
+                        params.append(str(addr))
+                sql += " WHERE id = %s"
+                params.append(node_id)
+                cursor.execute(sql, tuple(params))
             conn.commit()
             logger.debug(f"[数据库] 节点 {node_id} 状态更新为 {status}")
             return True
@@ -571,7 +580,8 @@ def async_handle_register(conn, addr, msg):
     try:
         cursor = conn_db.cursor(pymysql.cursors.DictCursor)
         query = """
-            SELECT * FROM nodes 
+            SELECT id, name, token, status, addr, is_active, created_at, updated_at
+            FROM nodes
             WHERE id = %s AND token = %s AND is_active = 1
         """
         cursor.execute(query, (node_id, token))
@@ -596,9 +606,9 @@ def async_handle_register(conn, addr, msg):
             if max_tasks <= 0 or max_tasks > 100:  # 假设最大任务数不超过100
                 max_tasks = 5  # 使用默认值
 
-            # 使用节点上报的max_tasks注册节点
+            # 使用节点上报的max_tasks注册节点，并同步数据库中的地址与状态
             node_manager.register_node(node_id, addr, conn, max_tasks)
-            node_manager.update_db_node_status(node_id, "online")
+            node_manager.update_db_node_status(node_id, "online", addr=addr)
             node_manager.set_node_idle(node_id)
 
             register_ack = {

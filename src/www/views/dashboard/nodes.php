@@ -86,71 +86,14 @@ if (!$isAjax) {
 
 <!-- 节点列表 -->
 <section>
-    <article class="node-card">
-        <div class="node-header">
-            <div>
-                <h3 style="margin: 0;">节点 #1</h3>
-                <small>node-001.example.com</small>
+    <div id="nodes-list">
+        <article class="node-card">
+            <div class="node-header">
+                <div>
+                    <h3 style="margin: 0;">正在加载节点数据…</h3>
+                    <small>请稍候</small>
+                </div>
             </div>
-            <span class="node-status online">● 在线</span>
-        </div>
-
-        <div class="node-info">
-            <div class="node-info-item">
-                <div class="node-info-value">99.8%</div>
-                <div class="node-info-label">在线率</div>
-            </div>
-            <div class="node-info-item">
-                <div class="node-info-value">1,234</div>
-                <div class="node-info-label">处理请求</div>
-            </div>
-            <div class="node-info-item">
-                <div class="node-info-value">15天</div>
-                <div class="node-info-label">运行时间</div>
-            </div>
-            <div class="node-info-item">
-                <div class="node-info-value">45ms</div>
-                <div class="node-info-label">平均响应</div>
-            </div>
-        </div>
-
-        <footer style="margin-top: 1rem; text-align: right;">
-            <a href="#" role="button" class="secondary outline">查看详情</a>
-            <a href="#" role="button" class="outline">配置</a>
-        </footer>
-    </article>
-
-    <article class="node-card">
-        <div class="node-header">
-            <div>
-                <h3 style="margin: 0;">节点 #2</h3>
-                <small>node-002.example.com</small>
-            </div>
-            <span class="node-status offline">● 离线</span>
-        </div>
-
-        <div class="node-info">
-            <div class="node-info-item">
-                <div class="node-info-value">95.2%</div>
-                <div class="node-info-label">在线率</div>
-            </div>
-            <div class="node-info-item">
-                <div class="node-info-value">856</div>
-                <div class="node-info-label">处理请求</div>
-            </div>
-            <div class="node-info-item">
-                <div class="node-info-value">8天</div>
-                <div class="node-info-label">运行时间</div>
-            </div>
-            <div class="node-info-item">
-                <div class="node-info-value">--</div>
-                <div class="node-info-label">平均响应</div>
-            </div>
-        </div>
-
-        <footer style="margin-top: 1rem; text-align: right;">
-            <a href="#" role="button" class="secondary outline">查看详情</a>
-            <a href="#" role="button" class="outline">配置</a>
-        </footer>
-    </article>
+        </article>
+    </div>
 </section>

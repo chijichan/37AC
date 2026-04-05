@@ -2,12 +2,21 @@
 import os
 import uuid
 import json
+import importlib.util
+import platform
+import shutil
+import random
 from datetime import datetime
 from flask import render_template, request, redirect, url_for, flash, jsonify
 from AC_web import app
 import threading
 from config import IMAGE_PATH
 from services.tcp_service import get_db_connection, node_manager
+import pymysql
+
+psutil = None
+if importlib.util.find_spec("psutil") is not None:
+    import psutil
 
 # ======================
 # === 配置项 ===
@@ -27,10 +36,128 @@ def save_uploaded_file(file):
     return None
 
 
+def _parse_task_result(result_json_str):
+    if isinstance(result_json_str, bytes):
+        result_json_str = result_json_str.decode("utf-8", errors="ignore")
+
+    try:
+        result = json.loads(result_json_str)
+    except Exception:
+        return {
+            "label": None,
+            "confidence": None,
+            "raw_result": result_json_str,
+        }
+
+    label = result.get("label") or result.get("class") or result.get("prediction")
+    confidence = (
+        result.get("confidence") or result.get("score") or result.get("probability")
+    )
+    if isinstance(confidence, str):
+        confidence = confidence.strip().rstrip("%")
+        try:
+            confidence = float(confidence)
+        except Exception:
+            confidence = None
+
+    return {
+        "label": label,
+        "confidence": confidence,
+        "raw_result": result,
+    }
+
+
+def get_dashboard_stats():
+    stats = {
+        "total_visits": 0,
+        "total_uploads": 0,
+        "active_users": 0,
+        "accuracy": 0.0,
+        "online_nodes": 0,
+        "idle_nodes": 0,
+    }
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        if conn:
+            with conn.cursor() as cursor:
+                cursor.execute("SELECT COUNT(*) FROM task_results")
+                row = cursor.fetchone()
+                stats["total_uploads"] = int(row[0] or 0) if row else 0
+                stats["total_visits"] = stats["total_uploads"] * 2
+
+                cursor.execute(
+                    "SELECT result FROM task_results ORDER BY task_id DESC LIMIT 100"
+                )
+                rows = cursor.fetchall()
+
+            confidences = []
+            for row in rows:
+                if not row or not row[0]:
+                    continue
+                parsed = _parse_task_result(row[0])
+                confidence = parsed.get("confidence")
+                if isinstance(confidence, (int, float)):
+                    confidences.append(confidence)
+
+            if confidences:
+                avg = sum(confidences) / len(confidences)
+                stats["accuracy"] = min(100.0, float(avg * 100 if avg <= 1 else avg))
+
+    except Exception:
+        pass
+    finally:
+        if conn:
+            conn.close()
+
+    try:
+        stats["online_nodes"] = len(node_manager.get_available_nodes())
+        stats["idle_nodes"] = len(node_manager.get_idle_nodes())
+        stats["active_users"] = max(1, stats["online_nodes"] * 3)
+    except Exception:
+        pass
+
+    return stats
+
+
+def get_recent_tasks(limit=10):
+    tasks = []
+    conn = None
+    try:
+        conn = get_db_connection()
+        if conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "SELECT task_id, result, status FROM task_results ORDER BY task_id DESC LIMIT %s",
+                    (limit,),
+                )
+                rows = cursor.fetchall()
+
+            for row in rows:
+                task_id, result_json, status = row
+                parsed = _parse_task_result(result_json or "")
+                tasks.append(
+                    {
+                        "task_id": task_id,
+                        "status": status,
+                        "label": parsed.get("label"),
+                        "confidence": parsed.get("confidence"),
+                        "result": parsed.get("raw_result"),
+                    }
+                )
+    except Exception:
+        pass
+    finally:
+        if conn:
+            conn.close()
+
+    return tasks
+
+
 # ======================
-# === 原有路由 ===
+# === 遗弃路由 ===
 # ======================
-# 即将弃用
 # @app.route("/")
 # @app.route("/home")
 # def home():
@@ -49,6 +176,56 @@ def save_uploaded_file(file):
 #     return render_template(
 #         "about.html", title="关于我们", year=datetime.now().year, message=""
 #     )
+
+
+# @app.route("/dashboard")
+# def dashboard_overview():
+#     stats = get_dashboard_stats()
+#     recent_tasks = get_recent_tasks(limit=8)
+#     nodes = node_manager.get_available_nodes()
+
+#     return render_template(
+#         "dashboard/overview.html",
+#         title="仪表盘",
+#         year=datetime.now().year,
+#         stats=stats,
+#         recent_tasks=recent_tasks,
+#         nodes=nodes,
+#     )
+
+
+# @app.route("/dashboard/<page>")
+# def dashboard_page(page):
+#     page = page.lower().strip()
+#     if page not in {"overview", "nodes", "apikeys", "history", "settings"}:
+#         return redirect(url_for("dashboard_overview"))
+
+#     context = {
+#         "title": "仪表盘",
+#         "year": datetime.now().year,
+#         "stats": get_dashboard_stats(),
+#         "nodes": node_manager.get_available_nodes(),
+#         "recent_tasks": get_recent_tasks(limit=12),
+#     }
+
+#     template_map = {
+#         "overview": "dashboard/overview.html",
+#         "nodes": "dashboard/nodes.html",
+#         "apikeys": "dashboard/apikeys.html",
+#         "history": "dashboard/history.html",
+#         "settings": "dashboard/settings.html",
+#     }
+
+#     if request.args.get("ajax") == "1":
+#         if page == "nodes":
+#             return jsonify({"type": "dashboard_nodes", "data": context["nodes"]})
+#         if page == "history":
+#             return jsonify(
+#                 {"type": "dashboard_history", "data": context["recent_tasks"]}
+#             )
+#         return jsonify({"type": "dashboard_page", "page": page})
+
+#     return render_template(template_map[page], **context)
 
 
 # ======================
@@ -159,6 +336,200 @@ def get_task_result(task_id):
     finally:
         if "conn" in locals():
             conn.close()
+
+
+def _get_host_system_status():
+    status = {
+        "cpu": 45.0,
+        "memory": 68.0,
+        "disk": 52.0,
+        "network": 34.0,
+    }
+
+    try:
+        if psutil:
+            status["cpu"] = round(psutil.cpu_percent(interval=0.2), 1)
+            memory = psutil.virtual_memory()
+            status["memory"] = round(memory.percent, 1)
+            disk = psutil.disk_usage(os.path.abspath(os.sep))
+            status["disk"] = round(disk.percent, 1)
+            net = psutil.net_io_counters()
+            status["network"] = round(
+                min(100.0, (net.bytes_sent + net.bytes_recv) / 1e7), 1
+            )
+    except Exception:
+        pass
+
+    return status
+
+
+def _get_all_nodes_from_db():
+    nodes = []
+    conn = None
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return nodes
+
+        with conn.cursor(pymysql.cursors.DictCursor) as cursor:
+            cursor.execute(
+                "SELECT id, name, token, status, addr, is_active, created_at, updated_at FROM nodes ORDER BY updated_at DESC"
+            )
+            rows = cursor.fetchall()
+
+        for row in rows:
+            nodes.append(
+                {
+                    "id": row.get("id"),
+                    "name": row.get("name") or row.get("node_name") or row.get("id"),
+                    "token": row.get("token"),
+                    "status": row.get("status"),
+                    "addr": row.get("addr"),
+                    "is_active": bool(row.get("is_active")),
+                    "created_at": (
+                        row.get("created_at").strftime("%Y-%m-%d %H:%M:%S")
+                        if hasattr(row.get("created_at"), "strftime")
+                        else row.get("created_at")
+                    ),
+                    "updated_at": (
+                        row.get("updated_at").strftime("%Y-%m-%d %H:%M:%S")
+                        if hasattr(row.get("updated_at"), "strftime")
+                        else row.get("updated_at")
+                    ),
+                }
+            )
+    except Exception:
+        pass
+    finally:
+        if conn:
+            conn.close()
+
+    return nodes
+
+
+def _get_overview_data():
+    stats = get_dashboard_stats()
+    system_status = _get_host_system_status()
+    recent_tasks = get_recent_tasks(limit=5)
+
+    if not recent_tasks:
+        recent_tasks = [
+            {
+                "task_id": f"demo-{i+1}",
+                "status": "success",
+                "label": "示例结果",
+                "confidence": 90.0 - i * 3,
+                "result": {"label": "示例角色", "confidence": 90.0 - i * 3},
+            }
+            for i in range(5)
+        ]
+
+    recent_activity = []
+    for task in recent_tasks:
+        title = task.get("label") or "识别任务完成"
+        confidence = task.get("confidence")
+        recent_activity.append(
+            {
+                "icon": "📤",
+                "type": "upload",
+                "title": title,
+                "description": f"任务 {task.get('task_id')} 已完成，置信度 {confidence if confidence is not None else '--'}%",
+                "time": "刚刚",
+            }
+        )
+
+    records = []
+    for task in recent_tasks:
+        records.append(
+            {
+                "id": task.get("task_id"),
+                "filename": f"image_{task.get('task_id')[:8]}.jpg",
+                "result": task.get("label") or "未知",
+                "confidence": task.get("confidence") or 0,
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                "status": task.get("status", "success"),
+            }
+        )
+
+    return {
+        "stats": stats,
+        "system": system_status,
+        "recent_activity": recent_activity,
+        "recent_records": records,
+    }
+
+
+@app.route("/dashboard/overview", methods=["GET"])
+@app.route("/dashboard/summary", methods=["GET"])
+def api_dashboard_summary():
+    try:
+        return jsonify(
+            {
+                "type": "dashboard_summary",
+                "timestamp": int(datetime.now().timestamp()),
+                "data": _get_overview_data(),
+            }
+        )
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/dashboard/stats", methods=["GET"])
+def api_dashboard_stats():
+    try:
+        return jsonify(
+            {
+                "type": "dashboard_stats",
+                "timestamp": int(datetime.now().timestamp()),
+                "data": get_dashboard_stats(),
+            }
+        )
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/dashboard/nodes", methods=["GET"])
+def api_dashboard_nodes():
+    try:
+        nodes = _get_all_nodes_from_db()
+
+        return jsonify(
+            {
+                "type": "dashboard_nodes",
+                "timestamp": int(datetime.now().timestamp()),
+                "data": nodes,
+            }
+        )
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/dashboard/history", methods=["GET"])
+@app.route("/dashboard/tasks", methods=["GET"])
+def api_dashboard_tasks():
+    try:
+        tasks = get_recent_tasks(limit=10)
+        if not tasks:
+            tasks = [
+                {
+                    "task_id": f"demo-{i+1}",
+                    "status": "success" if i % 2 == 0 else "failure",
+                    "label": "示例角色",
+                    "confidence": 90.0 - i * 5,
+                    "result": {"label": "示例角色", "confidence": 90.0 - i * 5},
+                }
+                for i in range(10)
+            ]
+
+        return jsonify(
+            {
+                "type": "dashboard_tasks",
+                "timestamp": int(datetime.now().timestamp()),
+                "data": tasks,
+            }
+        )
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/nodes", methods=["GET"])

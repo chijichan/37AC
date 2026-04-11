@@ -312,8 +312,41 @@ require_once ROOT_PATH . '/views/layout.php';
         // 当前激活的页面
         let currentPage = 'overview';
 
-        // 页面缓存
-        const pageCache = {};
+        function setLoading(active) {
+            if (!loadingIndicator) return;
+            loadingIndicator.setAttribute('aria-busy', active ? 'true' : 'false');
+            contentContainer.style.opacity = active ? '0.5' : '1';
+        }
+
+        <?php
+        function capture_dashboard_fragment($path)
+        {
+            $backupGet = $_GET;
+            $_GET['ajax'] = '1';
+            ob_start();
+            require $path;
+            $content = ob_get_clean();
+            $_GET = $backupGet;
+            return $content;
+        }
+
+        $dashboardTemplates = [
+            'overview' => capture_dashboard_fragment(ROOT_PATH . '/views/dashboard/overview.php'),
+            'nodes' => capture_dashboard_fragment(ROOT_PATH . '/views/dashboard/nodes.php'),
+            'apikeys' => capture_dashboard_fragment(ROOT_PATH . '/views/dashboard/apikeys.php'),
+            'history' => capture_dashboard_fragment(ROOT_PATH . '/views/dashboard/history.php'),
+            'settings' => capture_dashboard_fragment(ROOT_PATH . '/views/dashboard/settings.php'),
+        ];
+        ?>
+
+        const pageTemplates = {
+            'overview': <?php echo json_encode($dashboardTemplates['overview']); ?>,
+            'nodes': <?php echo json_encode($dashboardTemplates['nodes']); ?>,
+            'apikeys': <?php echo json_encode($dashboardTemplates['apikeys']); ?>,
+            'history': <?php echo json_encode($dashboardTemplates['history']); ?>,
+            'settings': <?php echo json_encode($dashboardTemplates['settings']); ?>,
+        };
+
         const API_BASE_URL = 'http://127.0.0.1:13138';
 
         // 页面信息映射
@@ -372,14 +405,7 @@ require_once ROOT_PATH . '/views/layout.php';
         }
 
         // 加载页面内容
-        function loadPage(page, addToHistory = true) {
-            // 防止重复加载
-            if (page === currentPage && pageCache[page]) {
-                contentContainer.innerHTML = pageCache[page];
-                renderPageData(page);
-                return;
-            }
-
+        async function loadPage(page, addToHistory = true) {
             // 更新导航激活状态
             updateNavActive(page);
 
@@ -390,59 +416,34 @@ require_once ROOT_PATH . '/views/layout.php';
             navDropdown.classList.remove('show');
             navToggle.classList.remove('open');
 
-            // 如果断网且有缓存，直接使用
-            if (!navigator.onLine && pageCache[page]) {
-                contentContainer.innerHTML = pageCache[page];
-                currentPage = page;
+            // 加载本地模板
+            const pageHtml = pageTemplates[page];
+            if (!pageHtml) {
+                contentContainer.innerHTML = `
+                    <article style="text-align: center; padding: 3rem;">
+                        <h2>⚠️ 页面未找到</h2>
+                        <p>无法加载页面：${page}</p>
+                    </article>
+                `;
                 return;
             }
 
-            // 开始加载：启用 aria-busy 并加淡内容
-            loadingIndicator.setAttribute('aria-busy', 'true');
-            contentContainer.style.opacity = '0.5';
+            setLoading(true);
+            contentContainer.innerHTML = pageHtml;
+            currentPage = page;
 
-            // 构建请求URL
-            const url = page === 'overview' ? '/dashboard?ajax=1' : `/dashboard/${page}?ajax=1`;
+            try {
+                await renderPageData(page);
+            } finally {
+                setLoading(false);
+            }
 
-            // 发起 AJAX 请求
-            fetch(url)
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error('页面加载失败');
-                    }
-                    return response.text();
-                })
-                .then(html => {
-                    // 缓存内容
-                    pageCache[page] = html;
-
-                    // 更新内容
-                    contentContainer.innerHTML = html;
-                    currentPage = page;
-                    renderPageData(page);
-
-                    // 更新浏览器历史
-                    if (addToHistory) {
-                        const url = page === 'overview' ? '/dashboard' : `/dashboard/${page}`;
-                        history.pushState({
-                            page
-                        }, '', url);
-                    }
-                })
-                .catch(error => {
-                    contentContainer.innerHTML = `
-                        <article style="text-align: center; padding: 3rem;">
-                            <h2>⚠️ 加载失败</h2>
-                            <p>${error.message}</p>
-                            <button onclick="location.reload()">刷新页面</button>
-                        </article>
-                    `;
-                })
-                .finally(() => {
-                    // 结束加载：移除 aria-busy
-                    loadingIndicator.setAttribute('aria-busy', 'false');
-                    contentContainer.style.opacity = '1';
-                });
+            if (addToHistory) {
+                const url = page === 'overview' ? '/dashboard' : `/dashboard/${page}`;
+                history.pushState({
+                    page
+                }, '', url);
+            }
         }
 
         function fetchJson(url) {
@@ -460,7 +461,7 @@ require_once ROOT_PATH . '/views/layout.php';
 
         function renderPageData(page) {
             if (page === 'overview') {
-                fetchJson(`${API_BASE_URL}/dashboard/summary`)
+                return fetchJson(`${API_BASE_URL}/dashboard/summary`)
                     .then((payload) => {
                         const data = payload.data || {};
                         const stats = data.stats || {};
@@ -519,7 +520,7 @@ require_once ROOT_PATH . '/views/layout.php';
                         console.error(error);
                     });
             } else if (page === 'nodes') {
-                fetchJson(`${API_BASE_URL}/dashboard/nodes`)
+                return fetchJson(`${API_BASE_URL}/dashboard/nodes`)
                     .then((payload) => {
                         const nodes = payload.data || [];
                         const container = document.getElementById('nodes-list');
@@ -564,7 +565,7 @@ require_once ROOT_PATH . '/views/layout.php';
                         console.error(error);
                     });
             } else if (page === 'history') {
-                fetchJson(`${API_BASE_URL}/dashboard/tasks`)
+                return fetchJson(`${API_BASE_URL}/dashboard/tasks`)
                     .then((payload) => {
                         const tasks = payload.data || [];
                         const body = document.getElementById('history-table-body');
@@ -601,6 +602,19 @@ require_once ROOT_PATH . '/views/layout.php';
                         console.error(error);
                     });
             }
+
+            return Promise.resolve();
+        }
+
+        function copyToClipboard(btn) {
+            const keyText = btn.closest('.key-display').querySelector('.key-text').textContent;
+            navigator.clipboard.writeText(keyText).then(() => {
+                const originalText = btn.innerHTML;
+                btn.innerHTML = '✓';
+                setTimeout(() => {
+                    btn.innerHTML = originalText;
+                }, 2000);
+            });
         }
 
         // 更新导航激活状态（桌面端）

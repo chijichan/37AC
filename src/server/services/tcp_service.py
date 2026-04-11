@@ -24,7 +24,7 @@ else:
     log_level = logging.INFO
 logger.setLevel(log_level)
 
-file_handler = logging.FileHandler(LOGS_PATH / "/tcp_server.log")
+file_handler = logging.FileHandler(LOGS_PATH / "tcp_server.log")
 console_handler = logging.StreamHandler()
 
 formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")

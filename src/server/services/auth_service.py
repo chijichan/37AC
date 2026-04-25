@@ -218,7 +218,7 @@ def get_user_by_id(user_id: int) -> dict:
         conn = _get_connection()
         with conn.cursor(pymysql.cursors.DictCursor) as cursor:
             cursor.execute(
-                """SELECT id, username, email, role, status, avatar, bio,
+                """SELECT id, username, email, role, status,
                           last_login_at, last_login_ip, created_at, updated_at
                    FROM users WHERE id = %s""",
                 (user_id,),
@@ -243,7 +243,7 @@ def get_user_by_id(user_id: int) -> dict:
 
 def update_profile(user_id: int, data: dict) -> dict:
     """更新用户个人资料"""
-    allowed_fields = {"email", "avatar", "username", "bio"}
+    allowed_fields = {"email", "avatar", "username"}
     update_fields = []
     update_values = []
 

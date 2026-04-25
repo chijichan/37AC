@@ -10,7 +10,6 @@ ini_set('display_errors', 1);
 define('ROOT_PATH', dirname(__DIR__));
 
 require_once ROOT_PATH . '/router.php';
-require_once ROOT_PATH . '/config/config.php';
 require_once ROOT_PATH . '/controllers/controller.php';
 
 spl_autoload_register(function ($class) {

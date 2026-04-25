@@ -2,13 +2,16 @@
 """仪表盘相关路由"""
 
 from datetime import datetime
-from flask import jsonify, Blueprint
+from flask import jsonify, Blueprint, request, g
 from services.dashboard_service import (
     get_dashboard_stats,
     get_recent_tasks,
     get_overview_data,
     _get_all_nodes_from_db,
+    get_user_nodes_from_db,
+    get_user_tasks_from_db,
 )
+from middleware.auth_middleware import login_required
 
 dashboard_bp = Blueprint("dashboard", __name__)
 
@@ -62,24 +65,24 @@ def api_dashboard_nodes():
 @dashboard_bp.route("/dashboard/tasks", methods=["GET"])
 def api_dashboard_tasks():
     try:
-        tasks = get_recent_tasks(limit=10)
+        # 获取查询参数
+        page = request.args.get("page", 1, type=int)
+        limit = request.args.get("limit", 15, type=int)
+        time_range = request.args.get("time_range", 30, type=int)
+        status_filter = request.args.get("status", "")
+
+        tasks = get_recent_tasks(limit=limit)
+
         if not tasks:
-            tasks = [
-                {
-                    "task_id": f"demo-{i+1}",
-                    "status": "success" if i % 2 == 0 else "failure",
-                    "label": "示例角色",
-                    "confidence": 90.0 - i * 5,
-                    "result": {"label": "示例角色", "confidence": 90.0 - i * 5},
-                }
-                for i in range(10)
-            ]
+            tasks = []
 
         return jsonify(
             {
                 "type": "dashboard_tasks",
                 "timestamp": int(datetime.now().timestamp()),
                 "data": tasks,
+                "page": page,
+                "total_pages": 1,
             }
         )
     except Exception as e:

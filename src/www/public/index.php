@@ -19,6 +19,48 @@ spl_autoload_register(function ($class) {
     }
 });
 
+/**
+ * 认证检查中间件
+ * 检查用户是否已登录，未登录则重定向到登录页
+ */
+function require_auth()
+{
+    // 从 Cookie 或 Session 中检查登录状态
+    session_start();
+    $is_logged_in = isset($_SESSION['user_id']) ||
+        (isset($_COOKIE['access_token']) && !empty($_COOKIE['access_token']));
+
+    if (!$is_logged_in) {
+        // 检查 Authorization header（用于 AJAX 请求）
+        $auth_header = isset($_SERVER['HTTP_AUTHORIZATION']) ? $_SERVER['HTTP_AUTHORIZATION'] : '';
+        if (empty($auth_header)) {
+            // 也检查 REDIRECT_HTTP_AUTHORIZATION
+            $auth_header = isset($_SERVER['REDIRECT_HTTP_AUTHORIZATION']) ? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] : '';
+        }
+
+        if (!empty($auth_header) && preg_match('/Bearer\s+(.+)/', $auth_header, $matches)) {
+            $is_logged_in = !empty($matches[1]);
+        }
+    }
+
+    if (!$is_logged_in) {
+        // AJAX 请求返回 401
+        if (
+            !empty($_SERVER['HTTP_X_REQUESTED_WITH']) &&
+            strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest'
+        ) {
+            http_response_code(401);
+            header('Content-Type: application/json');
+            echo json_encode(['success' => false, 'message' => '未登录，请先登录']);
+            exit;
+        }
+
+        // 普通请求重定向到登录页
+        header('Location: /auth/login');
+        exit;
+    }
+}
+
 // 路由
 $router = new Router();
 
@@ -28,17 +70,37 @@ $router->get('/about', 'home_controller@about');
 $router->get('/contact', 'home_controller@contact');
 $router->get('/upload', 'home_controller@upload');
 
-// 仪表盘路由
-$router->get('/dashboard', 'dashboard_controller@index');
-$router->get('/dashboard/nodes', 'dashboard_controller@nodes');
-$router->get('/dashboard/apikeys', 'dashboard_controller@apikeys');
-$router->get('/dashboard/history', 'dashboard_controller@history');
-$router->get('/dashboard/settings', 'dashboard_controller@settings');
+// 仪表盘路由（需要认证）
+$router->get('/dashboard', function () {
+    require_auth();
+    $controller = new dashboard_controller();
+    $controller->index();
+});
+$router->get('/dashboard/nodes', function () {
+    require_auth();
+    $controller = new dashboard_controller();
+    $controller->nodes();
+});
+$router->get('/dashboard/apikeys', function () {
+    require_auth();
+    $controller = new dashboard_controller();
+    $controller->apikeys();
+});
+$router->get('/dashboard/history', function () {
+    require_auth();
+    $controller = new dashboard_controller();
+    $controller->history();
+});
+$router->get('/dashboard/settings', function () {
+    require_auth();
+    $controller = new dashboard_controller();
+    $controller->settings();
+});
 
-// 用户路由
-// $router->get('/users', 'user_controller@index');
-// $router->get('/user/{id}', 'user_controller@show');
-// $router->post('/user/create', 'user_controller@create');
+// 认证路由
+$router->get('/auth/login', 'auth_controller@login');
+$router->get('/auth/register', 'auth_controller@register');
+$router->get('/auth/forgot-password', 'auth_controller@forgot_password');
 
 // 执行路由分发
 $router->dispatch();

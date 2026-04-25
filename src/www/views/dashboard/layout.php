@@ -347,7 +347,6 @@ require_once ROOT_PATH . '/views/layout.php';
             'settings': <?php echo json_encode($dashboardTemplates['settings']); ?>,
         };
 
-        const API_BASE_URL = 'http://127.0.0.1:13138';
 
         // 页面信息映射
         const pageInfo = {
@@ -430,6 +429,8 @@ require_once ROOT_PATH . '/views/layout.php';
 
             setLoading(true);
             contentContainer.innerHTML = pageHtml;
+            executePageScripts(contentContainer);
+            initializeDashboardPage(page);
             currentPage = page;
 
             try {
@@ -443,6 +444,33 @@ require_once ROOT_PATH . '/views/layout.php';
                 history.pushState({
                     page
                 }, '', url);
+            }
+        }
+
+        function executePageScripts(container) {
+            const scripts = Array.from(container.querySelectorAll('script'));
+            scripts.forEach((script) => {
+                const newScript = document.createElement('script');
+                Array.from(script.attributes).forEach((attr) => {
+                    newScript.setAttribute(attr.name, attr.value);
+                });
+                if (script.src) {
+                    newScript.src = script.src;
+                    newScript.async = false;
+                } else {
+                    newScript.textContent = script.textContent;
+                }
+                script.parentNode.replaceChild(newScript, script);
+            });
+        }
+
+        function initializeDashboardPage(page) {
+            if (typeof window.dashboardPageInit === 'function') {
+                try {
+                    window.dashboardPageInit(page);
+                } finally {
+                    window.dashboardPageInit = null;
+                }
             }
         }
 
@@ -461,7 +489,7 @@ require_once ROOT_PATH . '/views/layout.php';
 
         function renderPageData(page) {
             if (page === 'overview') {
-                return fetchJson(`${API_BASE_URL}/dashboard/summary`)
+                return fetchJson(`${window.API_BASE_URL}/dashboard/summary`)
                     .then((payload) => {
                         const data = payload.data || {};
                         const stats = data.stats || {};
@@ -477,11 +505,13 @@ require_once ROOT_PATH . '/views/layout.php';
                         document.getElementById('system-cpu').textContent = `${system.cpu ?? '—'}%`;
                         document.getElementById('system-memory').textContent = `${system.memory ?? '—'}%`;
                         document.getElementById('system-disk').textContent = `${system.disk ?? '—'}%`;
-                        document.getElementById('system-network').textContent = `${system.network ?? '—'}%`;
+                        const network = system.network || {};
+                        document.getElementById('system-network').textContent = `${(network.upload_speed ?? 0).toFixed(1)} KB/s`;
+                        document.getElementById('network-upload-speed').textContent = (network.upload_speed ?? 0).toFixed(1);
+                        document.getElementById('network-download-speed').textContent = (network.download_speed ?? 0).toFixed(1);
                         document.getElementById('system-cpu-progress').value = system.cpu ?? 0;
                         document.getElementById('system-memory-progress').value = system.memory ?? 0;
                         document.getElementById('system-disk-progress').value = system.disk ?? 0;
-                        document.getElementById('system-network-progress').value = system.network ?? 0;
 
                         const activityList = document.getElementById('recent-activity');
                         activityList.innerHTML = activity
@@ -520,52 +550,10 @@ require_once ROOT_PATH . '/views/layout.php';
                         console.error(error);
                     });
             } else if (page === 'nodes') {
-                return fetchJson(`${API_BASE_URL}/dashboard/nodes`)
-                    .then((payload) => {
-                        const nodes = payload.data || [];
-                        const container = document.getElementById('nodes-list');
-                        if (!nodes.length) {
-                            container.innerHTML = '<p>当前暂无节点数据。</p>';
-                            return;
-                        }
-                        container.innerHTML = nodes
-                            .map(
-                                (node) => `
-                                    <article class="node-card">
-                                        <div class="node-header">
-                                            <div>
-                                                <h3 style="margin: 0;">节点 ${node.name}</h3>
-                                                <small>${node.addr ?? '地址未知'}</small>
-                                            </div>
-                                            <span class="node-status ${node.status === 'online' ? 'online' : 'offline'}">● ${node.status === 'online' ? '在线' : '离线'}</span>
-                                        </div>
-                                        <div class="node-info">
-                                            <div class="node-info-item">
-                                                <div class="node-info-value">${node.load_percentage ?? 0}%</div>
-                                                <div class="node-info-label">负载</div>
-                                            </div>
-                                            <div class="node-info-item">
-                                                <div class="node-info-value">${node.current_tasks ?? 0}</div>
-                                                <div class="node-info-label">当前任务</div>
-                                            </div>
-                                            <div class="node-info-item">
-                                                <div class="node-info-value">${node.max_tasks ?? 0}</div>
-                                                <div class="node-info-label">最大任务</div>
-                                            </div>
-                                        </div>
-                                        <footer style="margin-top: 1rem; text-align: right;">
-                                            <a href="#" role="button" class="secondary outline">查看详情</a>
-                                            <a href="#" role="button" class="outline">配置</a>
-                                        </footer>
-                                    </article>`
-                            )
-                            .join('');
-                    })
-                    .catch((error) => {
-                        console.error(error);
-                    });
+                // nodes.php 自己的 <script> 标签负责渲染
+                return Promise.resolve();
             } else if (page === 'history') {
-                return fetchJson(`${API_BASE_URL}/dashboard/tasks`)
+                return fetchJson(`${window.API_BASE_URL}/dashboard/tasks`)
                     .then((payload) => {
                         const tasks = payload.data || [];
                         const body = document.getElementById('history-table-body');

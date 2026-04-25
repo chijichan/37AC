@@ -5,16 +5,54 @@ import uuid
 import json
 import threading
 from datetime import datetime
-from flask import render_template, request, redirect, url_for, flash, jsonify, Blueprint
+from flask import (
+    render_template,
+    request,
+    redirect,
+    url_for,
+    flash,
+    jsonify,
+    Blueprint,
+    g,
+)
 from services.tcp_service import get_db_connection, dispatch_task
 from services.file_service import save_uploaded_file
+from services.api_key_service import verify_api_key
+from middleware.auth_middleware import login_required
 
 upload_bp = Blueprint("upload", __name__)
+
+
+def _require_api_key():
+    """验证 API Key 中间件"""
+    api_key = request.headers.get("X-API-Key", "")
+    if not api_key:
+        return (
+            None,
+            jsonify(
+                {
+                    "success": False,
+                    "message": "缺少 API Key，请在请求头中提供 X-API-Key",
+                }
+            ),
+            401,
+        )
+
+    result = verify_api_key(api_key)
+    if not result["success"]:
+        return None, jsonify(result), 401
+
+    return result["data"], None, None
 
 
 @upload_bp.route("/upload", methods=["GET", "POST"])
 def upload_and_predict():
     if request.method == "POST":
+        # 验证 API Key（从请求头获取）
+        api_key_data, error_response, status_code = _require_api_key()
+        if error_response:
+            return error_response, status_code
+
         if "file" not in request.files:
             flash("没有选择文件")
             return redirect(request.url)
@@ -25,7 +63,7 @@ def upload_and_predict():
             return redirect(request.url)
 
         image_data = file.read()
-        file.seek(0)  # 如果后续还需要保存一份到磁盘，可以重置指针
+        file.seek(0)
 
         filepath = save_uploaded_file(file)
         if not filepath:
@@ -39,6 +77,22 @@ def upload_and_predict():
         def dispatch():
             result = dispatch_task(filepath, image_data, task_id)
             print(f"[调度结果] 任务 {task_id}: {result}")
+
+            # 保存 API Key 使用记录到 task_results
+            try:
+                conn = get_db_connection()
+                if conn:
+                    with conn.cursor() as cursor:
+                        cursor.execute(
+                            "UPDATE task_results SET user_id = %s, api_key_id = %s WHERE task_id = %s",
+                            (api_key_data["user_id"], api_key_data["key_id"], task_id),
+                        )
+                        conn.commit()
+            except Exception as e:
+                print(f"[API Key] 更新任务记录失败: {e}")
+            finally:
+                if conn:
+                    conn.close()
 
         threading.Thread(target=dispatch, daemon=True).start()
 
@@ -72,20 +126,16 @@ def get_task_result(task_id):
         with conn.cursor() as cursor:
             sql = "SELECT result, status FROM task_results WHERE task_id = %s"
             cursor.execute(sql, (task_id,))
-            row = cursor.fetchone()  # 返回的是元组 (result, status)
+            row = cursor.fetchone()
 
         if row:
-            result_json_str = row[0]  # result 是 JSON 格式的字符串
+            result_json_str = row[0]
             status = row[1]
 
             try:
-                result = json.loads(
-                    result_json_str
-                )  # 转为字典，如 {'label': '猫', 'confidence': 95.0}
+                result = json.loads(result_json_str)
             except json.JSONDecodeError:
-                result = {
-                    "raw_result": result_json_str
-                }  # 如果不是合法 JSON，原样返回字符串
+                result = {"raw_result": result_json_str}
 
             return (
                 jsonify(
@@ -102,10 +152,7 @@ def get_task_result(task_id):
             )
 
         else:
-            return (
-                jsonify(json_response),
-                202,
-            )
+            return jsonify(json_response), 202
 
     except Exception as e:
         json_response["status"] = "error"

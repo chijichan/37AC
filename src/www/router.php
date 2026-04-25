@@ -1,4 +1,5 @@
 <?php
+
 /**
  * 路由类
  */
@@ -50,7 +51,7 @@ class Router
             }
 
             $pattern = $this->convertPathToRegex($route['path']);
-            
+
             if (preg_match($pattern, $requestUri, $matches)) {
                 array_shift($matches); // 移除完整匹配
                 $this->params = $matches;
@@ -77,14 +78,20 @@ class Router
      */
     private function callHandler($handler)
     {
+        // 支持闭包函数
+        if ($handler instanceof Closure) {
+            return call_user_func_array($handler, $this->params);
+        }
+
+        // 支持 "controller@method" 字符串
         list($controller, $method) = explode('@', $handler);
-        
+
         if (!class_exists($controller)) {
             throw new Exception("Controller {$controller} not found");
         }
 
         $instance = new $controller();
-        
+
         if (!method_exists($instance, $method)) {
             throw new Exception("Method {$method} not found in {$controller}");
         }

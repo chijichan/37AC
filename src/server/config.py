@@ -34,3 +34,11 @@ IMAGE_PATH.mkdir(exist_ok=True)
 LOGS_PATH = ROOT_PATH / "saves" / "logs"
 LOGS_PATH.mkdir(exist_ok=True)
 monitor_counter = 0
+
+# JWT 配置
+JWT_SECRET = (
+    "37AC-JWT-Secret-Key-2024-With-Extra-Length-For-SHA256"  # 生产环境请替换为强密钥
+)
+JWT_ALGORITHM = "HS256"
+JWT_ACCESS_TOKEN_EXPIRES = 3600  # 访问令牌过期时间（秒），默认1小时
+JWT_REFRESH_TOKEN_EXPIRES = 2592000  # 刷新令牌过期时间（秒），默认30天

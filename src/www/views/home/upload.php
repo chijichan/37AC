@@ -917,7 +917,8 @@ require_once ROOT_PATH . '/views/layout.php';
                     method: 'POST',
                     body: formData,
                     headers: {
-                        'X-Requested-With': 'XMLHttpRequest'
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-API-Key': '37ac_ls340v2qkcbqqt7xbdi0d1kvb9cd1qz4cfgp3s4z'
                     }
                 });
 

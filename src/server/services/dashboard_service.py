@@ -3,6 +3,7 @@
 
 import json
 import os
+import time
 from datetime import datetime
 from services.tcp_service import get_db_connection, node_manager
 import pymysql
@@ -102,23 +103,34 @@ def get_recent_tasks(limit=10):
     try:
         conn = get_db_connection()
         if conn:
-            with conn.cursor() as cursor:
+            with conn.cursor(pymysql.cursors.DictCursor) as cursor:
                 cursor.execute(
-                    "SELECT task_id, result, status FROM task_results ORDER BY task_id DESC LIMIT %s",
+                    """SELECT tr.task_id, tr.result, tr.status, tr.created_at,
+                              tr.user_id, tr.api_key_id, ak.name as api_key_name
+                       FROM task_results tr
+                       LEFT JOIN api_keys ak ON tr.api_key_id = ak.id
+                       ORDER BY tr.created_at DESC LIMIT %s""",
                     (limit,),
                 )
                 rows = cursor.fetchall()
 
             for row in rows:
-                task_id, result_json, status = row
-                parsed = _parse_task_result(result_json or "")
+                parsed = _parse_task_result(row.get("result") or "")
                 tasks.append(
                     {
-                        "task_id": task_id,
-                        "status": status,
+                        "task_id": row.get("task_id"),
+                        "status": row.get("status"),
                         "label": parsed.get("label"),
                         "confidence": parsed.get("confidence"),
                         "result": parsed.get("raw_result"),
+                        "user_id": row.get("user_id"),
+                        "api_key_id": row.get("api_key_id"),
+                        "api_key_name": row.get("api_key_name"),
+                        "created_at": (
+                            row.get("created_at").strftime("%Y-%m-%d %H:%M:%S")
+                            if hasattr(row.get("created_at"), "strftime")
+                            else row.get("created_at")
+                        ),
                     }
                 )
     except Exception:
@@ -130,13 +142,69 @@ def get_recent_tasks(limit=10):
     return tasks
 
 
+# 网络带宽测量缓存
+_net_io_cache = {
+    "prev_bytes_sent": 0,
+    "prev_bytes_recv": 0,
+    "prev_time": 0,
+    "upload_speed": 0.0,  # KB/s
+    "download_speed": 0.0,  # KB/s
+}
+
+
+def _measure_network_bandwidth():
+    """测量实时网络带宽，返回上传/下载速度（KB/s）"""
+    global _net_io_cache
+
+    try:
+        import importlib.util
+
+        psutil = None
+        if importlib.util.find_spec("psutil") is not None:
+            import psutil
+
+        if not psutil:
+            return {"upload_speed": 0.0, "download_speed": 0.0}
+
+        net = psutil.net_io_counters()
+        now = time.time()
+
+        prev_sent = _net_io_cache["prev_bytes_sent"]
+        prev_recv = _net_io_cache["prev_bytes_recv"]
+        prev_time = _net_io_cache["prev_time"]
+
+        if prev_time > 0 and prev_sent > 0 and prev_recv > 0:
+            elapsed = now - prev_time
+            if elapsed > 0:
+                # 计算速率（字节/秒），转换为 KB/s
+                upload_bps = (net.bytes_sent - prev_sent) / elapsed
+                download_bps = (net.bytes_recv - prev_recv) / elapsed
+                _net_io_cache["upload_speed"] = round(upload_bps / 1024, 1)  # KB/s
+                _net_io_cache["download_speed"] = round(download_bps / 1024, 1)  # KB/s
+
+        # 更新缓存
+        _net_io_cache["prev_bytes_sent"] = net.bytes_sent
+        _net_io_cache["prev_bytes_recv"] = net.bytes_recv
+        _net_io_cache["prev_time"] = now
+
+        return {
+            "upload_speed": _net_io_cache["upload_speed"],
+            "download_speed": _net_io_cache["download_speed"],
+        }
+    except Exception:
+        return {"upload_speed": 0.0, "download_speed": 0.0}
+
+
 def _get_host_system_status():
-    """获取主机系统状态（CPU、内存、磁盘、网络）"""
+    """获取主机系统状态（CPU、内存、磁盘、网络带宽）"""
     status = {
         "cpu": 45.0,
         "memory": 68.0,
         "disk": 52.0,
-        "network": 34.0,
+        "network": {
+            "upload_speed": 0.0,
+            "download_speed": 0.0,
+        },
     }
 
     try:
@@ -152,10 +220,8 @@ def _get_host_system_status():
             status["memory"] = round(memory.percent, 1)
             disk = psutil.disk_usage(os.path.abspath(os.sep))
             status["disk"] = round(disk.percent, 1)
-            net = psutil.net_io_counters()
-            status["network"] = round(
-                min(100.0, (net.bytes_sent + net.bytes_recv) / 1e7), 1
-            )
+            # 实时网络带宽
+            status["network"] = _measure_network_bandwidth()
     except Exception:
         pass
 
@@ -173,7 +239,11 @@ def _get_all_nodes_from_db():
 
         with conn.cursor(pymysql.cursors.DictCursor) as cursor:
             cursor.execute(
-                "SELECT id, name, token, status, addr, is_active, created_at, updated_at FROM nodes ORDER BY updated_at DESC"
+                """SELECT n.id, n.name, n.token, n.status, n.addr, n.is_active,
+                          n.user_id, n.created_at, n.updated_at, u.username
+                   FROM nodes n
+                   LEFT JOIN users u ON n.user_id = u.id
+                   ORDER BY n.updated_at DESC"""
             )
             rows = cursor.fetchall()
 
@@ -186,6 +256,8 @@ def _get_all_nodes_from_db():
                     "status": row.get("status"),
                     "addr": row.get("addr"),
                     "is_active": bool(row.get("is_active")),
+                    "user_id": row.get("user_id"),
+                    "username": row.get("username"),
                     "created_at": (
                         row.get("created_at").strftime("%Y-%m-%d %H:%M:%S")
                         if hasattr(row.get("created_at"), "strftime")
@@ -205,6 +277,161 @@ def _get_all_nodes_from_db():
             conn.close()
 
     return nodes
+
+
+def get_user_nodes_from_db(user_id):
+    """获取指定用户的节点信息"""
+    nodes = []
+    conn = None
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return nodes
+
+        with conn.cursor(pymysql.cursors.DictCursor) as cursor:
+            cursor.execute(
+                """SELECT n.id, n.name, n.token, n.status, n.addr, n.is_active,
+                          n.user_id, n.created_at, n.updated_at, u.username
+                   FROM nodes n
+                   LEFT JOIN users u ON n.user_id = u.id
+                   WHERE n.user_id = %s
+                   ORDER BY n.updated_at DESC""",
+                (user_id,),
+            )
+            rows = cursor.fetchall()
+
+        for row in rows:
+            nodes.append(
+                {
+                    "id": row.get("id"),
+                    "name": row.get("name") or row.get("node_name") or row.get("id"),
+                    "token": row.get("token"),
+                    "status": row.get("status"),
+                    "addr": row.get("addr"),
+                    "is_active": bool(row.get("is_active")),
+                    "user_id": row.get("user_id"),
+                    "username": row.get("username"),
+                    "created_at": (
+                        row.get("created_at").strftime("%Y-%m-%d %H:%M:%S")
+                        if hasattr(row.get("created_at"), "strftime")
+                        else row.get("created_at")
+                    ),
+                    "updated_at": (
+                        row.get("updated_at").strftime("%Y-%m-%d %H:%M:%S")
+                        if hasattr(row.get("updated_at"), "strftime")
+                        else row.get("updated_at")
+                    ),
+                }
+            )
+    except Exception:
+        pass
+    finally:
+        if conn:
+            conn.close()
+
+    return nodes
+
+
+def create_node(name, token, addr=None, is_active=True, user_id=None):
+    """向数据库新增节点记录"""
+    conn = None
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return None
+
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """INSERT INTO nodes (name, token, addr, status, is_active, user_id, created_at, updated_at)
+                   VALUES (%s, %s, %s, %s, %s, %s, NOW(), NOW())""",
+                (
+                    name,
+                    token,
+                    addr,
+                    "offline",
+                    1 if is_active else 0,
+                    user_id,
+                ),
+            )
+            conn.commit()
+            return cursor.lastrowid
+    except Exception:
+        return None
+    finally:
+        if conn:
+            conn.close()
+
+
+def get_user_tasks_from_db(user_id, limit=15, page=1, time_range=30, status_filter=""):
+    """获取指定用户的任务记录"""
+    tasks = []
+    conn = None
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return tasks
+
+        offset = (page - 1) * limit
+
+        with conn.cursor(pymysql.cursors.DictCursor) as cursor:
+            # 构建查询条件
+            where_clauses = ["tr.user_id = %s"]
+            params = [user_id]
+
+            if time_range > 0:
+                where_clauses.append("tr.created_at >= NOW() - INTERVAL %s DAY")
+                params.append(time_range)
+
+            if status_filter:
+                where_clauses.append("tr.status = %s")
+                params.append(status_filter)
+
+            where_sql = " AND ".join(where_clauses)
+
+            cursor.execute(
+                f"""SELECT tr.task_id, tr.status, tr.result, tr.user_id,
+                           tr.api_key_id, tr.created_at, tr.updated_at,
+                           ak.name as api_key_name
+                    FROM task_results tr
+                    LEFT JOIN api_keys ak ON tr.api_key_id = ak.id
+                    WHERE {where_sql}
+                    ORDER BY tr.created_at DESC
+                    LIMIT %s OFFSET %s""",
+                params + [limit, offset],
+            )
+            rows = cursor.fetchall()
+
+        for row in rows:
+            parsed = _parse_task_result(row.get("result") or "")
+            tasks.append(
+                {
+                    "task_id": row.get("task_id"),
+                    "status": row.get("status"),
+                    "label": parsed.get("label"),
+                    "confidence": parsed.get("confidence"),
+                    "result": parsed.get("raw_result"),
+                    "user_id": row.get("user_id"),
+                    "api_key_id": row.get("api_key_id"),
+                    "api_key_name": row.get("api_key_name"),
+                    "created_at": (
+                        row.get("created_at").strftime("%Y-%m-%d %H:%M:%S")
+                        if hasattr(row.get("created_at"), "strftime")
+                        else row.get("created_at")
+                    ),
+                    "updated_at": (
+                        row.get("updated_at").strftime("%Y-%m-%d %H:%M:%S")
+                        if hasattr(row.get("updated_at"), "strftime")
+                        else row.get("updated_at")
+                    ),
+                }
+            )
+    except Exception:
+        pass
+    finally:
+        if conn:
+            conn.close()
+
+    return tasks
 
 
 def get_overview_data():

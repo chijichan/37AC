@@ -280,9 +280,12 @@
             <div class="progress-container">
                 <div class="progress-label">
                     <span>网络带宽</span>
-                    <strong id="system-network">--%</strong>
+                    <strong id="system-network">-- KB/s</strong>
                 </div>
-                <progress id="system-network-progress" value="0" max="100"></progress>
+                <div style="display:flex; justify-content:space-between; font-size:0.875rem; color:var(--pico-muted-color);">
+                    <span>上传: <strong id="network-upload-speed">--</strong> KB/s</span>
+                    <span>下载: <strong id="network-download-speed">--</strong> KB/s</span>
+                </div>
             </div>
 
             <footer style="margin-top: 1.5rem;">

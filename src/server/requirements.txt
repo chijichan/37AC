@@ -1,8 +1,3 @@
-# 核心深度学习框架（服务器端不需要，注释掉）
-# torch==2.8.0
-# torchaudio==2.8.0
-# torchvision==0.23.0
-
 # Web服务器框架
 Flask==3.1.3
 flask_cors==6.0.2
@@ -16,7 +11,10 @@ blinker==1.9.0
 # 数据库
 PyMySQL==1.1.2
 
-# 系统监控（服务器特有）
+# JWT 认证
+PyJWT==2.10.1
+
+# 系统监控
 psutil==7.2.2
 
 # 图像处理
@@ -29,32 +27,3 @@ urllib3==2.6.3
 certifi==2026.2.25
 idna==3.11
 charset-normalizer==3.4.7
-
-# 工具库
-tqdm==4.67.3
-colorama==0.4.6
-filelock==3.19.1
-typing_extensions==4.15.0
-setuptools==82.0.1
-packaging==26.0
-six==1.17.0
-fsspec==2025.10.0
-importlib_metadata==8.7.1
-importlib_resources==6.5.2
-zipp==3.23.0
-
-# 以下包可能不是必需的，已注释掉
-# altgraph==0.17.5  # PyInstaller相关，打包时可能需要
-# beautifulsoup4==4.14.3  # 网页解析，项目中未使用
-# contourpy==1.3.0  # matplotlib依赖，绘图功能
-# cycler==0.12.1  # matplotlib依赖，绘图功能
-# fonttools==4.60.2  # matplotlib依赖，字体处理
-# jsonify==0.5  # Flask已包含jsonify功能
-# kiwisolver==1.4.7  # matplotlib依赖，布局引擎
-# matplotlib==3.9.4  # 绘图库，训练可视化可能用到
-# mpmath==1.3.0  # sympy依赖，符号数学计算
-# networkx==3.2.1  # 图网络库，项目中未使用
-# pefile==2024.8.26  # Windows PE文件分析，打包时可能需要
-# rarfile==4.2  # 压缩文件处理，项目中未使用
-# soupsieve==2.8.3  # beautifulsoup4依赖
-# sympy==1.14.0  # 符号数学计算，项目中未使用

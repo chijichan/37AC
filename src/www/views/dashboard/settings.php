@@ -77,7 +77,7 @@ if (!$isAjax) {
 
 <!-- 通知设置 -->
 <section class="settings-section">
-    <h3>🔔 通知偏好</h3>
+    <h3><?php require ROOT_PATH . '/views/components/icons/inform.php'; ?> 通知偏好</h3>
     <form id="form-notifications">
         <label>
             <input type="checkbox" name="email_notifications" checked />
@@ -97,7 +97,7 @@ if (!$isAjax) {
 
 <!-- 账户操作 -->
 <section class="settings-section">
-    <h3>⚠️ 危险操作</h3>
+    <h3><?php require ROOT_PATH . '/views/components/icons/warn.php'; ?> 危险操作</h3>
     <p style="color: var(--pico-muted-color);">以下操作不可逆，请谨慎操作。</p>
     <div style="display: flex; gap: 1rem;">
         <button class="secondary" onclick="Auth.logout()">🚪 退出登录</button>
@@ -105,10 +105,11 @@ if (!$isAjax) {
     </div>
 </section>
 
+<?php $warnIconSvg = file_get_contents(ROOT_PATH . '/views/components/icons/warn.php'); ?>
 <script>
     function showDeleteAccountConfirm() {
         Modal.show('🗑️ 删除账户', `
-            <p style="color: var(--pico-del-color); font-weight: 600;">⚠️ 此操作不可恢复！</p>
+            <p style="color: var(--pico-del-color); font-weight: 600;"><?php echo $warnIconSvg; ?> 此操作不可恢复！</p>
             <p>确定要删除你的账户吗？所有数据将被永久清除。</p>
         `, [{
                 text: '取消',

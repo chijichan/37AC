@@ -268,8 +268,10 @@ if (!$isAjax) {
     </div>
 </section>
 
+<?php $warnIconSvg = file_get_contents(ROOT_PATH . '/views/components/icons/warn.php'); ?>
 <script>
     var pendingAction = null;
+    var WARN_ICON_SVG = <?php echo json_encode($warnIconSvg); ?>;
 
     // 确认对话框（使用 PicoCSS 模态框）
     function showConfirm(title, message, onConfirm) {
@@ -430,7 +432,7 @@ if (!$isAjax) {
 
                 // 使用 PicoCSS 模态框显示新密钥
                 Modal.show('✅ 密钥创建成功', `
-                    <p style="color: var(--pico-del-color); font-weight: 600;">⚠️ 请立即复制并安全保存此密钥，关闭后将无法再次查看完整密钥！</p>
+                    <p style="color: var(--pico-del-color); font-weight: 600;">${WARN_ICON_SVG} 请立即复制并安全保存此密钥，关闭后将无法再次查看完整密钥！</p>
                     <div class="key-reveal" id="new-key-display">${key}</div>
                 `, [{
                         text: '📋 复制密钥',
@@ -477,7 +479,7 @@ if (!$isAjax) {
     // 确认撤销
     function confirmRevokeKey(keyId, keyName) {
         showConfirm(
-            '⚠️ 撤销密钥',
+            WARN_ICON_SVG + ' 撤销密钥',
             `确定要撤销密钥「${keyName}」吗？撤销后该密钥将无法使用，但可以重新启用。`,
             () => revokeKey(keyId)
         );

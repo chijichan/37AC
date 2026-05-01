@@ -211,8 +211,10 @@ if (!$isAjax) {
     </div>
 </section>
 
+<?php $warnIconSvg = file_get_contents(ROOT_PATH . '/views/components/icons/warn.php'); ?>
 <script>
     var allNodes = [];
+    var WARN_ICON_SVG = <?php echo json_encode($warnIconSvg); ?>;
 
     // 复制文本
     function copyText(text, successMsg = '已复制') {
@@ -242,7 +244,7 @@ if (!$isAjax) {
                 allNodes = [];
                 container.innerHTML = `
                     <article class="node-card empty-state">
-                        <h3>⚠️ 节点加载失败</h3>
+                        <h3>${WARN_ICON_SVG} 节点加载失败</h3>
                         <p>${message}</p>
                     </article>
                 `;

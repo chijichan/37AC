@@ -349,6 +349,8 @@ require_once ROOT_PATH . '/views/layout.php';
 
 
         // 页面信息映射
+        const warnIconSvg = <?php echo json_encode(file_get_contents(ROOT_PATH . '/views/components/icons/warn.php')); ?>;
+
         const pageInfo = {
             'overview': {
                 icon: <?php echo json_encode(file_get_contents(ROOT_PATH . '/views/components/icons/overview.php')); ?>,
@@ -420,7 +422,7 @@ require_once ROOT_PATH . '/views/layout.php';
             if (!pageHtml) {
                 contentContainer.innerHTML = `
                     <article style="text-align: center; padding: 3rem;">
-                        <h2>⚠️ 页面未找到</h2>
+                        <h2>${warnIconSvg} 页面未找到</h2>
                         <p>无法加载页面：${page}</p>
                     </article>
                 `;

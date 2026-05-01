@@ -336,7 +336,7 @@
 
 <!-- 警告和通知 -->
 <section>
-    <h2>🔔 系统通知</h2>
+    <h2><?php require ROOT_PATH . '/views/components/icons/inform.php'; ?> 系统通知</h2>
     <article>
         <header>
             <strong>✅ 系统运行正常</strong>
@@ -349,7 +349,7 @@
 
     <article style="margin-top: 1rem;">
         <header>
-            <strong>⚠️ 注意事项</strong>
+            <strong><?php require ROOT_PATH . '/views/components/icons/warn.php'; ?> 注意事项</strong>
         </header>
         <p>测试版本。</p>
         <footer>

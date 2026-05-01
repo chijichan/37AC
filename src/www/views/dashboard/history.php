@@ -11,20 +11,23 @@ if (!$isAjax) {
 <style>
     .history-status.success {
         color: var(--pico-ins-color);
+        font-weight: 600;
     }
 
     .history-status.failure {
         color: var(--pico-del-color);
+        font-weight: 600;
     }
 
     .history-status.pending {
         color: var(--pico-muted-color);
+        font-weight: 600;
     }
 
     .api-key-tag {
         display: inline-block;
         padding: 0.15rem 0.5rem;
-        border-radius: 3px;
+        border-radius: var(--pico-border-radius);
         font-size: 0.75rem;
         background: var(--pico-card-sectioning-background-color);
         color: var(--pico-muted-color);
@@ -34,48 +37,156 @@ if (!$isAjax) {
     .stat-card {
         text-align: center;
         padding: 1.5rem;
+        background: var(--pico-card-background-color);
+        border-radius: var(--pico-border-radius);
+        box-shadow: var(--pico-box-shadow);
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .stat-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
     }
 
     .stat-card h2 {
         margin: 0;
+        font-size: 2rem;
     }
 
     .stat-card small {
         color: var(--pico-muted-color);
+        display: block;
+        margin-top: 0.25rem;
     }
 
-    .filter-bar {
-        display: flex;
+    /* 筛选器卡片样式 */
+    .filter-card {
+        background: var(--pico-card-background-color);
+        border-radius: var(--pico-border-radius);
+        box-shadow: var(--pico-box-shadow);
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+    }
+
+    .filter-card .filter-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
         gap: 1rem;
+        align-items: end;
+    }
+
+    .filter-card .filter-grid label {
+        margin-bottom: 0;
+    }
+
+    .filter-card .filter-actions {
+        display: flex;
+        gap: 0.5rem;
         align-items: flex-end;
-        flex-wrap: wrap;
+        padding-top: 0.25rem;
     }
 
-    .filter-bar>* {
+    .filter-card .filter-actions button {
         flex: 1;
-        min-width: 150px;
-    }
-
-    .filter-bar button {
-        flex: 0 0 auto;
-        min-width: auto;
+        min-width: 0;
     }
 
     @media (max-width: 768px) {
-        .filter-bar {
+        .filter-card .filter-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .filter-card .filter-actions {
             flex-direction: column;
         }
 
-        .filter-bar>* {
-            min-width: 100%;
+        .filter-card .filter-actions button {
+            width: 100%;
+        }
+    }
+
+    /* 表格行悬停效果 */
+    #history-table-body tr {
+        transition: background-color 0.15s ease;
+    }
+
+    #history-table-body tr:hover {
+        background-color: var(--pico-card-sectioning-background-color);
+    }
+
+    /* 分页容器 */
+    .pagination-bar {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 1rem;
+        margin-top: 1.5rem;
+        padding: 1rem;
+        background: var(--pico-card-background-color);
+        border-radius: var(--pico-border-radius);
+        box-shadow: var(--pico-box-shadow);
+    }
+
+    .pagination-bar span {
+        padding: 0.5rem 1rem;
+        font-weight: 500;
+        color: var(--pico-muted-color);
+    }
+
+    /* 空状态 */
+    .empty-state {
+        text-align: center;
+        padding: 3rem 1rem;
+        color: var(--pico-muted-color);
+    }
+
+    .empty-state h3 {
+        margin-bottom: 0.5rem;
+    }
+
+    /* 详情模态框中的预格式化文本 */
+    pre.detail-json {
+        background: var(--pico-card-sectioning-background-color);
+        padding: 1rem;
+        border-radius: var(--pico-border-radius);
+        overflow-x: auto;
+        font-size: 0.8rem;
+        max-height: 300px;
+        white-space: pre-wrap;
+        word-break: break-all;
+    }
+
+    /* 详情网格 */
+    .detail-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1rem;
+    }
+
+    .detail-grid p {
+        margin: 0;
+    }
+
+    .detail-grid p strong {
+        display: block;
+        font-size: 0.8rem;
+        color: var(--pico-muted-color);
+        margin-bottom: 0.25rem;
+    }
+
+    @media (max-width: 600px) {
+        .detail-grid {
+            grid-template-columns: 1fr;
         }
     }
 </style>
 
 <!-- 页面标题 -->
 <header style="margin-bottom: 2rem;">
-    <h1>📜 使用记录</h1>
-    <p>查看 API 使用历史和图片识别记录</p>
+    <hgroup>
+        <h1>📜 使用记录</h1>
+        <p>查看 API 使用历史和图片识别记录</p>
+    </hgroup>
 </header>
 
 <!-- 统计概览 -->
@@ -98,39 +209,41 @@ if (!$isAjax) {
     </article>
 </div>
 
-<!-- 筛选器 -->
-<section style="margin-bottom: 2rem;">
-    <form class="filter-bar" id="filter-form">
-        <label>
-            时间范围
-            <select name="time_range">
-                <option value="7">最近7天</option>
-                <option value="30" selected>最近30天</option>
-                <option value="90">最近90天</option>
-                <option value="365">最近一年</option>
-            </select>
-        </label>
-        <label>
-            状态
-            <select name="status">
-                <option value="">全部</option>
-                <option value="success">成功</option>
-                <option value="failure">失败</option>
-                <option value="pending">处理中</option>
-            </select>
-        </label>
-        <label>
-            每页显示
-            <select name="limit">
-                <option value="10">10 条</option>
-                <option value="15" selected>15 条</option>
-                <option value="30">30 条</option>
-                <option value="50">50 条</option>
-            </select>
-        </label>
-        <div style="display: flex; align-items: flex-end; gap: 0.5rem;">
-            <button type="submit">🔍 筛选</button>
-            <button type="button" class="outline secondary" onclick="refreshHistory()">🔄 刷新</button>
+<!-- 筛选器（卡片式设计） -->
+<section class="filter-card">
+    <form id="filter-form">
+        <div class="filter-grid">
+            <label>
+                时间范围
+                <select name="time_range">
+                    <option value="7">最近7天</option>
+                    <option value="30" selected>最近30天</option>
+                    <option value="90">最近90天</option>
+                    <option value="365">最近一年</option>
+                </select>
+            </label>
+            <label>
+                状态
+                <select name="status">
+                    <option value="">全部</option>
+                    <option value="success">成功</option>
+                    <option value="failure">失败</option>
+                    <option value="pending">处理中</option>
+                </select>
+            </label>
+            <label>
+                每页显示
+                <select name="limit">
+                    <option value="10">10 条</option>
+                    <option value="15" selected>15 条</option>
+                    <option value="30">30 条</option>
+                    <option value="50">50 条</option>
+                </select>
+            </label>
+            <div class="filter-actions">
+                <button type="submit">🔍 筛选</button>
+                <button type="button" class="outline secondary" onclick="refreshHistory()">🔄 刷新</button>
+            </div>
         </div>
     </form>
 </section>
@@ -153,18 +266,20 @@ if (!$isAjax) {
         </thead>
         <tbody id="history-table-body">
             <tr>
-                <td colspan="9" style="text-align:center;">正在加载历史记录…</td>
+                <td colspan="9" style="text-align:center; padding: 2rem;">
+                    <span aria-busy="true"></span> 加载中…
+                </td>
             </tr>
         </tbody>
     </table>
-
-    <!-- 分页 -->
-    <nav aria-label="分页导航" style="display: flex; justify-content: center; align-items: center; gap: 1rem; margin-top: 1rem;">
-        <button class="outline secondary" id="btn-prev-page" disabled>← 上一页</button>
-        <span id="page-info" style="padding: 0.5rem 1rem;">第 1 页 / 共 1 页</span>
-        <button class="outline secondary" id="btn-next-page" disabled>下一页 →</button>
-    </nav>
 </section>
+
+<!-- 分页 -->
+<nav class="pagination-bar" aria-label="分页导航">
+    <button class="outline secondary" id="btn-prev-page" disabled>← 上一页</button>
+    <span id="page-info">第 1 页 / 共 1 页</span>
+    <button class="outline secondary" id="btn-next-page" disabled>下一页 →</button>
+</nav>
 
 <script>
     var currentPage = 1;
@@ -173,7 +288,7 @@ if (!$isAjax) {
 
     async function loadHistory(page = 1) {
         const body = document.getElementById('history-table-body');
-        body.innerHTML = '<tr><td colspan="9" style="text-align:center;"><span aria-busy="true"></span> 加载中…</td></tr>';
+        body.innerHTML = '<tr><td colspan="9" style="text-align:center; padding: 2rem;"><span aria-busy="true"></span> 加载中…</td></tr>';
 
         try {
             const form = document.getElementById('filter-form');
@@ -210,7 +325,7 @@ if (!$isAjax) {
             document.getElementById('btn-next-page').disabled = currentPage >= totalPages;
 
             if (!tasks.length) {
-                body.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--pico-muted-color);">暂无历史记录</td></tr>';
+                body.innerHTML = '<tr><td colspan="9"><div class="empty-state"><h3>📭 暂无记录</h3><p>当前筛选条件下没有找到历史记录</p></div></td></tr>';
                 return;
             }
 
@@ -254,7 +369,7 @@ if (!$isAjax) {
                 `;
             }).join('');
         } catch (e) {
-            body.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--pico-del-color);">加载失败，请检查服务器连接</td></tr>';
+            body.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--pico-del-color); padding: 2rem;">加载失败，请检查服务器连接</td></tr>';
         }
     }
 
@@ -267,21 +382,21 @@ if (!$isAjax) {
             '无';
 
         const bodyHtml = `
-            <div class="grid">
+            <div class="detail-grid">
                 <div>
-                    <p><strong>任务ID：</strong><br><small>${task.task_id || '--'}</small></p>
-                    <p><strong>时间：</strong><br><small>${task.created_at || '--'}</small></p>
-                    <p><strong>状态：</strong><br>${task.status === 'success' ? '✓ 成功' : task.status === 'failure' ? '✗ 失败' : '⏳ 处理中'}</p>
+                    <p><strong>任务ID</strong><small>${task.task_id || '--'}</small></p>
+                    <p><strong>时间</strong><small>${task.created_at || '--'}</small></p>
+                    <p><strong>状态</strong><small>${task.status === 'success' ? '✓ 成功' : task.status === 'failure' ? '✗ 失败' : '⏳ 处理中'}</small></p>
                 </div>
                 <div>
-                    <p><strong>识别结果：</strong><br>${task.label || '--'}</p>
-                    <p><strong>置信度：</strong><br>${task.confidence != null ? task.confidence + '%' : '--'}</p>
-                    <p><strong>API密钥：</strong><br>${task.api_key_name || '--'}</p>
+                    <p><strong>识别结果</strong><small>${task.label || '--'}</small></p>
+                    <p><strong>置信度</strong><small>${task.confidence != null ? task.confidence + '%' : '--'}</small></p>
+                    <p><strong>API密钥</strong><small>${task.api_key_name || '--'}</small></p>
                 </div>
             </div>
             <hr>
-            <p><strong>原始返回数据：</strong></p>
-            <pre style="background: var(--pico-card-sectioning-background-color); padding: 1rem; border-radius: var(--pico-border-radius); overflow-x: auto; font-size: 0.8rem; max-height: 300px;">${resultJson}</pre>
+            <p><strong>原始返回数据</strong></p>
+            <pre class="detail-json">${resultJson}</pre>
         `;
 
         Modal.show('📋 任务详情', bodyHtml, [{

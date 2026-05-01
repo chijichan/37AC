@@ -212,9 +212,11 @@ if (!$isAjax) {
 </section>
 
 <?php $warnIconSvg = file_get_contents(ROOT_PATH . '/views/components/icons/warn.php'); ?>
+<?php $historyIconSvg = file_get_contents(ROOT_PATH . '/views/components/icons/history.php'); ?>
 <script>
     var allNodes = [];
     var WARN_ICON_SVG = <?php echo json_encode($warnIconSvg); ?>;
+    var HISTORY_ICON_SVG = <?php echo json_encode($historyIconSvg); ?>;
 
     // 复制文本
     function copyText(text, successMsg = '已复制') {
@@ -321,7 +323,7 @@ if (!$isAjax) {
                         </div>
 
                         <div class="card-footer">
-                            <button class="secondary outline" onclick="showNodeDetail(${node.id})">📋 详情</button>
+                            <button class="secondary outline" onclick="showNodeDetail(${node.id})">${HISTORY_ICON_SVG} 详情</button>
                             <button class="outline" onclick="copyText('${node.token}', 'Token 已复制')">🔑 复制 Token</button>
                         </div>
                     </article>
@@ -391,7 +393,7 @@ if (!$isAjax) {
             </div>
         `;
 
-        Modal.show(`📋 ${node.name || '未命名节点'}`, bodyHtml, [{
+        Modal.show(HISTORY_ICON_SVG + ' ' + (node.name || '未命名节点'), bodyHtml, [{
             text: '关闭',
             class: 'secondary',
             click: () => Modal.close()

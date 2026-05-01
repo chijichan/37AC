@@ -184,8 +184,8 @@
 
 <!-- 仪表盘头部 -->
 <div class="dashboard-header">
-    <h1>📊 仪表盘总览</h1>
-    <p>欢迎回来!这是你的项目概览</p>
+    <h1><?php require ROOT_PATH . '/views/components/icons/overview.php'; ?> 仪表盘总览</h1>
+    <p>欢迎回来!</p>
 </div>
 
 <!-- 统计卡片 -->
@@ -225,7 +225,7 @@
 
 <!-- 快速操作 -->
 <section>
-    <h2>🚀 快速操作</h2>
+    <h2><?php require ROOT_PATH . '/views/components/icons/start.php'; ?> 快速操作</h2>
     <div class="quick-actions">
         <a href="/upload" class="action-button">
             <div class="action-icon">📤</div>
@@ -251,7 +251,7 @@
     <!-- 左侧:系统状态 -->
     <section>
         <article class="chart-container">
-            <h2>💻 系统状态</h2>
+            <h2><?php require ROOT_PATH . '/views/components/icons/heartbeat.php'; ?> 系统状态</h2>
 
             <div class="progress-container">
                 <div class="progress-label">
@@ -297,7 +297,7 @@
     <!-- 右侧:最近活动 -->
     <section>
         <article class="chart-container">
-            <h2>📋 最近活动</h2>
+            <h2><?php require ROOT_PATH . '/views/components/icons/history.php'; ?> 最近活动</h2>
             <ul id="recent-activity" class="activity-list">
                 <li class="activity-item">
                     <div class="activity-icon upload">⏳</div>
@@ -312,7 +312,7 @@
 
 <!-- 数据表格示例 -->
 <section class="overflow-auto">
-    <h2>📊 最近上传记录</h2>
+    <h2><?php require ROOT_PATH . '/views/components/icons/history.php'; ?> 最近上传记录</h2>
     <figure>
         <table role="grid">
             <thead>

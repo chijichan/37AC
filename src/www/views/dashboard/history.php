@@ -281,8 +281,10 @@ if (!$isAjax) {
     <button class="outline secondary" id="btn-next-page" disabled>下一页 →</button>
 </nav>
 
+<?php $historyIconSvg = file_get_contents(ROOT_PATH . '/views/components/icons/history.php'); ?>
 <script>
     var currentPage = 1;
+    var HISTORY_ICON_SVG = <?php echo json_encode($historyIconSvg); ?>;
     var totalPages = 1;
     var allTasks = [];
 
@@ -399,7 +401,7 @@ if (!$isAjax) {
             <pre class="detail-json">${resultJson}</pre>
         `;
 
-        Modal.show('📋 任务详情', bodyHtml, [{
+        Modal.show(HISTORY_ICON_SVG + ' 任务详情', bodyHtml, [{
             text: '关闭',
             class: 'secondary',
             click: () => Modal.close()

@@ -269,9 +269,11 @@ if (!$isAjax) {
 </section>
 
 <?php $warnIconSvg = file_get_contents(ROOT_PATH . '/views/components/icons/warn.php'); ?>
+<?php $historyIconSvg = file_get_contents(ROOT_PATH . '/views/components/icons/history.php'); ?>
 <script>
     var pendingAction = null;
     var WARN_ICON_SVG = <?php echo json_encode($warnIconSvg); ?>;
+    var HISTORY_ICON_SVG = <?php echo json_encode($historyIconSvg); ?>;
 
     // 确认对话框（使用 PicoCSS 模态框）
     function showConfirm(title, message, onConfirm) {
@@ -435,7 +437,7 @@ if (!$isAjax) {
                     <p style="color: var(--pico-del-color); font-weight: 600;">${WARN_ICON_SVG} 请立即复制并安全保存此密钥，关闭后将无法再次查看完整密钥！</p>
                     <div class="key-reveal" id="new-key-display">${key}</div>
                 `, [{
-                        text: '📋 复制密钥',
+                        text: HISTORY_ICON_SVG + ' 复制密钥',
                         click: () => {
                             const keyText = document.getElementById('new-key-display');
                             if (keyText) copyText(keyText.textContent, '✓ 密钥已复制到剪贴板');

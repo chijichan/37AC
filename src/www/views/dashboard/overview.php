@@ -228,19 +228,19 @@
     <h2><?php require ROOT_PATH . '/views/components/icons/start.php'; ?> 快速操作</h2>
     <div class="quick-actions">
         <a href="/upload" class="action-button">
-            <div class="action-icon">📤</div>
+            <div class="action-icon"><?php require ROOT_PATH . '/views/components/icons/upload.php'; ?></div>
             <strong>上传图片</strong>
         </a>
         <a href="/dashboard/nodes" class="action-button">
-            <div class="action-icon">👥</div>
+            <div class="action-icon"><?php require ROOT_PATH . '/views/components/icons/nodes.php'; ?></div>
             <strong>节点管理</strong>
         </a>
         <a href="/dashboard/settings" class="action-button">
-            <div class="action-icon">⚙️</div>
+            <div class="action-icon"><?php require ROOT_PATH . '/views/components/icons/settings.php'; ?></div>
             <strong>系统设置</strong>
         </a>
         <a href="/dashboard/history" class="action-button">
-            <div class="action-icon">📈</div>
+            <div class="action-icon"><?php require ROOT_PATH . '/views/components/icons/history.php'; ?></div>
             <strong>使用记录</strong>
         </a>
     </div>

@@ -208,7 +208,7 @@ if (!$isAjax) {
 
 <!-- 页面标题 -->
 <header style="margin-bottom: 2rem;">
-    <h1>🔑 API密钥管理</h1>
+    <h1><?php require ROOT_PATH . '/views/components/icons/apikeys.php'; ?> API密钥管理</h1>
     <p>生成和管理你的 API 访问密钥。每个密钥都有独立的使用配额和权限控制。</p>
 </header>
 
@@ -249,7 +249,7 @@ if (!$isAjax) {
                     <input type="number" name="max_usage" value="10000" min="0" />
                     <small>0 表示无限制</small>
                 </label>
-                <button type="submit">🔐 生成密钥</button>
+                <button type="submit"><?php require ROOT_PATH . '/views/components/icons/lock.php'; ?> 生成密钥</button>
             </div>
         </form>
     </article>
@@ -259,7 +259,7 @@ if (!$isAjax) {
 <section>
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
         <h2 style="margin: 0;">现有密钥</h2>
-        <button class="outline secondary" onclick="loadKeys()" style="padding: 0.3rem 0.8rem;">🔄 刷新</button>
+        <button class="outline secondary" onclick="loadKeys()" style="padding: 0.3rem 0.8rem;"><?php require ROOT_PATH . '/views/components/icons/refresh.php'; ?> 刷新</button>
     </div>
     <div id="keys-list">
         <article class="api-key-card">
@@ -270,10 +270,14 @@ if (!$isAjax) {
 
 <?php $warnIconSvg = file_get_contents(ROOT_PATH . '/views/components/icons/warn.php'); ?>
 <?php $historyIconSvg = file_get_contents(ROOT_PATH . '/views/components/icons/history.php'); ?>
+<?php $apikeysIconSvg = file_get_contents(ROOT_PATH . '/views/components/icons/apikeys.php'); ?>
+<?php $lockIconSvg = file_get_contents(ROOT_PATH . '/views/components/icons/lock.php'); ?>
 <script>
     var pendingAction = null;
     var WARN_ICON_SVG = <?php echo json_encode($warnIconSvg); ?>;
     var HISTORY_ICON_SVG = <?php echo json_encode($historyIconSvg); ?>;
+    var APIKEYS_ICON_SVG = <?php echo json_encode($apikeysIconSvg); ?>;
+    var LOCK_ICON_SVG = <?php echo json_encode($lockIconSvg); ?>;
 
     // 确认对话框（使用 PicoCSS 模态框）
     function showConfirm(title, message, onConfirm) {
@@ -311,7 +315,7 @@ if (!$isAjax) {
             if (!keys.length) {
                 container.innerHTML = `
                     <article class="api-key-card empty-state">
-                        <h3>🔑 暂无 API 密钥</h3>
+                        <h3>${APIKEYS_ICON_SVG} 暂无 API 密钥</h3>
                         <p>使用上方表单创建你的第一个密钥，开始使用 API 服务。</p>
                     </article>
                 `;
@@ -370,9 +374,9 @@ if (!$isAjax) {
 
                         <div class="card-footer">
                             ${key.status === 'active' ? `
-                                <button class="secondary outline" onclick="toggleKeyStatus(${key.id}, 'paused')">⏸ 暂停</button>
+                                <button class="secondary outline" onclick="toggleKeyStatus(${key.id}, 'paused')">暂停</button>
                             ` : key.status === 'paused' ? `
-                                <button class="secondary outline" onclick="toggleKeyStatus(${key.id}, 'active')">▶ 启用</button>
+                                <button class="secondary outline" onclick="toggleKeyStatus(${key.id}, 'active')">启用</button>
                             ` : ''}
                             ${key.status !== 'revoked' ? `
                                 <button class="outline" style="color: var(--pico-del-color); border-color: var(--pico-del-color);" onclick="confirmRevokeKey(${key.id}, '${key.name}')">撤销</button>
@@ -456,7 +460,7 @@ if (!$isAjax) {
             Notify.error('网络错误，请检查服务器连接');
         } finally {
             btn.removeAttribute('aria-busy');
-            btn.textContent = '🔐 生成密钥';
+            btn.textContent = LOCK_ICON_SVG + ' 生成密钥';
         }
     });
 

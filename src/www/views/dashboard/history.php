@@ -184,7 +184,7 @@ if (!$isAjax) {
 <!-- 页面标题 -->
 <header style="margin-bottom: 2rem;">
     <hgroup>
-        <h1>📜 使用记录</h1>
+        <h1><?php require ROOT_PATH . '/views/components/icons/history.php'; ?> 使用记录</h1>
         <p>查看 API 使用历史和图片识别记录</p>
     </hgroup>
 </header>
@@ -241,8 +241,8 @@ if (!$isAjax) {
                 </select>
             </label>
             <div class="filter-actions">
-                <button type="submit">🔍 筛选</button>
-                <button type="button" class="outline secondary" onclick="refreshHistory()">🔄 刷新</button>
+                <button type="submit"><?php require ROOT_PATH . '/views/components/icons/filter.php'; ?> 筛选</button>
+                <button type="button" class="outline secondary" onclick="refreshHistory()"><?php require ROOT_PATH . '/views/components/icons/refresh.php'; ?> 刷新</button>
             </div>
         </div>
     </form>
@@ -357,7 +357,7 @@ if (!$isAjax) {
                     <tr>
                         <td><small title="${task.task_id || ''}">${taskIdShort}</small></td>
                         <td><small>${task.created_at || '--'}</small></td>
-                        <td>🖼 图片识别</td>
+                        <td>图片识别</td>
                         <td><small>${filename}</small></td>
                         <td><strong>${task.label || '--'}</strong></td>
                         <td>${confidenceStr}</td>

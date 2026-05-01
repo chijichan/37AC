@@ -27,13 +27,13 @@ if (!$isAjax) {
 
 <!-- 页面标题 -->
 <header style="margin-bottom: 2rem;">
-    <h1>⚙️ 设置</h1>
+    <h1><?php require ROOT_PATH . '/views/components/icons/settings.php'; ?> 设置</h1>
     <p>管理你的账户设置和偏好</p>
 </header>
 
 <!-- 个人信息 -->
 <section class="settings-section">
-    <h3>👤 个人信息</h3>
+    <h3><?php require ROOT_PATH . '/views/components/icons/user.php'; ?> 个人信息</h3>
     <form id="form-profile">
         <div class="grid">
             <label>
@@ -49,13 +49,13 @@ if (!$isAjax) {
             个人简介
             <textarea name="bio" id="profile-bio" rows="3" placeholder="介绍一下自己…"></textarea>
         </label>
-        <button type="submit">💾 保存修改</button>
+        <button type="submit"><?php require ROOT_PATH . '/views/components/icons/save.php'; ?> 保存修改</button>
     </form>
 </section>
 
 <!-- 修改密码 -->
 <section class="settings-section">
-    <h3>🔒 修改密码</h3>
+    <h3><?php require ROOT_PATH . '/views/components/icons/lock.php'; ?> 修改密码</h3>
     <form id="form-password">
         <div class="grid">
             <label>
@@ -71,7 +71,7 @@ if (!$isAjax) {
                 <input type="password" name="confirm_password" required minlength="6" />
             </label>
         </div>
-        <button type="submit">🔄 更新密码</button>
+        <button type="submit"><?php require ROOT_PATH . '/views/components/icons/refresh.php'; ?> 更新密码</button>
     </form>
 </section>
 
@@ -91,7 +91,7 @@ if (!$isAjax) {
             <input type="checkbox" name="node_offline" checked />
             节点离线时通知
         </label>
-        <button type="submit">💾 保存偏好</button>
+        <button type="submit"><?php require ROOT_PATH . '/views/components/icons/save.php'; ?> 保存偏好</button>
     </form>
 </section>
 

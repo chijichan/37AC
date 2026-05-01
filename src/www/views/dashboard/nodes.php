@@ -176,7 +176,7 @@ if (!$isAjax) {
 
 <!-- 页面标题 -->
 <header style="margin-bottom: 2rem;">
-    <h1>🖥️ 节点管理</h1>
+    <h1><?php require ROOT_PATH . '/views/components/icons/nodes.php'; ?> 节点管理</h1>
     <p>管理和监控推理节点的运行状态</p>
 </header>
 
@@ -198,8 +198,8 @@ if (!$isAjax) {
 
 <!-- 操作按钮 -->
 <div class="action-bar">
-    <button id="btn-add-node">➕ 添加新节点</button>
-    <button class="secondary outline" id="btn-refresh-nodes">🔄 刷新状态</button>
+    <button id="btn-add-node"><?php require ROOT_PATH . '/views/components/icons/add.php'; ?> 添加新节点</button>
+    <button class="secondary outline" id="btn-refresh-nodes"><?php require ROOT_PATH . '/views/components/icons/refresh.php'; ?> 刷新状态</button>
 </div>
 
 <!-- 节点列表 -->
@@ -213,10 +213,18 @@ if (!$isAjax) {
 
 <?php $warnIconSvg = file_get_contents(ROOT_PATH . '/views/components/icons/warn.php'); ?>
 <?php $historyIconSvg = file_get_contents(ROOT_PATH . '/views/components/icons/history.php'); ?>
+<?php $userIconSvg = file_get_contents(ROOT_PATH . '/views/components/icons/user.php'); ?>
+<?php $apikeysIconSvg = file_get_contents(ROOT_PATH . '/views/components/icons/apikeys.php'); ?>
+<?php $nodesIconSvg = file_get_contents(ROOT_PATH . '/views/components/icons/nodes.php'); ?>
+<?php $addIconSvg = file_get_contents(ROOT_PATH . '/views/components/icons/add.php'); ?>
 <script>
     var allNodes = [];
     var WARN_ICON_SVG = <?php echo json_encode($warnIconSvg); ?>;
     var HISTORY_ICON_SVG = <?php echo json_encode($historyIconSvg); ?>;
+    var USER_ICON_SVG = <?php echo json_encode($userIconSvg); ?>;
+    var APIKEYS_ICON_SVG = <?php echo json_encode($apikeysIconSvg); ?>;
+    var NODES_ICON_SVG = <?php echo json_encode($nodesIconSvg); ?>;
+    var ADD_ICON_SVG = <?php echo json_encode($addIconSvg); ?>;
 
     // 复制文本
     function copyText(text, successMsg = '已复制') {
@@ -269,7 +277,7 @@ if (!$isAjax) {
             if (!nodes.length) {
                 container.innerHTML = `
                     <article class="node-card empty-state">
-                        <h3>🖥️ 暂无节点</h3>
+                        <h3>${NODES_ICON_SVG} 暂无节点</h3>
                         <p>点击上方"添加新节点"创建你的第一个推理节点。</p>
                     </article>
                 `;
@@ -279,7 +287,7 @@ if (!$isAjax) {
             container.innerHTML = nodes.map(node => {
                 const statusClass = node.status === 'online' ? 'online' : 'offline';
                 const statusText = node.status === 'online' ? '● 在线' : '● 离线';
-                const ownerInfo = node.username ? `👤 ${node.username}` : '👤 未分配';
+                const ownerInfo = node.username ? USER_ICON_SVG + ' ' + node.username : USER_ICON_SVG + ' 未分配';
                 const isActive = node.is_active;
                 const activeBadge = isActive ?
                     '<span style="color: var(--pico-ins-color); font-size: 0.8rem;">✓ 已启用</span>' :
@@ -324,7 +332,7 @@ if (!$isAjax) {
 
                         <div class="card-footer">
                             <button class="secondary outline" onclick="showNodeDetail(${node.id})">${HISTORY_ICON_SVG} 详情</button>
-                            <button class="outline" onclick="copyText('${node.token}', 'Token 已复制')">🔑 复制 Token</button>
+                            <button class="outline" onclick="copyText('${node.token}', 'Token 已复制')">${APIKEYS_ICON_SVG} 复制 Token</button>
                         </div>
                     </article>
                 `;
@@ -422,7 +430,7 @@ if (!$isAjax) {
             </form>
         `;
 
-        Modal.show('➕ 添加新节点', bodyHtml, [{
+        Modal.show(ADD_ICON_SVG + ' 添加新节点', bodyHtml, [{
                 text: '取消',
                 class: 'secondary',
                 click: () => Modal.close()

@@ -211,20 +211,8 @@ if (!$isAjax) {
     </div>
 </section>
 
-<?php $warnIconSvg = file_get_contents(ROOT_PATH . '/views/components/icons/warn.php'); ?>
-<?php $historyIconSvg = file_get_contents(ROOT_PATH . '/views/components/icons/history.php'); ?>
-<?php $userIconSvg = file_get_contents(ROOT_PATH . '/views/components/icons/user.php'); ?>
-<?php $apikeysIconSvg = file_get_contents(ROOT_PATH . '/views/components/icons/apikeys.php'); ?>
-<?php $nodesIconSvg = file_get_contents(ROOT_PATH . '/views/components/icons/nodes.php'); ?>
-<?php $addIconSvg = file_get_contents(ROOT_PATH . '/views/components/icons/add.php'); ?>
 <script>
     var allNodes = [];
-    var WARN_ICON_SVG = <?php echo json_encode($warnIconSvg); ?>;
-    var HISTORY_ICON_SVG = <?php echo json_encode($historyIconSvg); ?>;
-    var USER_ICON_SVG = <?php echo json_encode($userIconSvg); ?>;
-    var APIKEYS_ICON_SVG = <?php echo json_encode($apikeysIconSvg); ?>;
-    var NODES_ICON_SVG = <?php echo json_encode($nodesIconSvg); ?>;
-    var ADD_ICON_SVG = <?php echo json_encode($addIconSvg); ?>;
 
     // 复制文本
     function copyText(text, successMsg = '已复制') {

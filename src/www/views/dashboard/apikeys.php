@@ -268,16 +268,8 @@ if (!$isAjax) {
     </div>
 </section>
 
-<?php $warnIconSvg = file_get_contents(ROOT_PATH . '/views/components/icons/warn.php'); ?>
-<?php $historyIconSvg = file_get_contents(ROOT_PATH . '/views/components/icons/history.php'); ?>
-<?php $apikeysIconSvg = file_get_contents(ROOT_PATH . '/views/components/icons/apikeys.php'); ?>
-<?php $lockIconSvg = file_get_contents(ROOT_PATH . '/views/components/icons/lock.php'); ?>
 <script>
     var pendingAction = null;
-    var WARN_ICON_SVG = <?php echo json_encode($warnIconSvg); ?>;
-    var HISTORY_ICON_SVG = <?php echo json_encode($historyIconSvg); ?>;
-    var APIKEYS_ICON_SVG = <?php echo json_encode($apikeysIconSvg); ?>;
-    var LOCK_ICON_SVG = <?php echo json_encode($lockIconSvg); ?>;
 
     // 确认对话框（使用 PicoCSS 模态框）
     function showConfirm(title, message, onConfirm) {
@@ -460,7 +452,7 @@ if (!$isAjax) {
             Notify.error('网络错误，请检查服务器连接');
         } finally {
             btn.removeAttribute('aria-busy');
-            btn.textContent = LOCK_ICON_SVG + ' 生成密钥';
+            btn.innerHTML = LOCK_ICON_SVG + ' 生成密钥';
         }
     });
 

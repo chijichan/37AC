@@ -298,6 +298,26 @@ require_once ROOT_PATH . '/views/layout.php';
 </main>
 
 <script>
+    // 全局 SVG 图标变量（供子页面 JS 使用，必须在 IIFE 外部定义）
+    var WARN_ICON_SVG = <?php echo json_encode(file_get_contents(ROOT_PATH . '/views/components/icons/warn.php')); ?>;
+    var HISTORY_ICON_SVG = <?php echo json_encode(file_get_contents(ROOT_PATH . '/views/components/icons/history.php')); ?>;
+    var USER_ICON_SVG = <?php echo json_encode(file_get_contents(ROOT_PATH . '/views/components/icons/user.php')); ?>;
+    var APIKEYS_ICON_SVG = <?php echo json_encode(file_get_contents(ROOT_PATH . '/views/components/icons/apikeys.php')); ?>;
+    var NODES_ICON_SVG = <?php echo json_encode(file_get_contents(ROOT_PATH . '/views/components/icons/nodes.php')); ?>;
+    var ADD_ICON_SVG = <?php echo json_encode(file_get_contents(ROOT_PATH . '/views/components/icons/add.php')); ?>;
+    var LOCK_ICON_SVG = <?php echo json_encode(file_get_contents(ROOT_PATH . '/views/components/icons/lock.php')); ?>;
+    var REFRESH_ICON_SVG = <?php echo json_encode(file_get_contents(ROOT_PATH . '/views/components/icons/refresh.php')); ?>;
+    var SAVE_ICON_SVG = <?php echo json_encode(file_get_contents(ROOT_PATH . '/views/components/icons/save.php')); ?>;
+    var SETTINGS_ICON_SVG = <?php echo json_encode(file_get_contents(ROOT_PATH . '/views/components/icons/settings.php')); ?>;
+    var FILTER_ICON_SVG = <?php echo json_encode(file_get_contents(ROOT_PATH . '/views/components/icons/filter.php')); ?>;
+    var INFORM_ICON_SVG = <?php echo json_encode(file_get_contents(ROOT_PATH . '/views/components/icons/inform.php')); ?>;
+    var HEARTBEAT_ICON_SVG = <?php echo json_encode(file_get_contents(ROOT_PATH . '/views/components/icons/heartbeat.php')); ?>;
+    var START_ICON_SVG = <?php echo json_encode(file_get_contents(ROOT_PATH . '/views/components/icons/start.php')); ?>;
+    var UPLOAD_ICON_SVG = <?php echo json_encode(file_get_contents(ROOT_PATH . '/views/components/icons/upload.php')); ?>;
+    var ARTICLE_ICON_SVG = <?php echo json_encode(file_get_contents(ROOT_PATH . '/views/components/icons/article.php')); ?>;
+    var UNLOCK_ICON_SVG = <?php echo json_encode(file_get_contents(ROOT_PATH . '/views/components/icons/unlock.php')); ?>;
+    var OVERVIEW_ICON_SVG = <?php echo json_encode(file_get_contents(ROOT_PATH . '/views/components/icons/overview.php')); ?>;
+
     // 仪表盘异步导航系统
     (function() {
         const contentContainer = document.getElementById('dashboard-content');
@@ -347,9 +367,8 @@ require_once ROOT_PATH . '/views/layout.php';
             'settings': <?php echo json_encode($dashboardTemplates['settings']); ?>,
         };
 
-
         // 页面信息映射
-        const warnIconSvg = <?php echo json_encode(file_get_contents(ROOT_PATH . '/views/components/icons/warn.php')); ?>;
+        const warnIconSvg = WARN_ICON_SVG;
 
         const pageInfo = {
             'overview': {

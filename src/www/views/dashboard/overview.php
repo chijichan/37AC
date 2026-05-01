@@ -351,7 +351,7 @@
         <header>
             <strong>⚠️ 注意事项</strong>
         </header>
-        <p>您的存储空间使用率已达到 75%,建议及时清理旧文件。</p>
+        <p>测试版本。</p>
         <footer>
             <a href="#" role="button" class="outline">立即处理</a>
         </footer>

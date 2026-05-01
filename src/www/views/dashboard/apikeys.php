@@ -416,8 +416,10 @@ if (!$isAjax) {
         };
 
         const btn = form.querySelector('button[type="submit"]');
-        btn.setAttribute('aria-busy', 'true');
-        btn.textContent = '生成中…';
+        if (btn) {
+            btn.setAttribute('aria-busy', 'true');
+            btn.innerHTML = '生成中…';
+        }
 
         try {
             const result = await Auth.post(`${window.API_BASE_URL}/api-keys`, data);
@@ -451,8 +453,10 @@ if (!$isAjax) {
         } catch (e) {
             Notify.error('网络错误，请检查服务器连接');
         } finally {
-            btn.removeAttribute('aria-busy');
-            btn.innerHTML = LOCK_ICON_SVG + ' 生成密钥';
+            if (btn) {
+                btn.removeAttribute('aria-busy');
+                btn.innerHTML = LOCK_ICON_SVG + ' 生成密钥';
+            }
         }
     });
 

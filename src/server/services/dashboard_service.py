@@ -456,13 +456,40 @@ def get_overview_data():
     for task in recent_tasks:
         title = task.get("label") or "识别任务完成"
         confidence = task.get("confidence")
+
+        # 计算相对时间
+        created_at = task.get("created_at")
+        if created_at:
+            try:
+                from datetime import datetime
+                if isinstance(created_at, str):
+                    dt = datetime.strptime(created_at, "%Y-%m-%d %H:%M:%S")
+                else:
+                    dt = created_at
+                now = datetime.now()
+                diff = now - dt
+                seconds = int(diff.total_seconds())
+                if seconds < 60:
+                    time_str = "刚刚"
+                elif seconds < 3600:
+                    time_str = f"{seconds // 60}分钟前"
+                elif seconds < 86400:
+                    time_str = f"{seconds // 3600}小时前"
+                elif seconds < 2592000:
+                    time_str = f"{seconds // 86400}天前"
+                else:
+                    time_str = created_at if isinstance(created_at, str) else created_at.strftime("%Y-%m-%d")
+            except Exception:
+                time_str = "刚刚"
+        else:
+            time_str = "刚刚"
+
         recent_activity.append(
             {
-                "icon": "📤",
                 "type": "upload",
                 "title": title,
                 "description": f"任务 {task.get('task_id')} 已完成，置信度 {confidence if confidence is not None else '--'}%",
-                "time": "刚刚",
+                "time": time_str,
             }
         )
 

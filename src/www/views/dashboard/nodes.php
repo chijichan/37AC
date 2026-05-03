@@ -278,8 +278,8 @@ if (!$isAjax) {
                 const ownerInfo = node.username ? USER_ICON_SVG + ' ' + node.username : USER_ICON_SVG + ' 未分配';
                 const isActive = node.is_active;
                 const activeBadge = isActive ?
-                    '<span style="color: var(--pico-ins-color); font-size: 0.8rem;">✓ 已启用</span>' :
-                    '<span style="color: var(--pico-del-color); font-size: 0.8rem;">✗ 已禁用</span>';
+                    '<span style="color: var(--pico-ins-color); font-size: 0.8rem;">已启用</span>' :
+                    '<span style="color: var(--pico-del-color); font-size: 0.8rem;">已禁用</span>';
 
                 return `
                     <article class="node-card" data-node-id="${node.id}">
@@ -335,8 +335,8 @@ if (!$isAjax) {
         const node = allNodes.find(n => n.id === nodeId);
         if (!node) return;
 
-        const statusText = node.status === 'online' ? '✓ 在线' : '✗ 离线';
-        const activeText = node.is_active ? '✓ 已启用' : '✗ 已禁用';
+        const statusText = node.status === 'online' ? '在线' : '离线';
+        const activeText = node.is_active ? '已启用' : '已禁用';
 
         const bodyHtml = `
             <div class="node-detail-row">

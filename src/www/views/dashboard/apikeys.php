@@ -439,7 +439,7 @@ if (!$isAjax) {
                         text: HISTORY_ICON_SVG + ' 复制密钥',
                         click: () => {
                             const keyText = document.getElementById('new-key-display');
-                            if (keyText) copyText(keyText.textContent, '✓ 密钥已复制到剪贴板');
+                            if (keyText) copyText(keyText.textContent, '密钥已复制到剪贴板');
                         }
                     },
                     {

@@ -197,15 +197,15 @@ if (!$isAjax) {
     </article>
     <article class="stat-card">
         <h2 id="history-success-count" style="color: var(--pico-ins-color);">--</h2>
-        <small>成功</small>
+        <small>已完成</small>
     </article>
     <article class="stat-card">
         <h2 id="history-failure-count" style="color: var(--pico-del-color);">--</h2>
-        <small>失败</small>
+        <small>未完成</small>
     </article>
     <article class="stat-card">
         <h2 id="history-success-rate" style="color: var(--pico-primary);">--%</h2>
-        <small>成功率</small>
+        <small>完成率</small>
     </article>
 </div>
 
@@ -226,8 +226,7 @@ if (!$isAjax) {
                 状态
                 <select name="status">
                     <option value="">全部</option>
-                    <option value="success">成功</option>
-                    <option value="failure">失败</option>
+                    <option value="completed">完成</option>
                     <option value="pending">处理中</option>
                 </select>
             </label>
@@ -309,15 +308,14 @@ if (!$isAjax) {
 
             // 更新统计
             const total = tasks.length;
-            const successCount = tasks.filter(t => t.status === 'success').length;
-            const failureCount = tasks.filter(t => t.status === 'failure').length;
+            const completedCount = tasks.filter(t => t.status === 'completed').length;
             const pendingCount = tasks.filter(t => t.status === 'pending').length;
-            const successRate = total > 0 ? Math.round((successCount / total) * 1000) / 10 : 0;
+            const completionRate = total > 0 ? Math.round((completedCount / total) * 1000) / 10 : 0;
 
             document.getElementById('history-total-requests').textContent = total;
-            document.getElementById('history-success-count').textContent = successCount;
-            document.getElementById('history-failure-count').textContent = failureCount;
-            document.getElementById('history-success-rate').textContent = `${successRate}%`;
+            document.getElementById('history-success-count').textContent = completedCount;
+            document.getElementById('history-failure-count').textContent = pendingCount;
+            document.getElementById('history-success-rate').textContent = `${completionRate}%`;
 
             // 更新分页
             totalPages = payload.total_pages || 1;
@@ -333,9 +331,8 @@ if (!$isAjax) {
 
             body.innerHTML = tasks.map(task => {
                 const statusMap = {
-                    success: '<span class="history-status success">✓ 成功</span>',
-                    failure: '<span class="history-status failure">✗ 失败</span>',
-                    pending: '<span class="history-status pending">... 处理中</span>',
+                    completed: '<span class="history-status success">已完成</span>',
+                    pending: '<span class="history-status pending">处理中</span>',
                 };
                 const statusHtml = statusMap[task.status] || task.status;
                 const apiKeyInfo = task.api_key_name ?
@@ -388,7 +385,7 @@ if (!$isAjax) {
                 <div>
                     <p><strong>任务ID</strong><small>${task.task_id || '--'}</small></p>
                     <p><strong>时间</strong><small>${task.created_at || '--'}</small></p>
-                    <p><strong>状态</strong><small>${task.status === 'success' ? '✓ 成功' : task.status === 'failure' ? '✗ 失败' : '... 处理中'}</small></p>
+                    <p><strong>状态</strong><small>${task.status === 'completed' ? '已完成' : '处理中'}</small></p>
                 </div>
                 <div>
                     <p><strong>识别结果</strong><small>${task.label || '--'}</small></p>

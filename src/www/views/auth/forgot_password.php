@@ -92,6 +92,27 @@
         margin-bottom: 0.375rem;
         font-weight: 500;
     }
+
+    .cooldown-timer {
+        text-align: center;
+        padding: 1rem;
+        background: var(--pico-card-sectioning-background-color);
+        border-radius: var(--pico-border-radius);
+        margin-top: 1rem;
+        display: none;
+    }
+
+    .cooldown-timer .timer-display {
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: var(--pico-primary);
+        margin: 0.5rem 0;
+    }
+
+    .cooldown-timer .timer-label {
+        font-size: 0.8rem;
+        color: var(--pico-muted-color);
+    }
 </style>
 
 <div class="auth-container">
@@ -135,6 +156,13 @@
         <button type="submit" id="submit-btn">发送重置链接</button>
     </form>
 
+    <!-- 冷却倒计时面板 -->
+    <div id="cooldown-panel" class="cooldown-timer">
+        <div class="timer-label">请等待</div>
+        <div class="timer-display" id="cooldown-countdown">15:00</div>
+        <div class="timer-label">后重新尝试</div>
+    </div>
+
     <div class="auth-footer">
         <a href="/auth/login">返回登录</a>
     </div>
@@ -163,6 +191,45 @@
     function hideAlerts() {
         document.getElementById('error-message').style.display = 'none';
         document.getElementById('success-message').style.display = 'none';
+    }
+
+    let cooldownTimer = null;
+
+    function startCooldown(seconds) {
+        const panel = document.getElementById('cooldown-panel');
+        const display = document.getElementById('cooldown-countdown');
+        const btn = document.getElementById('submit-btn');
+        const form = document.getElementById('forgot-form');
+
+        // 隐藏表单，显示倒计时
+        form.style.display = 'none';
+        panel.style.display = 'block';
+
+        let remaining = seconds;
+
+        function updateDisplay() {
+            const mins = Math.floor(remaining / 60);
+            const secs = remaining % 60;
+            display.textContent = String(mins).padStart(2, '0') + ':' + String(secs).padStart(2, '0');
+        }
+
+        clearInterval(cooldownTimer);
+        updateDisplay();
+
+        cooldownTimer = setInterval(() => {
+            remaining--;
+            updateDisplay();
+
+            if (remaining <= 0) {
+                clearInterval(cooldownTimer);
+                cooldownTimer = null;
+                panel.style.display = 'none';
+                form.style.display = 'block';
+                btn.disabled = false;
+                btn.removeAttribute('aria-busy');
+                btn.textContent = '发送重置链接';
+            }
+        }, 1000);
     }
 
     async function handleForgotPassword(event) {
@@ -205,7 +272,14 @@
                 showSuccess('重置链接已发送，请检查你的邮箱');
                 btn.textContent = '已发送';
                 btn.disabled = true;
-                btn.removeAttribute('aria-busy');
+
+                // 如果返回了 retry_after_minutes，启动冷却倒计时
+                if (result.data && result.data.retry_after_minutes) {
+                    startCooldown(result.data.retry_after_minutes * 60);
+                } else {
+                    // 默认冷却 60 秒
+                    startCooldown(60);
+                }
 
                 // 检查是否返回了令牌（开发/本地环境无邮件系统时使用）
                 if (result.data && result.data.token) {
@@ -217,10 +291,16 @@
                     resetLinkSection.style.display = 'block';
                 }
             } else {
-                showError(result.message || '发送失败，请稍后重试');
-                btn.disabled = false;
-                btn.removeAttribute('aria-busy');
-                btn.textContent = '发送重置链接';
+                // 检查是否是速率限制错误，如果是则启动倒计时
+                if (result.data && result.data.retry_after_minutes) {
+                    showError(result.message || '请求过于频繁');
+                    startCooldown(result.data.retry_after_minutes * 60);
+                } else {
+                    showError(result.message || '发送失败，请稍后重试');
+                    btn.disabled = false;
+                    btn.removeAttribute('aria-busy');
+                    btn.textContent = '发送重置链接';
+                }
             }
         } catch (error) {
             showError('网络错误：无法连接到服务器，请检查网络或联系管理员');
@@ -232,6 +312,13 @@
 
     document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('forgot-form').addEventListener('submit', handleForgotPassword);
+
+        // 页面卸载时清除定时器
+        window.addEventListener('beforeunload', function() {
+            if (cooldownTimer) {
+                clearInterval(cooldownTimer);
+            }
+        });
     });
 </script>
 

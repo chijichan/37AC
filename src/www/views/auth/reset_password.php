@@ -30,6 +30,7 @@
     }
 
     .auth-container .auth-footer a {
+        color: var(--pico-primary);
         text-decoration: none;
     }
 
@@ -100,6 +101,33 @@
         font-weight: 500;
     }
 
+    .password-toggle {
+        position: relative;
+    }
+
+    .password-toggle .toggle-btn {
+        position: absolute;
+        right: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 4px 8px;
+        color: var(--pico-muted-color);
+        font-size: 0.85rem;
+        line-height: 1;
+        z-index: 2;
+    }
+
+    .password-toggle .toggle-btn:hover {
+        color: var(--pico-primary);
+    }
+
+    .password-toggle input {
+        padding-right: 3.5rem;
+    }
+
     .password-strength {
         margin-top: 0.5rem;
         height: 4px;
@@ -155,6 +183,17 @@
     .match-indicator.no-match {
         color: var(--pico-del-color);
     }
+
+    .redirect-countdown {
+        text-align: center;
+        margin-top: 1rem;
+        font-size: 0.85rem;
+        color: var(--pico-muted-color);
+    }
+
+    .auth-container .auth-footer a[role="button"] {
+        color: #fff !important;
+    }
 </style>
 
 <div class="auth-container">
@@ -189,15 +228,18 @@
         <form id="reset-form">
             <div class="form-group">
                 <label for="password">新密码</label>
-                <input
-                    type="password"
-                    id="password"
-                    name="password"
-                    placeholder="请输入新密码（至少6位）"
-                    aria-label="新密码"
-                    autocomplete="new-password"
-                    minlength="6"
-                    required />
+                <div class="password-toggle">
+                    <input
+                        type="password"
+                        id="password"
+                        name="password"
+                        placeholder="请输入新密码（至少6位）"
+                        aria-label="新密码"
+                        autocomplete="new-password"
+                        minlength="6"
+                        required />
+                    <button type="button" class="toggle-btn" id="toggle-pw" aria-label="切换密码可见性">显示</button>
+                </div>
                 <div class="password-strength">
                     <div id="strength-bar" class="password-strength-bar"></div>
                 </div>
@@ -209,15 +251,18 @@
 
             <div class="form-group">
                 <label for="confirm-password">确认新密码</label>
-                <input
-                    type="password"
-                    id="confirm-password"
-                    name="confirm-password"
-                    placeholder="请再次输入新密码"
-                    aria-label="确认新密码"
-                    autocomplete="new-password"
-                    minlength="6"
-                    required />
+                <div class="password-toggle">
+                    <input
+                        type="password"
+                        id="confirm-password"
+                        name="confirm-password"
+                        placeholder="请再次输入新密码"
+                        aria-label="确认新密码"
+                        autocomplete="new-password"
+                        minlength="6"
+                        required />
+                    <button type="button" class="toggle-btn" id="toggle-confirm-pw" aria-label="切换确认密码可见性">显示</button>
+                </div>
                 <span id="match-text" class="match-indicator"></span>
             </div>
 
@@ -238,8 +283,11 @@
         <h1>密码重置成功</h1>
         <div class="token-invalid-container">
             <p>你的密码已成功重置</p>
-            <div class="auth-footer" style="margin-top: 1.5rem;">
-                <a href="/auth/login" role="button" style="text-decoration: none;">前往登录</a>
+            <div class="redirect-countdown">
+                <span id="redirect-countdown-text">5</span> 秒后自动跳转到登录页...
+            </div>
+            <div class="auth-footer" style="margin-top: 1rem;">
+                <a href="/auth/login" role="button" style="text-decoration: none;">立即登录</a>
             </div>
         </div>
     </div>
@@ -278,6 +326,20 @@
         if (successEl) successEl.style.display = 'none';
     }
 
+    function togglePasswordVisibility(inputId, btnId) {
+        const input = document.getElementById(inputId);
+        const btn = document.getElementById(btnId);
+        if (!input || !btn) return;
+
+        if (input.type === 'password') {
+            input.type = 'text';
+            btn.textContent = '隐藏';
+        } else {
+            input.type = 'password';
+            btn.textContent = '显示';
+        }
+    }
+
     function checkPasswordStrength(password) {
         const bar = document.getElementById('strength-bar');
         const text = document.getElementById('strength-text');
@@ -285,10 +347,10 @@
 
         if (password.length >= 6) {
             reqLength.className = 'valid';
-            reqLength.innerHTML = '至少 6 个字符';
+            reqLength.innerHTML = '✓ 至少 6 个字符';
         } else {
             reqLength.className = 'invalid';
-            reqLength.innerHTML = '至少 6 个字符（当前 ' + password.length + ' 位）';
+            reqLength.innerHTML = '✗ 至少 6 个字符（当前 ' + password.length + ' 位）';
         }
 
         let strength = 0;
@@ -329,10 +391,10 @@
         matchText.style.display = 'block';
         if (value === password) {
             matchText.className = 'match-indicator match';
-            matchText.textContent = '密码匹配';
+            matchText.textContent = '✓ 密码匹配';
         } else {
             matchText.className = 'match-indicator no-match';
-            matchText.textContent = '密码不匹配';
+            matchText.textContent = '✗ 密码不匹配';
         }
     }
 
@@ -370,6 +432,26 @@
             document.getElementById('token-invalid').style.display = 'block';
             document.getElementById('token-error-message').textContent = '网络错误，请检查服务器连接';
         }
+    }
+
+    let redirectTimer = null;
+
+    function startRedirectCountdown(seconds) {
+        const container = document.getElementById('success-container');
+        const countdownEl = document.getElementById('redirect-countdown-text');
+        let remaining = seconds;
+
+        function updateCountdown() {
+            countdownEl.textContent = remaining;
+            remaining--;
+            if (remaining < 0) {
+                clearInterval(redirectTimer);
+                window.location.href = '/auth/login';
+            }
+        }
+
+        updateCountdown();
+        redirectTimer = setInterval(updateCountdown, 1000);
     }
 
     async function handleResetPassword(event) {
@@ -412,6 +494,8 @@
             if (result.success) {
                 document.getElementById('reset-form-container').style.display = 'none';
                 document.getElementById('success-container').style.display = 'block';
+                // 5秒后自动跳转到登录页
+                startRedirectCountdown(5);
             } else {
                 showError(result.message || '密码重置失败，请重试');
                 btn.removeAttribute('aria-busy');
@@ -429,6 +513,14 @@
     document.addEventListener('DOMContentLoaded', function() {
         verifyToken();
 
+        // 密码显示/隐藏切换
+        document.getElementById('toggle-pw').addEventListener('click', function() {
+            togglePasswordVisibility('password', 'toggle-pw');
+        });
+        document.getElementById('toggle-confirm-pw').addEventListener('click', function() {
+            togglePasswordVisibility('confirm-password', 'toggle-confirm-pw');
+        });
+
         document.getElementById('password').addEventListener('input', function() {
             checkPasswordStrength(this.value);
         });
@@ -438,6 +530,13 @@
         });
 
         document.getElementById('reset-form').addEventListener('submit', handleResetPassword);
+
+        // 页面卸载时清除定时器
+        window.addEventListener('beforeunload', function() {
+            if (redirectTimer) {
+                clearInterval(redirectTimer);
+            }
+        });
     });
 </script>
 

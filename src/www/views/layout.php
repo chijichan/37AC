@@ -193,7 +193,6 @@
                 dialog.innerHTML = `
                     <article>
                         <header>
-                            <span class="notification-icon">${type === 'success' ? '✓' : type === 'error' ? '✗' : 'ℹ'}</span>
                             <p><strong>${titles[type]}</strong></p>
                             <button aria-label="Close" rel="prev" onclick="this.closest('dialog').close()"></button>
                         </header>

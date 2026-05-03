@@ -217,6 +217,51 @@ def refresh_token(refresh_token_str: str) -> dict:
     }
 
 
+def _count_recent_reset_requests(email: str) -> int:
+    """统计指定邮箱在限流时间窗口内的重置请求次数"""
+    conn = None
+    try:
+        conn = _get_connection()
+        with conn.cursor() as cursor:
+            window_minutes = RESET_RATE_LIMIT.get("window_minutes", 15)
+            cursor.execute(
+                """SELECT COUNT(*) FROM password_reset_tokens prt
+                   JOIN users u ON u.id = prt.user_id
+                   WHERE u.email = %s AND prt.created_at >= NOW() - INTERVAL %s MINUTE""",
+                (email, window_minutes),
+            )
+            row = cursor.fetchone()
+            return row[0] if row else 0
+    except Exception as e:
+        logger.warning("检查重置请求频率时出错: %s", str(e))
+        return 0
+    finally:
+        if conn:
+            conn.close()
+
+
+def _cleanup_expired_tokens() -> int:
+    """清理已过期且未使用的重置令牌，返回清理数量"""
+    conn = None
+    try:
+        conn = _get_connection()
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "DELETE FROM password_reset_tokens WHERE expires_at < NOW() AND used = 0"
+            )
+            conn.commit()
+            deleted = cursor.rowcount
+            if deleted > 0:
+                logger.info("已清理 %d 条过期的密码重置令牌", deleted)
+            return deleted
+    except Exception as e:
+        logger.warning("清理过期令牌时出错: %s", str(e))
+        return 0
+    finally:
+        if conn:
+            conn.close()
+
+
 def generate_reset_token(email: str) -> dict:
     """生成密码重置令牌并发送邮件（如果 SMTP 已配置）"""
     conn = None
@@ -233,6 +278,22 @@ def generate_reset_token(email: str) -> dict:
                 "message": "如果该邮箱已注册，重置链接将发送到你的邮箱",
                 "data": {"token": None}
             }
+
+        # 速率限制检查
+        recent_count = _count_recent_reset_requests(email)
+        max_requests = RESET_RATE_LIMIT.get("max_requests", 3)
+        window_minutes = RESET_RATE_LIMIT.get("window_minutes", 15)
+
+        if recent_count >= max_requests:
+            logger.warning("邮箱 %s 请求过于频繁 (%d 次 / %d 分钟)", email, recent_count, window_minutes)
+            return {
+                "success": False,
+                "message": f"请求过于频繁，请 {window_minutes} 分钟后再试",
+                "data": {"retry_after_minutes": window_minutes}
+            }
+
+        # 顺便清理过期令牌
+        _cleanup_expired_tokens()
 
         # 生成随机令牌
         raw_token = secrets.token_urlsafe(48)

@@ -121,6 +121,13 @@
         background: var(--pico-contrast-background);
     }
 
+    .activity-icon svg {
+        width: 20px;
+        height: 20px;
+        fill: currentColor;
+        color: var(--pico-background-color);
+    }
+
     .activity-content {
         flex: 1;
     }

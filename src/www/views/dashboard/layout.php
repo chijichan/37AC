@@ -546,17 +546,21 @@ require_once ROOT_PATH . '/views/layout.php';
 
                         const activityList = document.getElementById('recent-activity');
                         activityList.innerHTML = activity
-                            .map(
-                                (item) => `
+                            .map((item) => {
+                                const iconSvg = item.type === 'upload' ? UPLOAD_ICON_SVG :
+                                    item.type === 'user' ? USER_ICON_SVG :
+                                    item.type === 'system' ? SETTINGS_ICON_SVG :
+                                    UPLOAD_ICON_SVG;
+                                return `
                                     <li class="activity-item">
-                                        <div class="activity-icon upload">${item.icon}</div>
+                                        <div class="activity-icon ${item.type || 'upload'}">${iconSvg}</div>
                                         <div class="activity-content">
                                             <div class="activity-title">${item.title}</div>
                                             <div class="activity-time">${item.description}</div>
                                         </div>
                                         <small>${item.time}</small>
-                                    </li>`
-                            )
+                                    </li>`;
+                            })
                             .join('');
 
                         const recordBody = document.getElementById('recent-records');
@@ -584,42 +588,8 @@ require_once ROOT_PATH . '/views/layout.php';
                 // nodes.php 自己的 <script> 标签负责渲染
                 return Promise.resolve();
             } else if (page === 'history') {
-                return fetchJson(`${window.API_BASE_URL}/dashboard/tasks`)
-                    .then((payload) => {
-                        const tasks = payload.data || [];
-                        const body = document.getElementById('history-table-body');
-
-                        const total = tasks.length;
-                        const successCount = tasks.filter((task) => task.status === 'success').length;
-                        const failureCount = total - successCount;
-                        const successRate = total > 0 ? Math.round((successCount / total) * 1000) / 10 : 0;
-
-                        document.getElementById('history-total-requests').textContent = total;
-                        document.getElementById('history-success-count').textContent = successCount;
-                        document.getElementById('history-failure-count').textContent = failureCount;
-                        document.getElementById('history-success-rate').textContent = `${successRate}%`;
-
-                        if (!tasks.length) {
-                            body.innerHTML = '<tr><td colspan="6" style="text-align:center;">暂无历史记录</td></tr>';
-                            return;
-                        }
-                        body.innerHTML = tasks
-                            .map(
-                                (task) => `
-                                    <tr>
-                                        <td>${task.task_id}</td>
-                                        <td>${task.label || '--'}</td>
-                                        <td>图片识别</td>
-                                        <td>image_${task.task_id.slice(0, 8)}.jpg</td>
-                                        <td>${task.label || '--'}</td>
-                                        <td><span class="history-status ${task.status === 'success' ? 'success' : 'failure'}">${task.status === 'success' ? '✓ 成功' : '✗ 失败'}</span></td>
-                                    </tr>`
-                            )
-                            .join('');
-                    })
-                    .catch((error) => {
-                        console.error(error);
-                    });
+                // history.php 自己的 loadHistory() 负责渲染
+                return Promise.resolve();
             }
 
             return Promise.resolve();
@@ -629,7 +599,7 @@ require_once ROOT_PATH . '/views/layout.php';
             const keyText = btn.closest('.key-display').querySelector('.key-text').textContent;
             navigator.clipboard.writeText(keyText).then(() => {
                 const originalText = btn.innerHTML;
-                btn.innerHTML = '✓';
+                btn.innerHTML = '已复制';
                 setTimeout(() => {
                     btn.innerHTML = originalText;
                 }, 2000);

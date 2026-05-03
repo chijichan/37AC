@@ -3,36 +3,21 @@
 import os
 import socket
 import threading
-import logging
 import json
 import time
 from datetime import datetime
 import pymysql
 from pymysql import Error
-from config import TSAC_DEBUG, DB_CONFIG, LOGS_PATH, TCP_PORT
+from config.base import DB_CONFIG, TCP_PORT
 import struct
 from concurrent.futures import ThreadPoolExecutor
 from queue import Queue
+from config.log_config import get_logger
 
 # =============================================
-# 日志配置
+# 日志配置 - 使用统一日志系统
 # =============================================
-logger = logging.getLogger("tcp_service")
-if TSAC_DEBUG:
-    log_level = logging.DEBUG
-else:
-    log_level = logging.INFO
-logger.setLevel(log_level)
-
-file_handler = logging.FileHandler(LOGS_PATH / "tcp_server.log")
-console_handler = logging.StreamHandler()
-
-formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-file_handler.setFormatter(formatter)
-console_handler.setFormatter(formatter)
-
-logger.addHandler(file_handler)
-logger.addHandler(console_handler)
+logger = get_logger("tcp_service")
 
 
 # 异步处理器
@@ -131,6 +116,7 @@ class NodeManager:
     def __init__(self):
         self.nodes = {}  # node_id -> dict
         self.lock = threading.Lock()
+        self._logger = get_logger("NodeManager")
 
     def register_node(self, node_id, addr, socket_obj=None, max_tasks=None):
         """注册节点，支持动态设置最大任务数"""
@@ -147,8 +133,9 @@ class NodeManager:
                 "max_tasks": max_tasks,  # 最大任务处理数
                 "current_tasks": 0,  # 当前任务计数
             }
-            logger.info(
-                f"[节点注册] 节点 {node_id} ({addr}) 已注册，状态：空闲，最大任务数：{max_tasks}"
+            self._logger.info(
+                "节点 %s (%s) 已注册，状态：空闲，最大任务数：%s",
+                node_id, f"{addr[0]}:{addr[1]}" if isinstance(addr, tuple) else str(addr), max_tasks
             )
             return True
 
@@ -167,8 +154,9 @@ class NodeManager:
                 # 只有当当前任务数 >= 最大任务数时才设为busy
                 if node["current_tasks"] >= node["max_tasks"]:
                     node["status"] = "busy"
-                    logger.debug(
-                        f"[节点状态] 节点 {node_id} 任务数已满({node['current_tasks']}/{node['max_tasks']})，状态设为忙碌"
+                    self._logger.debug(
+                        "节点 %s 任务数已满(%s/%s)，状态设为忙碌",
+                        node_id, node["current_tasks"], node["max_tasks"]
                     )
                 return True
             return False
@@ -186,16 +174,19 @@ class NodeManager:
         with self.lock:
             if node_id in self.nodes:
                 node = self.nodes[node_id]
+                old_count = node["current_tasks"]
                 node["current_tasks"] += 1
-                logger.debug(
-                    f"[任务计数] 节点 {node_id} 任务数增加: {node['current_tasks']-1} -> {node['current_tasks']}/{node['max_tasks']}"
+                self._logger.debug(
+                    "节点 %s 任务数增加: %s -> %s/%s",
+                    node_id, old_count, node["current_tasks"], node["max_tasks"]
                 )
 
                 # 如果达到或超过最大任务数，自动设为忙碌
                 if node["current_tasks"] >= node["max_tasks"]:
                     node["status"] = "busy"
-                    logger.info(
-                        f"[节点状态] 节点 {node_id} 任务数达到上限({node['current_tasks']}/{node['max_tasks']})，自动设为忙碌"
+                    self._logger.info(
+                        "节点 %s 任务数达到上限(%s/%s)，自动设为忙碌",
+                        node_id, node["current_tasks"], node["max_tasks"]
                     )
 
                 return True
@@ -207,19 +198,19 @@ class NodeManager:
             if node_id in self.nodes:
                 node = self.nodes[node_id]
                 if node["current_tasks"] > 0:
+                    old_count = node["current_tasks"]
                     node["current_tasks"] -= 1
-                    logger.debug(
-                        f"[任务计数] 节点 {node_id} 任务数减少: {node['current_tasks']+1} -> {node['current_tasks']}/{node['max_tasks']}"
+                    self._logger.debug(
+                        "节点 %s 任务数减少: %s -> %s/%s",
+                        node_id, old_count, node["current_tasks"], node["max_tasks"]
                     )
 
                     # 如果从忙碌状态变为非满负荷，自动设为空闲
-                    if (
-                        node["status"] == "busy"
-                        and node["current_tasks"] < node["max_tasks"]
-                    ):
+                    if node["status"] == "busy" and node["current_tasks"] < node["max_tasks"]:
                         node["status"] = "idle"
-                        logger.info(
-                            f"[节点状态] 节点 {node_id} 任务数低于上限({node['current_tasks']}/{node['max_tasks']})，自动设为空闲"
+                        self._logger.info(
+                            "节点 %s 任务数低于上限(%s/%s)，自动设为空闲",
+                            node_id, node["current_tasks"], node["max_tasks"]
                         )
 
                 return True
@@ -323,7 +314,7 @@ class NodeManager:
         with self.lock:
             for node_id, info in self.nodes.items():
                 if current_time - info["last_heartbeat"] > timeout:
-                    logger.info(f"[节点清理] 节点 {node_id} 超时未心跳，将被移除")
+                    self._logger.info("节点 %s 超时未心跳，将被移除", node_id)
                     self.update_db_node_status(node_id, "offline")
                     to_remove.append(node_id)
             for node_id in to_remove:
@@ -331,9 +322,7 @@ class NodeManager:
 
     def show_all_nodes(self):
         with self.lock:
-            logger.debug("\n" + "=" * 80)
-            logger.debug("[节点监控] 当前所有节点信息:")
-            logger.debug("=" * 80)
+            self._logger.debug("当前所有节点信息:")
             for node_id, info in self.nodes.items():
                 addr = info.get("addr", ("Unknown", 0))
                 ip, port = addr
@@ -354,18 +343,16 @@ class NodeManager:
                     else 0
                 )
 
-                logger.debug(
-                    f"     节点ID: {node_id} | 地址: {ip}:{port} | 状态: {status} | "
-                    f"最大任务数: {max_tasks} | 当前任务: {current_tasks} | "
-                    f"负载: {load_percent:.1f}% | 最后心跳: {ts_str}"
+                self._logger.debug(
+                    "节点ID: %-20s | 地址: %s:%s | 状态: %s | 任务: %s/%s | 负载: %.1f%% | 心跳: %s",
+                    node_id, ip, port, status, current_tasks, max_tasks, load_percent, ts_str
                 )
-            logger.debug("=" * 80 + "\n")
 
     def update_db_node_status(self, node_id, status, addr=None):
         try:
             conn = get_db_connection()
             if not conn:
-                logger.error(f"[数据库] 无法连接数据库，无法更新节点 {node_id} 状态")
+                self._logger.error("无法连接数据库，无法更新节点 %s 状态", node_id)
                 return False
             with conn.cursor() as cursor:
                 sql = "UPDATE nodes SET status = %s, updated_at = NOW()"
@@ -380,10 +367,10 @@ class NodeManager:
                 params.append(node_id)
                 cursor.execute(sql, tuple(params))
             conn.commit()
-            logger.debug(f"[数据库] 节点 {node_id} 状态更新为 {status}")
+            self._logger.debug("节点 %s 状态更新为 %s", node_id, status)
             return True
         except Exception as e:
-            logger.error(f"[数据库] 更新节点状态失败: {e}")
+            self._logger.error("更新节点状态失败: %s", e)
             return False
         finally:
             if "conn" in locals() and conn:
@@ -400,6 +387,7 @@ class TaskManager:
         self.lock = threading.Lock()
         self.check_interval = 2
         self.max_retries = 3
+        self._logger = get_logger("TaskManager")
         threading.Thread(target=self._monitor_loop, daemon=True).start()
 
     def register_task(self, task_id, image_path, max_retries=None):
@@ -424,8 +412,6 @@ class TaskManager:
                 entry["last_dispatch"] = now
                 entry["next_retry"] = now + 10
 
-        # 不再将排队任务持久化到数据库，pending 任务仅保存在内存中。
-
     def mark_task_completed(self, task_id):
         with self.lock:
             if task_id in self.pending_tasks:
@@ -448,8 +434,9 @@ class TaskManager:
                     continue
 
                 if entry["attempts"] >= entry["max_retries"]:
-                    logger.warning(
-                        f"[TaskManager] 任务 {task_id} 达到最大重试次数 ({entry['max_retries']})，停止重试"
+                    self._logger.warning(
+                        "任务 %s 达到最大重试次数 (%s)，停止重试",
+                        task_id, entry["max_retries"]
                     )
                     self.mark_task_completed(task_id)
                     continue
@@ -482,7 +469,7 @@ class TaskManager:
             with open(image_path, "rb") as f:
                 image_data = f.read()
         except Exception as e:
-            logger.error(f"[TaskManager] 读取重试图片失败: {e}")
+            self._logger.error("读取重试图片失败: %s", e)
             self.mark_task_completed(task_id)
             return
 
@@ -502,11 +489,10 @@ class TaskManager:
             current["last_dispatch"] = now
             current["next_retry"] = now + 10
 
-        logger.info(
-            f"[TaskManager] 任务 {task_id} 第 {entry['attempts'] + 1} 次重试，结果: {response.get('status')}"
+        self._logger.info(
+            "任务 %s 第 %s 次重试，结果: %s",
+            task_id, entry["attempts"] + 1, response.get("status")
         )
-
-    # pending 任务仅保存在内存中，不再写入数据库
 
 
 # 全局任务管理器
@@ -519,7 +505,7 @@ def get_db_connection():
         conn = pymysql.connect(**DB_CONFIG)
         return conn
     except Error as e:
-        print(f"[数据库操作] 数据库连接失败: {e}")
+        logger.error("数据库连接失败: %s", e)
         return None
 
 
@@ -544,11 +530,11 @@ class JsonProtocol:
             sock.sendall(full_message)
 
             logger.debug(
-                f"[send_json] 发送成功: 头部='{header_str}', 内容长度={content_length}"
+                "发送成功: 头部='%s', 内容长度=%s", header_str, content_length
             )
 
         except Exception as e:
-            logger.error(f"[send_json] 发送失败: {e}")
+            logger.error("发送失败: %s", e)
             raise
 
     def recv_json(self, sock):
@@ -578,7 +564,7 @@ class JsonProtocol:
 
         except (ConnectionError, ValueError, struct.error) as e:
             logger.debug(
-                f"[recv_json] 接收 JSON 失败 (期望标记: {self.expected_headers}): {e}"
+                "接收 JSON 失败 (期望标记: %s): %s", self.expected_headers, e
             )
             return None
 
@@ -608,7 +594,7 @@ class JsonProtocol:
             # 检查缓冲区是否过大
             if len(buffer) > max_marker_len * 2:
                 logger.warning(
-                    f"[recv_json] 未找到期望标记 {self.expected_headers}，清空缓冲区重新搜索"
+                    "未找到期望标记 %s，清空缓冲区重新搜索", self.expected_headers
                 )
                 buffer = b""
 
@@ -630,7 +616,7 @@ class JsonProtocol:
 
         if not num_buffer:
             logger.error(
-                f"[recv_json] 无法解析长度数字，找到标记: '{marker[:-1].decode('utf-8')}@'"
+                "无法解析长度数字，找到标记: '%s@'", marker[:-1].decode("utf-8")
             )
             return None, None
 
@@ -638,7 +624,7 @@ class JsonProtocol:
         content_start = length_start + len(num_buffer)
 
         logger.debug(
-            f"[recv_json] 解析到内容长度: {content_length}, 起始位置: {content_start}"
+            "解析到内容长度: %s, 起始位置: %s", content_length, content_start
         )
         return content_length, content_start
 
@@ -741,7 +727,7 @@ def async_handle_register(conn, addr, msg):
             }
             json_protocol.send_json(conn, register_ack)
             logger.info(
-                f"[注册成功] node_id={node_id}, addr={addr}, max_tasks={max_tasks}"
+                "注册成功: node_id=%s, addr=%s, max_tasks=%s", node_id, addr, max_tasks
             )
         else:
             register_ack = {
@@ -752,7 +738,7 @@ def async_handle_register(conn, addr, msg):
             }
             json_protocol.send_json(conn, register_ack)
     except Exception as e:
-        logger.error(f"[注册错误] 处理注册时出错: {e}")
+        logger.error("处理注册时出错: %s", e)
         register_ack = {
             "type": "register_ack",
             "timestamp": int(time.time()),
@@ -800,17 +786,15 @@ def async_handle_task_result(conn, addr, msg):
                 """
                 cursor.execute(sql, (task_id, json.dumps(result), "completed"))
             conn.commit()
-            logger.info(f"[数据库操作] 任务结果已保存: task_id={task_id}")
+            logger.info("任务结果已保存: task_id=%s", task_id)
 
             # 如果有node_id，减少任务计数
             if node_id:
                 node_manager.decrement_task_count(node_id)
-                logger.info(
-                    f"[任务处理] 节点 {node_id} 任务计数已减少，task_id={task_id}"
-                )
+                logger.info("节点 %s 任务计数已减少，task_id=%s", node_id, task_id)
 
         except Exception as e:
-            logger.error(f"[数据库操作] 异步保存失败: {e}")
+            logger.error("异步保存失败: %s", e)
         finally:
             if "conn" in locals() and conn:
                 conn.close()
@@ -837,21 +821,6 @@ def dispatch_task(
     优先通过 TCP 将 image_file（图片二进制）发送给节点，
     使用统一的 JSON 协议，避免粘包问题
     """
-    # === 可选：备份逻辑 ===
-
-    """ 
-    uploads_dir = "./uploads"
-    os.makedirs(uploads_dir, exist_ok=True)
-    backup_image_path = os.path.join(uploads_dir, os.path.basename(image_path))
-    with open(backup_image_path, "wb") as f:
-        if hasattr(image_data, "read"):  # 比如 request.files 的 FileStorage 对象
-            f.write(image_data.read())
-        else:  # 如果是二进制数据，比如 bytes
-            f.write(image_data)
-    logger.info(f"[服务端] 图片已备份到本地: {backup_image_path}")
-    """
-
-    # === 优先：通过 TCP 传输图片给节点（使用统一 JSON 协议）===
 
     dispatch_task_response = {
         "type": "dispatch_task",
@@ -896,7 +865,7 @@ def dispatch_task(
         MAX_IMAGE_SIZE = 1024 * 1024 * 10  # 10MB
         if len(image_bytes) > MAX_IMAGE_SIZE:
             logger.error(
-                f"[dispatch_task] 图片过大: {len(image_bytes)} 字节，超过10MB限制"
+                "图片过大: %s 字节，超过10MB限制", len(image_bytes)
             )
             node_manager.set_node_idle(node_id)
             dispatch_task_response["message"] = "图片文件过大"
@@ -919,8 +888,8 @@ def dispatch_task(
         json_protocol.send_json(socket_obj, task_msg)
 
         logger.info(
-            f"[dispatch_task] 任务已发送: task_id={task_id}, 图片={image_filename}, "
-            f"大小={len(image_bytes)}字节, base64大小={len(image_base64)}字节"
+            "任务已发送: task_id=%s, 图片=%s, 大小=%s字节, base64大小=%s字节",
+            task_id, image_filename, len(image_bytes), len(image_base64)
         )
 
         node_manager.set_node_busy(node_id)
@@ -935,32 +904,17 @@ def dispatch_task(
         return dispatch_task_response
 
     except Exception as e:
-        logger.error(f"[dispatch_task] 发送任务失败: {e}")
+        logger.error("发送任务失败: %s", e)
         node_manager.set_node_idle(node_id)
         dispatch_task_response["message"] = str(e)
         dispatch_task_response["status"] = "failed"
         dispatch_task_response["data"]["task_id"] = task_id
         return dispatch_task_response
 
-    """
-    【已废弃】现在任务由用户直接连接节点发送，此方法仅作备用
-
-    保留基本功能用于兼容现有代码
-    """
-    logger.warning("[任务分发] dispatch_task 方法已废弃，任务现在由用户直接发送到节点")
-
-    # 简单的备用逻辑：随机选择一个可用节点
-    available_nodes = node_manager.get_available_nodes()
-    if not available_nodes:
-        return {"status": "waiting", "task_id": task_id, "message": "没有可用节点"}
-
-    # 这里只是示例，实际使用中可能不需要这个功能
-    return {"status": "deprecated", "message": "请直接使用节点API"}
-
 
 # TCP 服务端核心逻辑
 def handle_client(conn, addr):
-    print(f"[TCP] 新连接来自: {addr}")
+    logger.info("新连接来自: %s:%s", addr[0], addr[1])
     node_id = None
 
     try:
@@ -973,10 +927,6 @@ def handle_client(conn, addr):
 
             if msg_type == "register":
                 node_id = msg["data"].get("node_id")
-                """
-                token = msg.get("token")
-                max_tasks = msg.get("max_tasks", 5)
-                """
                 # 异步处理注册消息
                 message_processor.submit_message_task(
                     "register", async_handle_register, conn, addr, msg
@@ -1010,7 +960,7 @@ def handle_client(conn, addr):
                 )
 
     except ConnectionResetError:
-        print(f"[连接断开] {addr}")
+        logger.info("连接断开: %s:%s", addr[0], addr[1])
     finally:
         if node_id:
             with node_manager.lock:
@@ -1019,18 +969,18 @@ def handle_client(conn, addr):
                     node_manager.nodes[node_id]["status"] = "offline"
                     node_manager.update_db_node_status(node_id, "offline")
                     logger.info(
-                        f"[节点下行检测] 节点 {node_id} 连接异常断开，立即标记为离线"
+                        "节点 %s 连接异常断开，立即标记为离线", node_id
                     )
 
                     # 从内存中移除节点
                     del node_manager.nodes[node_id]
-                    logger.info(f"[节点清理] 节点 {node_id} 已从内存中移除")
+                    logger.info("节点 %s 已从内存中移除", node_id)
 
         try:
             conn.close()
         except:
             pass
-        logging.info(f"[TCP] 连接关闭: {addr}")
+        logger.info("连接关闭: %s:%s", addr[0], addr[1])
 
 
 # 启动 TCP 服务
@@ -1039,7 +989,7 @@ def start_tcp_server(host="0.0.0.0", port=TCP_PORT):
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         s.bind((host, port))
         s.listen(5)
-        print(f"[TCP] 服务启动，监听 {host}:{port}")
+        logger.info("TCP 服务启动，监听 %s:%s", host, port)
 
         def cleanup_loop():
             while True:
@@ -1053,7 +1003,7 @@ def start_tcp_server(host="0.0.0.0", port=TCP_PORT):
             while True:
                 time.sleep(5)
                 monitor_counter += 1
-                logger.debug(f"[MONITOR] 第 {monitor_counter} 次节点监控")
+                logger.debug("第 %s 次节点监控", monitor_counter)
                 node_manager.show_all_nodes()
 
         threading.Thread(target=monitor_nodes, daemon=True).start()
@@ -1063,10 +1013,3 @@ def start_tcp_server(host="0.0.0.0", port=TCP_PORT):
             threading.Thread(
                 target=handle_client, args=(conn, addr), daemon=True
             ).start()
-
-
-# =============================================
-# 启动入口（测试用，可直接注释）
-# =============================================
-# if __name__ == '__main__':
-#     start_tcp_server()

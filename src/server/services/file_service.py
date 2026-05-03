@@ -3,7 +3,7 @@
 
 import os
 import uuid
-from config import IMAGE_PATH
+from config.base import IMAGE_PATH
 
 
 def save_uploaded_file(file):

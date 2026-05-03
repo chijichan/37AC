@@ -331,6 +331,7 @@ if (!$isAjax) {
                 const progressClass = usagePercent < 60 ? 'low' : usagePercent < 85 ? 'medium' : 'high';
                 const keyPrefix = `37ac_${key.id}_****`;
 
+                const safeName = String(key.name).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
                 return `
                     <article class="api-key-card" data-key-id="${key.id}">
                         <div class="card-header">
@@ -371,9 +372,9 @@ if (!$isAjax) {
                                 <button class="secondary outline" onclick="toggleKeyStatus(${key.id}, 'active')">启用</button>
                             ` : ''}
                             ${key.status !== 'revoked' ? `
-                                <button class="outline" style="color: var(--pico-del-color); border-color: var(--pico-del-color);" onclick="confirmRevokeKey(${key.id}, '${key.name}')">撤销</button>
+                                <button class="outline" style="color: var(--pico-del-color); border-color: var(--pico-del-color);" onclick="confirmRevokeKey(${key.id}, '${safeName}')">撤销</button>
                             ` : ''}
-                            <button class="outline" style="color: var(--pico-del-color); border-color: var(--pico-del-color);" onclick="confirmDeleteKey(${key.id}, '${key.name}')">删除</button>
+                            <button class="outline" style="color: var(--pico-del-color); border-color: var(--pico-del-color);" onclick="confirmDeleteKey(${key.id}, '${safeName}')">删除</button>
                         </div>
                     </article>
                 `;
@@ -431,7 +432,7 @@ if (!$isAjax) {
                 loadKeys();
 
                 // 使用 PicoCSS 模态框显示新密钥
-                Modal.show('✅ 密钥创建成功', `
+                Modal.show('密钥创建成功', `
                     <p style="color: var(--pico-del-color); font-weight: 600;">${WARN_ICON_SVG} 请立即复制并安全保存此密钥，关闭后将无法再次查看完整密钥！</p>
                     <div class="key-reveal" id="new-key-display">${key}</div>
                 `, [{
@@ -504,7 +505,7 @@ if (!$isAjax) {
     // 确认删除
     function confirmDeleteKey(keyId, keyName) {
         showConfirm(
-            '🗑️ 删除密钥',
+            '删除密钥',
             `确定要永久删除密钥「${keyName}」吗？此操作不可恢复！`,
             () => deleteKey(keyId)
         );

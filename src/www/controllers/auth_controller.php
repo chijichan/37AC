@@ -30,9 +30,26 @@ class Auth_Controller extends Controller
     public function forgot_password()
     {
         $data = [
-            'title' => '忘记密码'
+            'title' => '忘记密码',
+            'api_base_url' => API_BASE_URL
         ];
 
         $this->view('auth/forgot_password', $data);
+    }
+
+    // 重置密码页面
+    public function reset_password()
+    {
+
+        // 从 URL 参数中获取 token
+        $token = isset($_GET['token']) ? trim($_GET['token']) : '';
+
+        $data = [
+            'title' => '重置密码',
+            'token' => $token,
+            'api_base_url' => API_BASE_URL
+        ];
+
+        $this->view('auth/reset_password', $data);
     }
 }

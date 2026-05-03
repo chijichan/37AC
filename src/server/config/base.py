@@ -1,8 +1,9 @@
-﻿# config.py
+# config/base.py
+"""基础配置 - 数据库、服务器、JWT 等"""
 
 from pathlib import Path
 
-ROOT_PATH = Path(__file__).resolve().parent
+ROOT_PATH = Path(__file__).resolve().parent.parent
 
 # MySQL 数据库配置（用于节点 Token 认证、后续可扩展更多配置）
 DB_CONFIG = {
@@ -17,6 +18,9 @@ DB_CONFIG = {
 # FLASK web服务器配置
 WEB_HOST = "127.0.0.1"
 WEB_PORT = 13138
+
+# 前端地址（用于构建密码重置等外链）
+FRONTEND_URL = "http://127.0.0.1:8000"
 
 # 全局配置
 # - DEBUG 模式

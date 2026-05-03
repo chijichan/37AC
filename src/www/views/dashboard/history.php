@@ -327,7 +327,7 @@ if (!$isAjax) {
             document.getElementById('btn-next-page').disabled = currentPage >= totalPages;
 
             if (!tasks.length) {
-                body.innerHTML = '<tr><td colspan="9"><div class="empty-state"><h3>📭 暂无记录</h3><p>当前筛选条件下没有找到历史记录</p></div></td></tr>';
+                body.innerHTML = '<tr><td colspan="9"><div class="empty-state"><h3>暂无记录</h3><p>当前筛选条件下没有找到历史记录</p></div></td></tr>';
                 return;
             }
 
@@ -335,7 +335,7 @@ if (!$isAjax) {
                 const statusMap = {
                     success: '<span class="history-status success">✓ 成功</span>',
                     failure: '<span class="history-status failure">✗ 失败</span>',
-                    pending: '<span class="history-status pending">⏳ 处理中</span>',
+                    pending: '<span class="history-status pending">... 处理中</span>',
                 };
                 const statusHtml = statusMap[task.status] || task.status;
                 const apiKeyInfo = task.api_key_name ?
@@ -388,7 +388,7 @@ if (!$isAjax) {
                 <div>
                     <p><strong>任务ID</strong><small>${task.task_id || '--'}</small></p>
                     <p><strong>时间</strong><small>${task.created_at || '--'}</small></p>
-                    <p><strong>状态</strong><small>${task.status === 'success' ? '✓ 成功' : task.status === 'failure' ? '✗ 失败' : '⏳ 处理中'}</small></p>
+                    <p><strong>状态</strong><small>${task.status === 'success' ? '✓ 成功' : task.status === 'failure' ? '✗ 失败' : '... 处理中'}</small></p>
                 </div>
                 <div>
                     <p><strong>识别结果</strong><small>${task.label || '--'}</small></p>

@@ -3,7 +3,7 @@
 
 from flask import Blueprint, request, jsonify
 
-from services.auth_service import register, login, refresh_token
+from services.auth_service import register, login, refresh_token, generate_reset_token, validate_reset_token, reset_password
 from middleware.auth_middleware import login_required
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
@@ -64,20 +64,52 @@ def logout_route():
 
 @auth_bp.route("/forgot-password", methods=["POST"])
 def forgot_password_route():
-    """忘记密码（预留接口）"""
-    return (
-        jsonify({"success": False, "message": "功能开发中，请联系管理员重置密码"}),
-        501,
-    )
+    """忘记密码 - 发送密码重置链接"""
+    data = request.get_json(silent=True) or {}
+    email = data.get("email", "").strip()
+
+    if not email:
+        return jsonify({"success": False, "message": "邮箱不能为空"}), 400
+
+    result = generate_reset_token(email)
+    status_code = 200 if result["success"] else 400
+    return jsonify(result), status_code
 
 
 @auth_bp.route("/reset-password", methods=["POST"])
 def reset_password_route():
-    """重置密码（预留接口）"""
-    return (
-        jsonify({"success": False, "message": "功能开发中，请联系管理员重置密码"}),
-        501,
-    )
+    """重置密码 - 使用重置令牌设置新密码"""
+    data = request.get_json(silent=True) or {}
+    token = data.get("token", "").strip()
+    password = data.get("password", "")
+    confirm_password = data.get("confirm_password", "")
+
+    if not token:
+        return jsonify({"success": False, "message": "重置令牌不能为空"}), 400
+
+    if not password:
+        return jsonify({"success": False, "message": "新密码不能为空"}), 400
+
+    if password != confirm_password:
+        return jsonify({"success": False, "message": "两次输入的密码不一致"}), 400
+
+    result = reset_password(token, password)
+    status_code = 200 if result["success"] else 400
+    return jsonify(result), status_code
+
+
+@auth_bp.route("/verify-reset-token", methods=["POST"])
+def verify_reset_token_route():
+    """验证重置令牌是否有效"""
+    data = request.get_json(silent=True) or {}
+    token = data.get("token", "").strip()
+
+    if not token:
+        return jsonify({"success": False, "message": "重置令牌不能为空"}), 400
+
+    result = validate_reset_token(token)
+    status_code = 200 if result["success"] else 400
+    return jsonify(result), status_code
 
 
 @auth_bp.route("/verify-email", methods=["POST"])

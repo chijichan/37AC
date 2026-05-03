@@ -12,6 +12,9 @@ define('ROOT_PATH', dirname(__DIR__));
 require_once ROOT_PATH . '/router.php';
 require_once ROOT_PATH . '/controllers/controller.php';
 
+// 后端 API 基础 URL（Flask 服务地址）
+define('API_BASE_URL', 'http://127.0.0.1:13138');
+
 spl_autoload_register(function ($class) {
     $file = ROOT_PATH . '/controllers/' . $class . '.php';
     if (file_exists($file)) {
@@ -101,6 +104,7 @@ $router->get('/dashboard/settings', function () {
 $router->get('/auth/login', 'auth_controller@login');
 $router->get('/auth/register', 'auth_controller@register');
 $router->get('/auth/forgot-password', 'auth_controller@forgot_password');
+$router->get('/auth/reset-password', 'auth_controller@reset_password');
 
 // 执行路由分发
 $router->dispatch();

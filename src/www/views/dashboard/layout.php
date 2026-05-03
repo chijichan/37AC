@@ -339,7 +339,7 @@ require_once ROOT_PATH . '/views/layout.php';
         }
 
         <?php
-        function capture_dashboard_fragment($path)
+        function capture_dashboard_fragment(string $path)
         {
             $backupGet = $_GET;
             $_GET['ajax'] = '1';
@@ -373,23 +373,28 @@ require_once ROOT_PATH . '/views/layout.php';
         const pageInfo = {
             'overview': {
                 icon: <?php echo json_encode(file_get_contents(ROOT_PATH . '/views/components/icons/overview.php')); ?>,
-                text: '总览'
+                text: '总览',
+                title: '仪表盘'
             },
             'nodes': {
                 icon: <?php echo json_encode(file_get_contents(ROOT_PATH . '/views/components/icons/nodes.php')); ?>,
-                text: '节点管理'
+                text: '节点管理',
+                title: '节点管理'
             },
             'apikeys': {
                 icon: <?php echo json_encode(file_get_contents(ROOT_PATH . '/views/components/icons/apikeys.php')); ?>,
-                text: 'API密钥'
+                text: 'API密钥',
+                title: 'API密钥'
             },
             'history': {
                 icon: <?php echo json_encode(file_get_contents(ROOT_PATH . '/views/components/icons/history.php')); ?>,
-                text: '使用记录'
+                text: '使用记录',
+                title: '使用记录'
             },
             'settings': {
                 icon: <?php echo json_encode(file_get_contents(ROOT_PATH . '/views/components/icons/settings.php')); ?>,
-                text: '设置'
+                text: '设置',
+                title: '设置'
             }
         };
 
@@ -428,6 +433,11 @@ require_once ROOT_PATH . '/views/layout.php';
         async function loadPage(page, addToHistory = true) {
             // 更新导航激活状态
             updateNavActive(page);
+
+            // 更新网页标题
+            if (pageInfo[page]) {
+                document.title = pageInfo[page].title + ' - 37AC';
+            }
 
             // 更新移动端下拉按钮显示
             updateMobileNav(page);

@@ -7,7 +7,7 @@ from datetime import datetime
 
 import pymysql
 
-from config import DB_CONFIG
+from config.base import DB_CONFIG
 
 
 def _get_connection():

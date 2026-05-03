@@ -4,7 +4,7 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo $title; ?> - 37AC</title>
+    <title><?php echo $title ?? ''; ?> - 37AC</title>
     <!-- <link rel="stylesheet" type="text/css" href="/static/content/bootstrap.min.css" /> -->
     <link rel="stylesheet" type="text/css" href="/static/css/pico.min.css" />
     <link rel="stylesheet" type="text/css"
@@ -182,11 +182,6 @@
              * @param {number} duration - 自动关闭时间（毫秒），0 表示不自动关闭
              */
             show(message, type = 'info', duration = 3000) {
-                const icons = {
-                    success: '✅',
-                    error: '❌',
-                    info: 'ℹ️'
-                };
                 const titles = {
                     success: '操作成功',
                     error: '操作失败',
@@ -198,7 +193,7 @@
                 dialog.innerHTML = `
                     <article>
                         <header>
-                            <span class="notification-icon">${icons[type]}</span>
+                            <span class="notification-icon">${type === 'success' ? '✓' : type === 'error' ? '✗' : 'ℹ'}</span>
                             <p><strong>${titles[type]}</strong></p>
                             <button aria-label="Close" rel="prev" onclick="this.closest('dialog').close()"></button>
                         </header>

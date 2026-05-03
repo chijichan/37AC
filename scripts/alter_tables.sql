@@ -26,8 +26,7 @@ CREATE TABLE IF NOT EXISTS api_keys (
     PRIMARY KEY (id),
     INDEX idx_user_id (user_id),
     INDEX idx_key_hash (key_hash),
-    INDEX idx_status (status),
-    -- 允许同名密钥，不再使用唯一约束
+    INDEX idx_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='API密钥表';
 
 -- 3. task_results 表添加 user_id 和 api_key_id 字段
@@ -36,3 +35,17 @@ ALTER TABLE task_results
     ADD COLUMN api_key_id INT(11) DEFAULT NULL COMMENT '使用的API密钥ID' AFTER user_id,
     ADD INDEX idx_user_id (user_id),
     ADD INDEX idx_api_key_id (api_key_id);
+
+-- 4. 创建 password_reset_tokens 表
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    id INT(11) NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    user_id INT(11) NOT NULL COMMENT '用户ID',
+    token VARCHAR(128) NOT NULL COMMENT '重置令牌 (SHA-256)',
+    expires_at DATETIME NOT NULL COMMENT '过期时间',
+    used TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否已使用 (0=未使用, 1=已使用)',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    PRIMARY KEY (id),
+    INDEX idx_user_id (user_id),
+    INDEX idx_token (token),
+    INDEX idx_expires_at (expires_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='密码重置令牌表';

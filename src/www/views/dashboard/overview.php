@@ -300,7 +300,7 @@
             <h2><?php require ROOT_PATH . '/views/components/icons/history.php'; ?> 最近活动</h2>
             <ul id="recent-activity" class="activity-list">
                 <li class="activity-item">
-                    <div class="activity-icon upload">⏳</div>
+                    <div class="activity-icon upload">...</div>
                     <div class="activity-content">
                         <div class="activity-title">正在加载最近活动…</div>
                     </div>
@@ -339,7 +339,7 @@
     <h2><?php require ROOT_PATH . '/views/components/icons/inform.php'; ?> 系统通知</h2>
     <article>
         <header>
-            <strong>✅ 系统运行正常</strong>
+            <strong>系统运行正常</strong>
         </header>
         <p>所有服务正常运行,没有检测到异常情况。</p>
         <footer>

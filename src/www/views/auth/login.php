@@ -76,7 +76,7 @@
 </style>
 
 <div class="auth-container">
-    <h1>🔐 登录</h1>
+    <h1>登录</h1>
     <p class="subtitle">欢迎回来，请登录你的账号</p>
 
     <div id="error-message" class="error-message"></div>

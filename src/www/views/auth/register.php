@@ -82,7 +82,7 @@
 </style>
 
 <div class="auth-container">
-    <h1>📝 注册</h1>
+    <h1>注册</h1>
     <p class="subtitle">创建你的账号，开始使用</p>
 
     <div id="error-message" class="error-message"></div>

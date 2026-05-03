@@ -71,14 +71,14 @@
 </style>
 
 <div class="auth-container">
-    <h1>🔑 忘记密码</h1>
+    <h1>忘记密码</h1>
     <p class="subtitle">输入你的邮箱，我们将发送重置链接</p>
 
     <div id="error-message" class="error-message"></div>
     <div id="success-message" class="success-message"></div>
 
     <div class="info-box">
-        <strong>📧 说明：</strong>请输入你注册时使用的邮箱地址，
+        <strong>说明：</strong>请输入你注册时使用的邮箱地址，
         系统将向该邮箱发送密码重置链接。如果未收到邮件，
         请检查垃圾邮件箱或联系管理员。
     </div>

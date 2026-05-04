@@ -114,6 +114,11 @@
     <link rel="icon" href="https://static.322337.xyz/view.php/3c2d0a0c603703e2a99ce22f85eb3087.ico" type="image/x-icon" />
     <script src="/static/scripts/modernizr-2.6.2.js"></script>
     <script src="/static/scripts/auth.js"></script>
+
+    <!-- 后端 API 基础 URL（Flask 服务地址）集中定义，所有前端页面统一引用 -->
+    <script>
+        window.API_BASE_URL = '<?= API_BASE_URL ?>';
+    </script>
 </head>
 
 <body>

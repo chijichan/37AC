@@ -913,7 +913,7 @@ require_once ROOT_PATH . '/views/layout.php';
             const formData = this.createFormData(blob);
 
             try {
-                const response = await fetch('http://127.0.0.1:13138/upload', {
+                const response = await fetch(`${window.API_BASE_URL}/upload`, {
                     method: 'POST',
                     body: formData,
                     headers: {
@@ -986,7 +986,7 @@ require_once ROOT_PATH . '/views/layout.php';
         }
 
         async fetchTaskResult(taskId) {
-            const response = await fetch(`http://127.0.0.1:13138/tasks/${taskId}`);
+            const response = await fetch(`${window.API_BASE_URL}/tasks/${taskId}`);
             if (!response.ok) {
                 throw new Error(`查询失败: ${response.status}`);
             }

@@ -156,8 +156,6 @@
 </div>
 
 <script>
-    const API_BASE_URL = 'http://127.0.0.1:13138';
-
     function showError(message) {
         const el = document.getElementById('error-message');
         el.textContent = message;

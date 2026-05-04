@@ -4,12 +4,13 @@
  */
 
 const AUTH_CONFIG = {
-    API_BASE_URL: 'http://127.0.0.1:13138',
     TOKEN_REFRESH_MARGIN: 300, // token 过期前5分钟刷新
 };
 
-// 全局 API 基础 URL，供所有页面使用
-window.API_BASE_URL = AUTH_CONFIG.API_BASE_URL;
+// 确保全局 API 基础 URL 已定义（由 layout.php 注入）
+if (!window.API_BASE_URL) {
+    window.API_BASE_URL = 'http://127.0.0.1:13138'; // 降级默认值
+}
 
 const Auth = {
     /**
@@ -81,7 +82,7 @@ const Auth = {
         if (!refreshToken) return false;
 
         try {
-            const response = await fetch(`${AUTH_CONFIG.API_BASE_URL}/auth/refresh`, {
+            const response = await fetch(`${window.API_BASE_URL}/auth/refresh`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ refresh_token: refreshToken })

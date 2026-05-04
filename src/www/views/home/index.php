@@ -164,8 +164,8 @@ require_once ROOT_PATH . '/views/layout.php';
                 style="color: rgba(0, 0, 0, 0.8); text-shadow: -1px 1px 0 rgba(255, 255, 255, 0.9), 1px 1px 0 rgba(255, 255, 255, 0.9), 1px -1px 0 rgba(255, 255, 255, 0.9), -1px -1px 0 rgba(255, 255, 255, 0.9);">
                 角色识别案例</p>
         </div>
-        <img class="img-responsive" src="https://upload-bbs.miyoushe.com/upload/2025/10/07/313131301/5195a0911ab45fcfd7d0f50b3d4ffa0d_579969555057559446.png"
-            alt="二次元角色识别示例" />
+        <img class="img-responsive" src="https://static.322337.xyz/view.php/47a0df48f93aaab740ad020f82a50c26.png"
+            alt="欸嘿嘿" />
     </div>
     <div class="article__info">
         <h2>高清识别</h2>
@@ -182,7 +182,7 @@ require_once ROOT_PATH . '/views/layout.php';
                 style="color: rgb(116,225,223,0.8); text-shadow: -1px 1px 0 rgba(255, 255, 255, 0.9), 1px 1px 0 rgba(255, 255, 255, 0.9), 1px -1px 0 rgba(255, 255, 255, 0.9), -1px -1px 0 rgba(255, 255, 255, 0.9);">
                 智能匹配</p>
         </div>
-        <img class="img-responsive" src="https://upload-bbs.miyoushe.com/upload/2025/10/07/313131301/22df51b7c95628bfa888410f8a328954_1064376901723553725.jpg" alt="欸嘿嘿嘿" />
+        <img class="img-responsive" src="https://static.322337.xyz/view.php/0c4ac0a32f95757ab03f112f6bca3a70.jpg" alt="欸嘿嘿嘿" />
     </div>
     <div class="article__info">
         <h2>没有多平台支持</h2>

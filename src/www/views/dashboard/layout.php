@@ -586,10 +586,16 @@ require_once ROOT_PATH . '/views/layout.php';
                     });
             } else if (page === 'nodes') {
                 // nodes.php 自己的 <script> 标签负责渲染
-                return Promise.resolve();
+                return window.__pageLoadPromise || Promise.resolve();
             } else if (page === 'history') {
                 // history.php 自己的 loadHistory() 负责渲染
-                return Promise.resolve();
+                return window.__pageLoadPromise || Promise.resolve();
+            } else if (page === 'apikeys') {
+                // apikeys.php 自己的 loadKeys() 负责渲染
+                return window.__pageLoadPromise || Promise.resolve();
+            } else if (page === 'settings') {
+                // settings.php 自己的 loadProfile() 负责渲染
+                return window.__pageLoadPromise || Promise.resolve();
             }
 
             return Promise.resolve();

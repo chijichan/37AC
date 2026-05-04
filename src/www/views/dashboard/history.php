@@ -425,6 +425,8 @@ if (!$isAjax) {
         if (currentPage < totalPages) loadHistory(currentPage + 1);
     });
 
-    // 页面加载时自动加载
-    window.dashboardPageInit = () => loadHistory(1);
+    // 页面加载时自动加载，将 Promise 存入全局变量供 layout.php 等待
+    window.dashboardPageInit = () => {
+        window.__pageLoadPromise = loadHistory(1);
+    };
 </script>

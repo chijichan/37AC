@@ -479,6 +479,9 @@ if (!$isAjax) {
     // 添加节点按钮
     document.getElementById('btn-add-node').addEventListener('click', showAddNodeModal);
 
-    // 页面加载时自动加载
-    window.dashboardPageInit = loadNodes;
+    // 页面加载时自动加载，将 Promise 存入全局变量供 layout.php 等待
+    // 与此同时，loadNodes 自身的加载指示器（"加载中…"文字）仍然保留作为回退
+    window.dashboardPageInit = function() {
+        window.__pageLoadPromise = loadNodes();
+    };
 </script>

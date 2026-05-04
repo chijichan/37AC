@@ -6,10 +6,10 @@ import os
 # SMTP 邮件配置（从环境变量读取，用于密码重置等邮件发送）
 # 如果未配置，重置链接将直接返回给前端（仅开发/调试模式）
 SMTP_CONFIG = {
-    "host": os.environ.get("SMTP_HOST", "smtp.163.com"),          # SMTP 服务器地址，如 smtp.qq.com
+    "host": os.environ.get("SMTP_HOST", "smtp.322337.xyz"),          # SMTP 服务器地址，如 smtp.qq.com
     "port": int(os.environ.get("SMTP_PORT", "465")),  # SMTP 端口，465(SSL) 或 587(TLS)
-    "user": os.environ.get("SMTP_USER", "xhbbs123@163.com"),          # 发送邮箱地址
-    "password": os.environ.get("SMTP_PASSWORD", "JCvNtQD4nP6RrEWY"),  # 邮箱授权码/密码
+    "user": os.environ.get("SMTP_USER", "admin@mail.322337.xyz"),          # 发送邮箱地址
+    "password": os.environ.get("SMTP_PASSWORD", "123456"),  # 邮箱授权码/密码
     "use_tls": os.environ.get("SMTP_USE_TLS", "0") == "1",  # 是否使用 TLS（否则使用 SSL）
     "from_name": os.environ.get("SMTP_FROM_NAME", "37AC 系统"),  # 发件人显示名称
 }

@@ -27,6 +27,9 @@ certifi==2026.2.25
 idna==3.11
 charset-normalizer==3.4.7
 
+# 环境变量加载
+python-dotenv==1.1.0
+
 # 工具库
 tqdm==4.67.3
 colorama==0.4.6

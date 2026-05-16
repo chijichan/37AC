@@ -9,11 +9,33 @@ ini_set('display_errors', 1);
 
 define('ROOT_PATH', dirname(__DIR__));
 
+// 加载 .env 环境变量文件
+$envFile = ROOT_PATH . '/.env';
+if (file_exists($envFile)) {
+    $lines = file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+    foreach ($lines as $line) {
+        $line = trim($line);
+        // 跳过注释行
+        if (strpos($line, '#') === 0) {
+            continue;
+        }
+        if (strpos($line, '=') !== false) {
+            list($key, $value) = explode('=', $line, 2);
+            $key = trim($key);
+            $value = trim($value);
+            if (!empty($key)) {
+                putenv("$key=$value");
+                $_ENV[$key] = $value;
+            }
+        }
+    }
+}
+
 require_once ROOT_PATH . '/router.php';
 require_once ROOT_PATH . '/controllers/controller.php';
 
-// 后端 API 基础 URL（Flask 服务地址）
-define('API_BASE_URL', 'http://127.0.0.1:13138');
+// 后端 API 基础 URL（从环境变量读取，优先从 .env 加载）
+define('API_BASE_URL', getenv('API_BASE_URL') ?: 'http://127.0.0.1:13138');
 
 spl_autoload_register(function ($class) {
     $file = ROOT_PATH . '/controllers/' . $class . '.php';

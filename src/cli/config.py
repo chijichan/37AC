@@ -3,38 +3,46 @@
 import os
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+# 加载 .env 文件
+load_dotenv(Path(__file__).resolve().parent / ".env")
+
 ROOT_PATH = Path(__file__).resolve().parent
 
-AUTO_DEVICE = True
+# 设备配置（从环境变量读取）
+AUTO_DEVICE = os.getenv("AUTO_DEVICE", "True").lower() == "true"
 DEVICE = None
 
-# 训练相关配置
-# DATASET_DIR = Path("E:/pj/TAC_dataset/processed")
-DATASET_DIR = Path("W:/Img")
+# 训练相关配置（从环境变量读取）
+DATASET_DIR = Path(os.getenv("DATASET_DIR", "W:/Img"))
 
 MODEL_SAVE_PATH = ROOT_PATH / "saves" / "models" / "character_resnet18.pth"  # 模型
 CLASSES_TXT_PATH = ROOT_PATH / "saves" / "models" / "classes.txt"  # 类别名
 
-NUM_EPOCHS = 50
-BATCH_SIZE = 16  # 16
-IMAGE_SIZE = 224  # 224
-LEARNING_RATE = 1e-4
+NUM_EPOCHS = int(os.getenv("NUM_EPOCHS", "50"))
+BATCH_SIZE = int(os.getenv("BATCH_SIZE", "16"))
+IMAGE_SIZE = int(os.getenv("IMAGE_SIZE", "224"))
+LEARNING_RATE = float(os.getenv("LEARNING_RATE", "1e-4"))
 
 # 预测相关配置
 MODEL_LOAD_PATH = ROOT_PATH / "saves" / "models" / "character_resnet18.pth"  # 模型文件
 
-# 节点服务配置
-# TCP_HOST = "154.9.253.170"                    # 服务端TCP监听地址
-TCP_HOST = "127.0.0.1"
-TCP_PORT = 13137  # 服务端TCP监听端口
-LOCAL_PORT = None  # 本地服务监听端口 默认随机
-NODE_ID = 1  # 节点ID
-TOKEN = "a1ce075a-1ddb-430f-912c-747cc90d28fb"  # 节点认证Token
-HEARTBEAT_INTERVAL_SEC = 15  # 心跳发送间隔（与线程一致）
-HEARTBEAT_RESPONSE_TIMEOUT_SEC = 30  # 超过该时间未收到 heartbeat_ack 则认为超时
-HEARTBEAT_MISS_LIMIT = 3  # 允许连续丢失 heartbeat_ack 的最大次数
-RECONNECT_DELAY_SEC = 10  # 重连前等待时间（秒）
-MAX_TASKS = 5  # 节点最大任务处理数
+# 节点服务配置（从环境变量读取）
+TCP_HOST = os.getenv("TCP_HOST", "127.0.0.1")
+TCP_PORT = int(os.getenv("TCP_PORT", "13137"))
+LOCAL_PORT = os.getenv("LOCAL_PORT")
+if LOCAL_PORT:
+    LOCAL_PORT = int(LOCAL_PORT)
+else:
+    LOCAL_PORT = None  # 默认随机
+NODE_ID = int(os.getenv("NODE_ID", "1"))
+TOKEN = os.getenv("TOKEN")  # 节点认证Token
+HEARTBEAT_INTERVAL_SEC = int(os.getenv("HEARTBEAT_INTERVAL_SEC", "15"))
+HEARTBEAT_RESPONSE_TIMEOUT_SEC = int(os.getenv("HEARTBEAT_RESPONSE_TIMEOUT_SEC", "30"))
+HEARTBEAT_MISS_LIMIT = int(os.getenv("HEARTBEAT_MISS_LIMIT", "3"))
+RECONNECT_DELAY_SEC = int(os.getenv("RECONNECT_DELAY_SEC", "10"))
+MAX_TASKS = int(os.getenv("MAX_TASKS", "5"))
 
 # 暂存
 IMAGE_PATH = ROOT_PATH / "saves" / "uploads"

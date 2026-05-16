@@ -1,9 +1,9 @@
 # utils/validation_utils.py
 import os
 from .image_utils import validate_image_file
-import logging
+from config.log_config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def validate_dataset_images(dataset_dir: str) -> tuple:

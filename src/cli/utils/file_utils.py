@@ -1,9 +1,9 @@
 # utils/file_utils.py
 import os
 import hashlib
-import logging
+from config.log_config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def calculate_file_hash(
@@ -66,8 +66,6 @@ def load_classes_from_file(file_path: str) -> list:
 def save_classes_to_file(file_path: str, class_names: list) -> bool:
     """保存类别列表到文件"""
     try:
-        # from config import CLASSES_TXT_PATH
-
         ensure_directory_exists(os.path.dirname(file_path))
         with open(file_path, "w", encoding="utf-8") as f:
             for name in class_names:

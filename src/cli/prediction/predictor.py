@@ -7,10 +7,10 @@ import os
 from utils.image_utils import validate_image_file
 from utils.file_utils import load_classes_from_file, check_model_file
 from models.character_model import CharacterRecognitionModel
-from config import *
-import logging
+from config.base import *
+from config.log_config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # 数据预处理
 PREDICT_TRANSFORMS = transforms.Compose(

@@ -2,7 +2,7 @@
 import torch
 import torch.nn as nn
 from torchvision.models import resnet18
-from config import *
+from config.base import *
 
 
 class CharacterRecognitionModel:

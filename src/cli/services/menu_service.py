@@ -4,14 +4,14 @@ import sys
 import argparse
 from utils.validation_utils import validate_dataset_images
 from utils.image_utils import validate_image_file
-import logging
+from config.log_config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def verify_images_function():
     """单独的图像文件验证功能"""
-    from config import DATASET_DIR
+    from config.base import DATASET_DIR
 
     # 检查数据集目录
     if not os.path.exists(DATASET_DIR):

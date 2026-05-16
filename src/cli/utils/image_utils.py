@@ -1,10 +1,9 @@
 # utils/image_utils.py
 import warnings
 from PIL import Image
-import logging
+from config.log_config import get_logger
 
-logger = logging.getLogger(__name__)
-
+logger = get_logger(__name__)
 
 def validate_image_file(file_path: str) -> bool:
     """

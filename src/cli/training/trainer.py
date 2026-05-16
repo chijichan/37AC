@@ -8,10 +8,10 @@ from torchvision import transforms
 from data.dataset import IPRoleImageFolder
 from models.character_model import CharacterRecognitionModel
 from utils.file_utils import save_classes_to_file
-from config import *
-import logging
+from config.base import *
+from config.log_config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # 数据预处理
 TRAIN_TRANSFORMS = transforms.Compose(

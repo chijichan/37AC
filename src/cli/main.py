@@ -1,16 +1,13 @@
 # main.py
 from PIL import Image, ImageFile
 import sys
-import logging
 import argparse
 
-# 设置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-    handlers=[logging.StreamHandler(sys.stdout)],
-)
-logger = logging.getLogger(__name__)
+from config.log_config import init_logging, get_logger
+
+# 初始化统一日志系统
+init_logging()
+logger = get_logger(__name__)
 
 # 允许PIL加载截断的图像文件，增强健壮性
 ImageFile.LOAD_TRUNCATED_IMAGES = True

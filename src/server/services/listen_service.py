@@ -1,4 +1,4 @@
-﻿# services/tcp_service.py
+# services/listen_service.py
 
 import os
 import socket
@@ -17,7 +17,7 @@ from config.log_config import get_logger
 # =============================================
 # 日志配置 - 使用统一日志系统
 # =============================================
-logger = get_logger("tcp_service")
+logger = get_logger("listen_service")
 
 
 # 异步处理器

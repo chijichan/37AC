@@ -32,9 +32,9 @@ class IPRoleImageFolder(datasets.ImageFolder):
                 class_names.append(class_name)
                 class_to_idx[class_name] = len(class_to_idx)
 
-        from config import DATASET_DIR
-        import logging
+        from config.base import DATASET_DIR
+        from config.log_config import get_logger
 
-        logger = logging.getLogger(__name__)
+        logger = get_logger(__name__)
         logger.info(f"自动生成 {len(class_names)} 个类别（格式: IP/角色）")
         return class_names, class_to_idx

@@ -6,9 +6,9 @@ import json
 import time
 import os
 import struct
-import logging
 from prediction.predictor import predict_image
-from config import (
+from config.log_config import get_logger
+from config.base import (
     LOCAL_PORT,
     TCP_HOST,
     TCP_PORT,
@@ -22,7 +22,7 @@ from config import (
     IMAGE_PATH,
 )
 
-logger = logging.getLogger("node_service")
+logger = get_logger("node_service")
 
 
 class JsonProtocol:

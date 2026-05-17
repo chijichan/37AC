@@ -44,11 +44,8 @@ LOGS_PATH = ROOT_PATH / "saves" / "logs"
 LOGS_PATH.mkdir(exist_ok=True)
 monitor_counter = 0
 
-# JWT 配置（从环境变量读取）
-JWT_SECRET = os.getenv(
-    "JWT_SECRET",
-    "37AC-JWT-Secret-Key-2024-With-Extra-Length-For-SHA256"
-)
+# JWT 配置（从环境变量读取，不提供硬编码默认值）
+JWT_SECRET = os.getenv("JWT_SECRET")
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 JWT_ACCESS_TOKEN_EXPIRES = int(os.getenv("JWT_ACCESS_TOKEN_EXPIRES", "3600"))
 JWT_REFRESH_TOKEN_EXPIRES = int(os.getenv("JWT_REFRESH_TOKEN_EXPIRES", "2592000"))

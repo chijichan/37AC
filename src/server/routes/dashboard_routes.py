@@ -3,12 +3,16 @@
 
 from datetime import datetime
 from flask import jsonify, Blueprint, request, g
-from services.dashboard_service import (
+from services.dashboard import (
     get_dashboard_stats,
     get_recent_tasks,
     get_overview_data,
-    _get_all_nodes_from_db,
+)
+from services.dashboard.node_service import (
+    get_all_nodes_from_db,
     get_user_nodes_from_db,
+)
+from services.dashboard.task_service import (
     get_user_tasks_from_db,
 )
 from middleware.auth_middleware import login_required
@@ -48,7 +52,7 @@ def api_dashboard_stats():
 @dashboard_bp.route("/dashboard/nodes", methods=["GET"])
 def api_dashboard_nodes():
     try:
-        nodes = _get_all_nodes_from_db()
+        nodes = get_all_nodes_from_db()
 
         return jsonify(
             {

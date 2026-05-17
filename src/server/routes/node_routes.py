@@ -4,8 +4,8 @@
 from datetime import datetime
 from flask import render_template, request, flash, jsonify, Blueprint
 from middleware.auth_middleware import login_required
-from services.dashboard_service import create_node
-from services.listen_service import node_manager
+from services.dashboard.node_service import create_node
+from services.node_manager import node_manager
 
 node_bp = Blueprint("node", __name__)
 

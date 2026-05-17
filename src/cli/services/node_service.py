@@ -171,22 +171,8 @@ json_protocol = JsonProtocol()
 
 # === TCP 客户端主逻辑 ===
 def start_node_service():
-    # ===========================
-    # === 配置参数 ===
-    # ===========================
-    # TCP_HOST = "154.9.253.170"  # 请根据实际情况设置或从环境变量获取
-    # TCP_PORT = 13137  # 请根据实际情况设置或从环境变量获取
-    # NODE_ID = 1  # 请根据实际情况设置
-    # TOKEN = "a1ce075a-1ddb-430f-912c-747cc90d28fb"  # 请根据实际情况设置
-
-    # # ===========================
-    # # === 心跳超时与重连控制参数 ===
-    # # ===========================
-    # HEARTBEAT_INTERVAL_SEC = 10  # 心跳发送间隔（与线程一致）
-    # HEARTBEAT_RESPONSE_TIMEOUT_SEC = 30  # 超过该时间未收到 heartbeat_ack 则认为超时
-    # HEARTBEAT_MISS_LIMIT = 3  # 允许连续丢失 heartbeat_ack 的最大次数
-    # RECONNECT_DELAY_SEC = 10  # 重连前等待时间（秒）
-    # to config.py
+    # 配置参数已移至 config/base.py，通过 .env 文件加载
+    # 请勿在此处硬编码任何敏感数据
 
     # === 全局变量（在函数内使用）===
     s = None

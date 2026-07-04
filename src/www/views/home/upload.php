@@ -523,7 +523,9 @@ require_once ROOT_PATH . '/views/layout.php';
 </style>
 
 <script type="module">
-    import { removeBackground } from 'https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.7.0/+esm';
+    import {
+        removeBackground
+    } from 'https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.7.0/+esm';
 
     class AnimeDetector {
         constructor() {
@@ -872,57 +874,75 @@ require_once ROOT_PATH . '/views/layout.php';
 
             const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
             const data = imageData.data;
-            const w = canvas.width, h = canvas.height;
+            const w = canvas.width,
+                h = canvas.height;
 
             // 1) 从四角采样，自动检测主背景色
             const corners = [
-                [0,0], [w-2,0], [0,h-2], [w-2,h-2],
-                [Math.floor(w/4),0], [Math.floor(w*3/4),0],
-                [0,Math.floor(h/4)], [w-2,Math.floor(h/4)],
+                [0, 0],
+                [w - 2, 0],
+                [0, h - 2],
+                [w - 2, h - 2],
+                [Math.floor(w / 4), 0],
+                [Math.floor(w * 3 / 4), 0],
+                [0, Math.floor(h / 4)],
+                [w - 2, Math.floor(h / 4)],
             ];
-            let sumR=0, sumG=0, sumB=0, cnt=0;
-            for (const [cx,cy] of corners) {
-                const idx = (cy*w + cx) * 4;
-                sumR += data[idx]; sumG += data[idx+1]; sumB += data[idx+2]; cnt++;
+            let sumR = 0,
+                sumG = 0,
+                sumB = 0,
+                cnt = 0;
+            for (const [cx, cy] of corners) {
+                const idx = (cy * w + cx) * 4;
+                sumR += data[idx];
+                sumG += data[idx + 1];
+                sumB += data[idx + 2];
+                cnt++;
             }
-            const bgR = Math.round(sumR/cnt), bgG = Math.round(sumG/cnt), bgB = Math.round(sumB/cnt);
+            const bgR = Math.round(sumR / cnt),
+                bgG = Math.round(sumG / cnt),
+                bgB = Math.round(sumB / cnt);
 
             // 2) 动态阈值：背景色方差越大阈值越宽松
-            let varR=0, varG=0, varB=0;
-            for (const [cx,cy] of corners) {
-                const idx = (cy*w + cx) * 4;
-                varR += (data[idx]-bgR)**2; varG += (data[idx+1]-bgG)**2; varB += (data[idx+2]-bgB)**2;
+            let varR = 0,
+                varG = 0,
+                varB = 0;
+            for (const [cx, cy] of corners) {
+                const idx = (cy * w + cx) * 4;
+                varR += (data[idx] - bgR) ** 2;
+                varG += (data[idx + 1] - bgG) ** 2;
+                varB += (data[idx + 2] - bgB) ** 2;
             }
-            const threshold = Math.max(25, Math.min(80, Math.round(Math.sqrt((varR+varG+varB)/(cnt*3)) * 1.5)));
+            const threshold = Math.max(25, Math.min(80, Math.round(Math.sqrt((varR + varG + varB) / (cnt * 3)) * 1.5)));
 
             // 3) 第一遍：标记透明像素
             const alpha = new Uint8Array(w * h);
             for (let i = 0; i < data.length; i += 4) {
-                if (Math.abs(data[i]-bgR) < threshold &&
-                    Math.abs(data[i+1]-bgG) < threshold &&
-                    Math.abs(data[i+2]-bgB) < threshold) {
-                    data[i+3] = 0;
-                    alpha[i>>2] = 0;
+                if (Math.abs(data[i] - bgR) < threshold &&
+                    Math.abs(data[i + 1] - bgG) < threshold &&
+                    Math.abs(data[i + 2] - bgB) < threshold) {
+                    data[i + 3] = 0;
+                    alpha[i >> 2] = 0;
                 } else {
-                    alpha[i>>2] = 255;
+                    alpha[i >> 2] = 255;
                 }
             }
 
             // 4) 第二遍：边缘柔化（对透明/不透明边界做 3x3 alpha 渐变）
             const softData = new Uint8ClampedArray(data);
-            for (let y = 1; y < h-1; y++) {
-                for (let x = 1; x < w-1; x++) {
-                    const idx = (y*w + x);
+            for (let y = 1; y < h - 1; y++) {
+                for (let x = 1; x < w - 1; x++) {
+                    const idx = (y * w + x);
                     if (alpha[idx] === 255) continue; // 完全不透明，跳过
                     // 统计周围不透明像素数
                     let opaque = 0;
-                    for (let dy=-1; dy<=1; dy++)
-                        for (let dx=-1; dx<=1; dx++)
-                            opaque += (alpha[(y+dy)*w + (x+dx)] === 255) ? 1 : 0;
+                    for (let dy = -1; dy <= 1; dy++)
+                        for (let dx = -1; dx <= 1; dx++)
+                            opaque += (alpha[(y + dy) * w + (x + dx)] === 255) ? 1 : 0;
                     // 边缘像素：按周围不透明度比例保留
                     const p = (idx) * 4;
                     if (opaque >= 2 && opaque <= 6) {
-                        softData[p+3] = Math.round(255 * opaque / 9);
+                        softData[p + 3] = Math.round(255 * opaque / 9);
                     }
                 }
             }
@@ -951,7 +971,10 @@ require_once ROOT_PATH . '/views/layout.php';
                 publicPath: 'https://static.322337.xyz/file/package/dist/',
                 device: 'gpu',
                 model: 'small',
-                output: { format: 'image/png', quality: 0.8 },
+                output: {
+                    format: 'image/png',
+                    quality: 0.8
+                },
                 progress: (key, current, total) => {
                     const progress = (current / total) * 100;
                     this.elements.progressBar.style.width = `${progress}%`;

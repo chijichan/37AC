@@ -8,7 +8,7 @@ import os
 import struct
 import errno
 import base64
-from prediction.predictor import predict_image
+from prediction.predictor import predict_image, predict_image_llm
 from config.log_config import get_logger
 from config.base import (
     LOCAL_PORT,
@@ -22,6 +22,8 @@ from config.base import (
     RECONNECT_DELAY_SEC,
     MAX_TASKS,
     IMAGE_PATH,
+    LLM_RECOGNITION_ENABLED,
+    LLM_TIMEOUT_SEC,
 )
 
 logger = get_logger("node_service")
@@ -32,7 +34,8 @@ class JsonProtocol:
 
     def __init__(self):
         self.send_header = "node"
-        self.expected_headers = ["server", "user"]  # 在初始化时设置默认值
+        self.expected_headers = ["server"]  # 只期待服务端发来的 "server@" 标记
+        self._recv_buffer = b""  # 保存 recv 未消费完的溢出数据
 
     def send_json(self, sock, msg_dict):
         """发送一条 JSON 消息到 socket"""
@@ -85,16 +88,22 @@ class JsonProtocol:
                 f"[recv_json] 接收 JSON 失败 (期望标记: {self.expected_headers}): {e}"
             )
             return None
+        # socket.timeout 不在此处捕获，由主循环 except socket.timeout 统一处理（不计入 None 计数）
 
     def _find_message_marker(self, sock):
-        """查找消息标记"""
+        """查找消息标记（带最大迭代保护，防止垃圾数据导致无限循环）"""
         expected_markers = [
             f"{header}@".encode("utf-8") for header in self.expected_headers
         ]
-        buffer = b""
+        # 从余留缓冲区开始，避免上次未消费完的数据丢失
+        buffer = self._recv_buffer
+        self._recv_buffer = b""
         max_marker_len = max(len(marker) for marker in expected_markers)
+        max_iterations = 50  # 防止垃圾数据导致无限循环
+        iterations = 0
 
-        while True:
+        while iterations < max_iterations:
+            iterations += 1
             chunk = sock.recv(1024)
             if not chunk:
                 return None, None, None
@@ -111,10 +120,15 @@ class JsonProtocol:
 
             # 检查缓冲区是否过大
             if len(buffer) > max_marker_len * 2:
-                logger.warning(
+                logger.debug(
                     f"[recv_json] 未找到期望标记 {self.expected_headers}，清空缓冲区重新搜索"
                 )
                 buffer = b""
+
+        logger.warning(
+            f"[recv_json] 连续 {max_iterations} 次未找到期望标记 {self.expected_headers}，放弃并返回 None"
+        )
+        return None, None, None
 
     def _parse_content_length(self, marker, buffer):
         """解析内容长度"""
@@ -147,7 +161,7 @@ class JsonProtocol:
         return content_length, content_start
 
     def _receive_full_content(self, sock, buffer, content_start, content_length):
-        """接收完整内容"""
+        """接收完整内容，余留数据存入 _recv_buffer 供下次使用"""
         data = buffer[content_start:]
 
         while len(data) < content_length:
@@ -157,6 +171,8 @@ class JsonProtocol:
                 raise ConnectionError("连接中断，未能接收完整 JSON 数据")
             data += part
 
+        # 保存本次未消费完的溢出数据，防止丢失后续消息头
+        self._recv_buffer = data[content_length:]
         return data[:content_length]
 
     def _decode_json(self, data, found_header):
@@ -169,6 +185,10 @@ class JsonProtocol:
 
 # 全局 JSON 协议实例
 json_protocol = JsonProtocol()
+
+# 全局任务数据字典和锁，用于异步处理LLM任务
+task_data = {}
+task_data_lock = threading.Lock()
 
 
 # === TCP 客户端主逻辑 ===
@@ -184,6 +204,8 @@ def start_node_service():
     connection_alive = True  # 连接状态标志
     reconnect_attempts = 0
     tasks = []
+    pending_llm_tasks = {}  # task_id -> {store, local_image_path, effective_type, start_time}
+    consecutive_none_count = 0  # recv_json 连续返回 None 的计数，超过阈值触发重连
 
     def _safe_close(sock):
         """安全关闭 socket：SO_LINGER 立即中止 + shutdown，静默处理所有错误。
@@ -262,11 +284,12 @@ def start_node_service():
             logger.info(f"[节点] 已连接到服务器 {TCP_HOST}:{TCP_PORT}")
 
             # 重置状态
-            nonlocal heartbeat_missed_count, last_heartbeat_send_time, last_heartbeat_response_time
+            nonlocal heartbeat_missed_count, last_heartbeat_send_time, last_heartbeat_response_time, consecutive_none_count
             heartbeat_missed_count = 0
             last_heartbeat_send_time = 0
             last_heartbeat_response_time = 0
             reconnect_attempts = 0
+            consecutive_none_count = 0
 
             # 注册节点
             register_msg = {
@@ -329,6 +352,36 @@ def start_node_service():
 
         # === 主接收循环 ====
         while connection_alive and s:
+            # === 检查已完成的 LLM 任务（非阻塞） ===
+            for tid in list(pending_llm_tasks.keys()):
+                info = pending_llm_tasks[tid]
+                elapsed = time.time() - info["start_time"]
+                if "value" in info["store"] or elapsed >= LLM_TIMEOUT_SEC:
+                    if "value" in info["store"]:
+                        result = info["store"]["value"]
+                    else:
+                        logger.warning("[节点] LLM 任务 %s 等待超时 (%ds)", tid, LLM_TIMEOUT_SEC)
+                        result = {"success": False, "label": "", "confidence": 0.0, "class_probs": [], "error": f"LLM inference timeout after {LLM_TIMEOUT_SEC} seconds"}
+                    result["recognition_type"] = info["effective_type"]
+
+                    response_msg = {
+                        "type": "task_result",
+                        "timestamp": int(time.time()),
+                        "data": {
+                            "node_id": NODE_ID,
+                            "task_id": tid,
+                            "result": result,
+                            "processed_image_path": info["local_image_path"],
+                        },
+                    }
+                    try:
+                        json_protocol.send_json(s, response_msg)
+                        logger.info("[节点] 已返回 LLM 任务 %s 的推理结果", tid)
+                    except Exception as send_err:
+                        logger.error("[节点] 发送 LLM 任务结果失败: %s", send_err)
+                    tasks.remove(tid)
+                    del pending_llm_tasks[tid]
+
             # === 心跳超时检测 ===
             current_time = time.time()
 
@@ -358,8 +411,18 @@ def start_node_service():
                 s.settimeout(None)  # 恢复阻塞模式
 
                 if msg is None:
-                    # 检查是否因为超时导致的None，如果是则继续循环
+                    # 连续 None 累计，超过阈值则标记连接失效以触发重连
+                    consecutive_none_count += 1
+                    if consecutive_none_count >= 10:
+                        logger.warning(
+                            f"[节点] recv_json 连续返回 None {consecutive_none_count} 次，判定连接异常，触发重连"
+                        )
+                        connection_alive = False
+                        break
                     continue
+
+                # 成功收到消息，重置连续 None 计数
+                consecutive_none_count = 0
 
                 msg_type = msg.get("type")
                 msg_data = msg.get("data", {})
@@ -393,6 +456,8 @@ def start_node_service():
                         image_size = msg_data.get("image_size")
                         image_data_b64 = msg_data.get("image_data")
                         timestamp = msg_data.get("timestamp")
+                        # 识别方式类型：local / llm / auto，默认 local
+                        recognition_type = msg_data.get("recognition_type", "local")
 
                         if not all([task_id, image_filename, image_data_b64]):
                             logger.warning("[节点] 任务数据不完整")
@@ -400,6 +465,7 @@ def start_node_service():
 
                         logger.info(
                             f"[节点] 收到带图片任务: {task_id}, 文件名: {image_filename}, "
+                            f"识别方式: {recognition_type}, "
                             f"大小: {image_size} 字节, 时间戳: {timestamp}"
                         )
 
@@ -424,8 +490,42 @@ def start_node_service():
                                 f.write(image_bytes)
                             logger.info(f"[节点] 图片已保存到: {local_image_path}")
 
-                            # 推理
-                            result = predict_image(local_image_path)
+                            # 根据 recognition_type 选择推理方式
+                            # 优先使用节点配置的环境变量开关，兼容服务端指定类型
+                            effective_type = recognition_type
+                            if recognition_type == "auto":
+                                effective_type = "llm" if LLM_RECOGNITION_ENABLED else "local"
+                            elif recognition_type == "llm" and not LLM_RECOGNITION_ENABLED:
+                                logger.warning(
+                                    f"[节点] 任务要求 LLM 识别但节点未启用，回退到本地模型"
+                                )
+                                effective_type = "local"
+
+                            logger.info(f"[节点] 推理方式: {effective_type}")
+                            if effective_type == "llm":
+                                store = {}
+                                def _run_llm():
+                                    try:
+                                        store["value"] = predict_image_llm(local_image_path)
+                                    except Exception as exc:
+                                        logger.error("[节点] LLM inference failed: %s", exc, exc_info=True)
+                                        store["value"] = {"success": False, "label": "", "confidence": 0.0, "class_probs": [], "error": f"LLM inference failed: {exc}"}
+
+                                threading.Thread(target=_run_llm, daemon=True).start()
+                                pending_llm_tasks[task_id] = {
+                                    "store": store,
+                                    "local_image_path": local_image_path,
+                                    "effective_type": effective_type,
+                                    "start_time": time.time(),
+                                }
+                                logger.info("[节点] LLM 任务 %s 已提交到后台，主循环继续监听", task_id)
+                                # 不阻塞主循环，由 pending_llm_tasks 检查处理结果
+                                continue
+                            else:
+                                result = predict_image(local_image_path)
+
+                            # 在结果中标明识别方式
+                            result["recognition_type"] = effective_type
 
                             # 返回结果
                             response_msg = {
@@ -498,7 +598,7 @@ def start_node_service():
                 pass
             s = None
 
-        # 修改5：增加重连延迟和最大尝试次数
+        # 增加重连延迟和最大尝试次数
         reconnect_attempts += 1
         if reconnect_attempts > 5:  # 最多尝试5次
             logger.error("[节点] 重连尝试次数过多，退出程序")
@@ -509,30 +609,11 @@ def start_node_service():
         heartbeat_missed_count = 0
         last_heartbeat_send_time = 0
         last_heartbeat_response_time = 0
+        consecutive_none_count = 0
+        pending_llm_tasks.clear()  # 清空未完成的 LLM 任务
 
-        # === 连接异常或心跳超时，断开并尝试重连 ===
-        logger.info("[节点] 当前连接异常或心跳超时，尝试重新连接...")
-        if s:
-            try:
-                _safe_close(s)
-            except Exception:
-                pass
-        s = None
-
-        while True:
-            try:
-                logger.info("[节点] 尝试重新连接服务器...")
-                if connect_and_register():
-                    logger.info("[节点] 重连成功，继续运行...")
-                    break  # 跳出重连循环，外层 while True 将重启主循环
-                else:
-                    logger.warning(
-                        f"[节点] 重连失败，{RECONNECT_DELAY_SEC} 秒后重试..."
-                    )
-                    time.sleep(RECONNECT_DELAY_SEC)
-            except Exception as e:
-                logger.error(f"[节点] 重连异常: {e}，{RECONNECT_DELAY_SEC} 秒后重试...")
-                time.sleep(RECONNECT_DELAY_SEC)
+        # 外层 while True 会自动调用 connect_and_register() 重新连接
+        # 无需在此处再次调用，避免重复连接
 
 
 # # ======================

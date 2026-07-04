@@ -4,6 +4,8 @@ import torch.nn as nn
 from torchvision import transforms
 from PIL import Image
 import os
+import json
+import re
 from utils.image_utils import validate_image_file
 from utils.file_utils import load_classes_from_file, check_model_file
 from models.character_model import CharacterRecognitionModel
@@ -270,3 +272,207 @@ def quick_predict(image_path):
         return result["label"], result["confidence"]
     else:
         return None, None
+
+
+# ======================
+# 第三方大模型（LLM）识别
+# ======================
+
+def predict_image_llm(image_path: str) -> dict:
+    """通过第三方多模态 API（如 DeepSeek、GPT-4V）识别图片角色。
+
+    Args:
+        image_path (str): 图片本地路径
+
+    Returns:
+        dict: 与 predict_image() 格式一致的识别结果
+    """
+    result = {
+        "success": False,
+        "label": "",
+        "confidence": 0.0,
+        "class_probs": [],
+        "image_path": image_path,
+        "error": None,
+        "recognition_type": "llm",
+    }
+
+    if not LLM_RECOGNITION_ENABLED:
+        result["error"] = "LLM 识别未启用（LLM_RECOGNITION_ENABLED=False）"
+        logger.warning("[LLM] %s", result["error"])
+        return result
+
+    if not LLM_API_KEY:
+        result["error"] = "LLM_API_KEY 未配置"
+        logger.error("[LLM] %s", result["error"])
+        return result
+
+    try:
+        import base64
+        import requests
+
+        # 读取图片并转为 Base64
+        with open(image_path, "rb") as f:
+            image_bytes = f.read()
+        image_b64 = base64.b64encode(image_bytes).decode("utf-8")
+
+        logger.info(
+            "[LLM] 请求 API: %s, 模型: %s, 图片: %s",
+            LLM_API_URL, LLM_MODEL_NAME, image_path
+        )
+
+        resp = requests.post(
+            LLM_API_URL,
+            headers={
+                "Authorization": f"Bearer {LLM_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": LLM_MODEL_NAME,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": LLM_PROMPT_TEMPLATE},
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/jpeg;base64,{image_b64}"
+                                },
+                            },
+                        ],
+                    }
+                ],
+                "max_tokens": 256,
+                "temperature": 0.1,
+            },
+            timeout=LLM_TIMEOUT_SEC,
+        )
+
+        if resp.status_code != 200:
+            result["error"] = f"API 返回错误 ({resp.status_code}): {resp.text[:200]}"
+            logger.error("[LLM] %s", result["error"])
+            return result
+
+        resp_data = resp.json()
+        # 解析响应并提取角色标签
+        label, confidence = _parse_llm_response(resp_data)
+        if not label or label.lower() == "unknown":
+            result["error"] = f"LLM 无法识别该角色: {label}"
+            logger.warning("[LLM] %s", result["error"])
+            return result
+
+        result.update(
+            {
+                "success": True,
+                "label": label,
+                "confidence": confidence,
+                "class_probs": [],
+            }
+        )
+        logger.info("[LLM] 识别成功: %s -> %s", image_path, label)
+        return result
+
+    except ImportError:
+        result["error"] = "缺少 requests 库，请执行: pip install requests"
+        logger.error("[LLM] %s", result["error"])
+        return result
+    except requests.Timeout:
+        result["error"] = f"API 请求超时 ({LLM_TIMEOUT_SEC}秒)"
+        logger.error("[LLM] %s", result["error"])
+        return result
+    except Exception as e:
+        result["error"] = f"LLM 识别异常: {str(e)}"
+        logger.error("[LLM] %s", result["error"], exc_info=True)
+        return result
+
+
+def _parse_llm_response(resp_data: dict) -> tuple:
+    """从 LLM API 响应中提取 (label, confidence)。
+
+    兼容普通模型（content）和推理模型（reasoning_content）。
+    """
+    try:
+        message = (resp_data.get("choices") or [{}])[0].get("message", {})
+        content = message.get("content")
+        reasoning = message.get("reasoning_content")
+
+        # 推理模型：content 可能为 None，从 reasoning_content 尾部截取结论
+        if content is None and reasoning:
+            text = str(reasoning).strip()
+            content = text[-200:] if len(text) > 200 else text
+            logger.info("[LLM] 使用 reasoning_content 作为识别内容")
+
+        if not content:
+            logger.error("[LLM] API 返回空内容: %s", resp_data)
+            return ("", 0.0)
+
+        content = str(content).strip()
+
+        # 优先从 JSON 中提取结构化结果
+        json_match = re.search(r'\{[^{}]*\}', content)
+        if json_match:
+            parsed = json.loads(json_match.group())
+            label = parsed.get("label", "").strip()
+            confidence = float(parsed.get("confidence", 95.0))
+        else:
+            # 降级：纯文本作为标签
+            label = content
+            confidence = 95.0
+
+        # 过滤非角色标签（安全审查、拒绝回答等）
+        if _is_invalid_label(label):
+            logger.warning("[LLM] 过滤无效标签: %s", label)
+            return ("", 0.0)
+
+        return label, confidence
+
+    except (KeyError, IndexError, ValueError, json.JSONDecodeError) as e:
+        logger.error("[LLM] 无法解析 API 响应: %s, 错误: %s", resp_data, e)
+        return ("", 0.0)
+
+
+def _is_invalid_label(label: str) -> bool:
+    """判断 LLM 输出的标签是否为有效的角色名称。"""
+    if not label:
+        return True
+    
+    # 角色名合理长度：最长的一般不超过 30 个字符（如 "崩坏：星穹铁道/银狼"）
+    if len(label) > 50:
+        return True
+
+    lower = label.lower()
+
+    # 安全审查关键词
+    safety_keywords = ["user safety", "safe", "unsafe", "content safety", "nsfw"]
+    for kw in safety_keywords:
+        if kw in lower:
+            return True
+
+    # 拒绝回答模式
+    refuse_keywords = ["sorry", "apologize", "cannot", "can't", "unable", "not able",
+                       "i'm sorry", "i am sorry", "拒绝", "无法"]
+    for kw in refuse_keywords:
+        if kw in lower:
+            return True
+
+    # 中文描述性开头（非角色名句式）
+    desc_patterns = [r'^图中', r'^图片中', r'^这张', r'^该角色', r'^这是', r'^这位',
+                     r'^画面', r'^这幅', r'^从画', r'^角色是', r'^根据']
+    for p in desc_patterns:
+        if re.search(p, label):
+            return True
+
+    # 中文句子特征：句号、感叹号、问号、冒号、破折号等表明这是一段描述而非角色名
+    sentence_markers = ['。', '！', '？', '：', '——', '～', '~', '…', '●']
+    for m in sentence_markers:
+        if m in label:
+            return True
+
+    # 长度异常：不超过 50 字符的角色名中出现这些标志
+    url_patterns = ['http', 'www.', '.com', '.org', '.cn', '萌娘百科', '维基']
+    for u in url_patterns:
+        if u in lower:
+            return True
+
+    return False

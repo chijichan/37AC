@@ -16,6 +16,7 @@ class JsonProtocol:
     def __init__(self):
         self.send_header = "server"
         self.expected_headers = ["node"]
+        self._recv_buffer = b""
 
     def send_json(self, sock, msg_dict):
         """发送一条 JSON 消息到 socket"""
@@ -60,10 +61,15 @@ class JsonProtocol:
     def _find_message_marker(self, sock):
         """查找消息标记"""
         expected_markers = [f"{header}@".encode("utf-8") for header in self.expected_headers]
-        buffer = b""
+        # 从余留缓冲区开始，避免上次未消费完的数据丢失
+        buffer = self._recv_buffer
+        self._recv_buffer = b""
         max_marker_len = max(len(marker) for marker in expected_markers)
+        max_iterations = 50
+        iterations = 0
 
-        while True:
+        while iterations < max_iterations:
+            iterations += 1
             chunk = sock.recv(1024)
             if not chunk:
                 return None, None, None
@@ -80,6 +86,9 @@ class JsonProtocol:
             if len(buffer) > max_marker_len * 2:
                 logger.warning("未找到期望标记 %s，清空缓冲区重新搜索", self.expected_headers)
                 buffer = b""
+
+        logger.warning("连续 %s 次未找到期望标记 %s，放弃", max_iterations, self.expected_headers)
+        return None, None, None
 
     def _parse_content_length(self, marker, buffer):
         """解析内容长度"""
@@ -106,7 +115,7 @@ class JsonProtocol:
         return content_length, content_start
 
     def _receive_full_content(self, sock, buffer, content_start, content_length):
-        """接收完整内容"""
+        """接收完整内容，余留数据存入 _recv_buffer 供下次使用"""
         data = buffer[content_start:]
 
         while len(data) < content_length:
@@ -116,6 +125,8 @@ class JsonProtocol:
                 raise ConnectionError("连接中断，未能接收完整 JSON 数据")
             data += part
 
+        # 保存本次未消费完的溢出数据
+        self._recv_buffer = data[content_length:]
         return data[:content_length]
 
     def _decode_json(self, data, found_header):

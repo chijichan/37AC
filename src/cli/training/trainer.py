@@ -104,15 +104,15 @@ def train_model():
 
             if epoch_acc > best_accuracy:
                 best_accuracy = epoch_acc
-                model_handler.save_model(MODEL_SAVE_PATH)
+                model_handler.save_model(MODEL_PATH)
                 logger.info(
-                    f"保存最佳模型 (准确率: {best_accuracy:.2f}%) 到: {str(MODEL_SAVE_PATH)}"
+                    f"保存最佳模型 (准确率: {best_accuracy:.2f}%) 到: {str(MODEL_PATH)}"
                 )
                 save_classes_to_file(CLASSES_TXT_PATH, class_names)  # 保存类别名称
 
         # 训练完成，输出最终模型
         logger.info(
-            f"模型保存完成 (准确率: {best_accuracy:.2f}%) 到: {str(MODEL_SAVE_PATH)}"
+            f"模型保存完成 (准确率: {best_accuracy:.2f}%) 到: {str(MODEL_PATH)}"
         )
         logger.info(f"类别名称已保存到: {str(CLASSES_TXT_PATH)}")
 

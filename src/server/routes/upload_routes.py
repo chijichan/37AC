@@ -76,9 +76,15 @@ def upload_and_predict():
         # 生成任务ID
         task_id = str(uuid.uuid4())
 
+        # 从请求中获取识别方式（前端传入，默认 local）
+        recognition_type = request.form.get("recognition_type", "local")
+        if recognition_type not in ("local", "llm", "auto"):
+            recognition_type = "local"
+
         # 启动一个线程去分发任务（非阻塞）
         def dispatch():
-            result = dispatch_task(filepath, image_data, task_id)
+            result = dispatch_task(filepath, image_data, task_id,
+                                   recognition_type=recognition_type)
             print(f"[调度结果] 任务 {task_id}: {result}")
 
             # 保存 API Key 使用记录到 task_results
@@ -107,6 +113,7 @@ def upload_and_predict():
                     "status": "queued",
                     "message": "图片已上传，等待推理...",
                     "task_id": task_id,
+                    "recognition_type": recognition_type,
                 }
             )
 
@@ -178,17 +185,11 @@ def get_task_result(task_id):
 
 @upload_bp.route("/tasks/<task_id>/stream", methods=["GET"])
 def stream_task_result(task_id):
-    """SSE 实时流端点 — 节点返回结果后即时推送到前端。
-
-    前端用法（JavaScript）:
-        const es = new EventSource("/tasks/<task_id>/stream");
-        es.onmessage = (e) => { const data = JSON.parse(e.data); ... };
-        es.onerror = () => { es.close(); /* 可回退到轮询 /tasks/<task_id> */ };
-    """
+    """SSE 实时流端点 — 节点返回结果后即时推送到前端。"""
     def generate():
         q = sse_bus.subscribe(task_id)
         try:
-            # 先检查是否已有结果（竞态：结果在订阅前就已到达）
+            # 先检查是否已有结果
             conn = get_db_connection()
             if conn:
                 try:
@@ -199,13 +200,14 @@ def stream_task_result(task_id):
                         )
                         row = cursor.fetchone()
                     if row and row[1] and row[1] != "pending":
-                        result = json.loads(row[0]) if row[0] else []
-                        yield f"data: {json.dumps({'status': 'completed', 'message': '任务已完成', 'task_id': task_id, 'result': result}, ensure_ascii=False)}\n\n"
+                        result = json.loads(row[0]) if row[0] else {}
+                        error = result.get("error") if isinstance(result, dict) else None
+                        yield f"data: {json.dumps({'status': 'completed', 'message': '任务已完成', 'task_id': task_id, 'result': result, 'error': error}, ensure_ascii=False)}\n\n"
                         return
                 finally:
                     conn.close()
 
-            # 阻塞等待 SSE 事件（最长 60 秒）
+            # 阻塞等待 SSE 事件
             for event in sse_bus.iter_events(task_id, q, timeout=60):
                 yield event
         finally:

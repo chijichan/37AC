@@ -15,10 +15,20 @@ logger = get_logger("task_dispatcher")
 MAX_IMAGE_SIZE = 1024 * 1024 * 10
 
 
-def dispatch_task(image_path: str, image_data, task_id: str, register_pending: bool = True):
-    """
-    优先通过 TCP 将 image_file（图片二进制）发送给节点，
-    使用统一的 JSON 协议，避免粘包问题
+def dispatch_task(image_path: str, image_data, task_id: str,
+                  register_pending: bool = True,
+                  recognition_type: str = "local"):
+    """优先通过 TCP 将 image_file（图片二进制）发送给节点。
+
+    Args:
+        image_path: 图片服务器本地路径
+        image_data: 二进制或 file-like 对象
+        task_id: 唯一任务 ID
+        register_pending: 是否注册到任务管理器
+        recognition_type: 识别方式类型
+                          "local"  – 本地 ResNet 模型（默认）
+                          "llm"    – 第三方大模型 API（如 DeepSeek）
+                          "auto"   – 由节点根据自身配置自动选择
     """
     response = {
         "type": "dispatch_task",
@@ -70,14 +80,15 @@ def dispatch_task(image_path: str, image_data, task_id: str, register_pending: b
                 "image_filename": image_filename,
                 "image_size": len(image_bytes),
                 "image_data": image_base64,
+                "recognition_type": recognition_type,
             },
         }
 
         json_protocol.send_json(socket_obj, task_msg)
 
         logger.info(
-            "任务已发送: task_id=%s, 图片=%s, 大小=%s字节",
-            task_id, image_filename, len(image_bytes)
+            "任务已发送: task_id=%s, 图片=%s, 大小=%s字节, 识别方式=%s",
+            task_id, image_filename, len(image_bytes), recognition_type
         )
 
         node_manager.set_node_busy(node_id)
@@ -87,7 +98,7 @@ def dispatch_task(image_path: str, image_data, task_id: str, register_pending: b
         response["data"]["node_id"] = node_id
 
         if register_pending:
-            task_manager.register_task(task_id, image_path)
+            task_manager.register_task(task_id, image_path, recognition_type=recognition_type)
 
         return response
 

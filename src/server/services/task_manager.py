@@ -3,6 +3,7 @@
 import time
 import threading
 from config.log_config import get_logger
+from config.base import TASK_RETRY_INTERVAL_LOCAL, TASK_RETRY_INTERVAL_LLM, TASK_MAX_RETRIES
 
 logger = get_logger("TaskManager")
 
@@ -27,15 +28,20 @@ class TaskManager:
         self.pending_tasks = {}
         self.lock = threading.Lock()
         self.check_interval = 2
-        self.max_retries = 3
+        self.max_retries = TASK_MAX_RETRIES
         self._logger = get_logger("TaskManager")
         threading.Thread(target=self._monitor_loop, daemon=True).start()
 
-    def register_task(self, task_id, image_path, max_retries=None):
+    def _get_retry_interval(self, recognition_type):
+        """根据识别类型返回重试间隔（秒）"""
+        return TASK_RETRY_INTERVAL_LLM if recognition_type == "llm" else TASK_RETRY_INTERVAL_LOCAL
+
+    def register_task(self, task_id, image_path, max_retries=None, recognition_type="local"):
         """注册一个待处理任务"""
         if max_retries is None:
             max_retries = self.max_retries
 
+        retry_interval = self._get_retry_interval(recognition_type)
         now = time.time()
         with self.lock:
             entry = self.pending_tasks.get(task_id)
@@ -45,14 +51,16 @@ class TaskManager:
                     "attempts": 1,
                     "max_retries": max_retries,
                     "last_dispatch": now,
-                    "next_retry": now + 10,
+                    "next_retry": now + retry_interval,
+                    "recognition_type": recognition_type,
                 }
             else:
                 entry["image_path"] = image_path
                 entry["attempts"] = 1
                 entry["max_retries"] = max_retries
                 entry["last_dispatch"] = now
-                entry["next_retry"] = now + 10
+                entry["next_retry"] = now + retry_interval
+                entry["recognition_type"] = recognition_type
 
     def mark_task_completed(self, task_id):
         """标记任务为已完成"""
@@ -130,6 +138,7 @@ class TaskManager:
             image_data,
             task_id,
             register_pending=False,
+            recognition_type=entry.get("recognition_type", "local"),
         )
 
         now = time.time()
@@ -139,7 +148,8 @@ class TaskManager:
                 return
             current["attempts"] = current.get("attempts", 0) + 1
             current["last_dispatch"] = now
-            current["next_retry"] = now + 10
+            retry_interval = self._get_retry_interval(entry.get("recognition_type", "local"))
+            current["next_retry"] = now + retry_interval
 
         self._logger.info(
             "任务 %s 第 %s 次重试，结果: %s",

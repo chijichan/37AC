@@ -18,8 +18,9 @@ DEVICE = None
 # ==================== 训练相关配置 ====================
 DATASET_DIR = Path(os.getenv("DATASET_DIR", "W:/Img"))
 
-MODEL_SAVE_PATH = ROOT_PATH / "saves" / "models" / "character_resnet18.pth"
-CLASSES_TXT_PATH = ROOT_PATH / "saves" / "models" / "classes.txt"
+MODEL_DIR = ROOT_PATH / "saves" / "models"
+MODEL_PATH = MODEL_DIR / os.getenv("MODEL_FILENAME", "37ac-v0.0.1.pth")
+CLASSES_TXT_PATH = MODEL_DIR / "classes.txt"
 
 NUM_EPOCHS = int(os.getenv("NUM_EPOCHS", "50"))
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", "16"))
@@ -27,7 +28,7 @@ IMAGE_SIZE = int(os.getenv("IMAGE_SIZE", "224"))
 LEARNING_RATE = float(os.getenv("LEARNING_RATE", "1e-4"))
 
 # ==================== 预测相关配置 ====================
-MODEL_LOAD_PATH = ROOT_PATH / "saves" / "models" / "character_resnet18.pth"
+MODEL_LOAD_PATH = MODEL_PATH
 
 # ==================== 节点服务配置 ====================
 TCP_HOST = os.getenv("TCP_HOST", "127.0.0.1")
@@ -44,6 +45,27 @@ HEARTBEAT_RESPONSE_TIMEOUT_SEC = int(os.getenv("HEARTBEAT_RESPONSE_TIMEOUT_SEC",
 HEARTBEAT_MISS_LIMIT = int(os.getenv("HEARTBEAT_MISS_LIMIT", "3"))
 RECONNECT_DELAY_SEC = int(os.getenv("RECONNECT_DELAY_SEC", "10"))
 MAX_TASKS = int(os.getenv("MAX_TASKS", "5"))
+
+# ==================== 第三方大模型（LLM）识别配置 ====================
+# 使用多模态大模型（如 DeepSeek、GPT-4V 等）进行图片识别
+LLM_RECOGNITION_ENABLED = os.getenv("LLM_RECOGNITION_ENABLED", "False").lower() == "true"
+LLM_API_KEY = os.getenv("LLM_API_KEY", "")
+LLM_API_URL = os.getenv("LLM_API_URL", "https://api.deepseek.com/v1/chat/completions")
+LLM_MODEL_NAME = os.getenv("LLM_MODEL_NAME", "deepseek-vl2")
+LLM_TIMEOUT_SEC = int(os.getenv("LLM_TIMEOUT_SEC", "30"))
+# 识别提示词模板
+LLM_PROMPT_TEMPLATE = os.getenv(
+    "LLM_PROMPT_TEMPLATE",
+    '你只能输出一行 JSON，禁止输出任何其他文字。\n'
+    '任务：识别图片中的 ACG 角色。\n'
+    '输出格式（严格遵循）：{"label": "作品/角色名", "confidence": 95}\n'
+    '规则：\n'
+    '- label 写作品和角色名，中日文均可\n'
+    '- 完全无法识别时填 "unknown"\n'
+    '- confidence 填 0-100 的整数\n'
+    '警告：禁止输出描述、分析、评论或任何非 JSON 内容。\n'
+    '示例：{"label": "原神/神里绫华", "confidence": 98}'
+)
 
 # ==================== 路径配置 ====================
 # 暂存

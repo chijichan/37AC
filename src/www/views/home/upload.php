@@ -16,67 +16,83 @@ require_once ROOT_PATH . '/views/layout.php';
         </div>
     </div>
 
-    <!-- 裁剪区域 -->
+    <!-- 处理区域 -->
     <div id="cropContainer" class="crop-container">
-        <!-- 新增导航栏 -->
+        <!-- 导航栏 -->
         <div class="crop-navigation">
             <div class="nav-tabs">
-                <button class="nav-tab active" data-mode="crop">裁剪模式</button>
-                <button class="nav-tab" data-mode="remove-bg">去除背景</button>
+                <button class="nav-tab active" data-mode="quick">快速模式</button>
+                <button class="nav-tab" data-mode="advanced">高级模式</button>
             </div>
         </div>
 
-        <!-- 裁剪布局 -->
-        <div id="cropLayout" class="crop-layout">
-            <div class="crop-main">
-                <h3>调整选框以精确框选角色</h3>
-                <div class="image-wrapper">
-                    <img id="imagePreview" src="#" alt="裁剪预览" class="crop-image" />
+        <!-- ======== 快速模式（快速模式）：默认 auto + canvas 去背景 ======== -->
+        <div id="quickLayout">
+            <div class="crop-layout">
+                <div class="crop-main">
+                    <h3>快速识别</h3>
+                    <div class="image-wrapper">
+                        <img id="imagePreview" src="#" alt="裁剪预览" class="crop-image" />
+                    </div>
+                </div>
+                <div class="crop-preview-section">
+                    <h3>预览</h3>
+                    <div id="cropPreview" class="preview-box"></div>
+                    <p class="preview-hint">实时预览</p>
                 </div>
             </div>
-
-            <div class="crop-preview-section">
-                <h3>预览效果</h3>
-                <div id="cropPreview" class="preview-box"></div>
-                <p class="preview-hint">实时预览裁剪结果</p>
-            </div>
         </div>
 
-        <!-- 背景去除布局 -->
-        <div id="removeBgLayout" class="remove-bg-layout" style="display: none;">
-            <div class="remove-bg-main">
-                <h3>去除图片背景</h3>
-                <div class="remove-bg-content">
-                    <div class="single-image-container">
-                        <div class="image-box">
-                            <h4 id="imageTitle">待处理</h4>
-                            <div class="image-wrapper">
-                                <img id="mainImage" src="#" alt="处理后图片" class="bg-image" />
-                                <div class="image-placeholder" id="imagePlaceholder">
-                                    <p>请先上传图片，然后点击"开始去除背景"</p>
-                                </div>
+        <!-- ======== 高级模式（高级模式）：自定义识别 + 去背景 ======== -->
+        <div id="advancedLayout" class="advanced-layout" style="display: none;">
+            <div class="advanced-grid">
+                <!-- 左列：识别方式 -->
+                <div class="advanced-left">
+                    <fieldset class="recognition-type-selector">
+                        <legend>识别方式</legend>
+                        <label>
+                            <input type="radio" name="recognitionType" value="auto" checked>
+                            <span>自动选择</span>
+                        </label>
+                        <label>
+                            <input type="radio" name="recognitionType" value="local">
+                            <span>37ac模型 <small>快速识别</small></span>
+                        </label>
+                        <label>
+                            <input type="radio" name="recognitionType" value="llm">
+                            <span>大模型 API <small>多模态模型-深度思考</small></span>
+                        </label>
+                    </fieldset>
+
+                    <!-- 去背景方式（仅在高级模式显示） -->
+                    <fieldset class="remove-bg-method-selector">
+                        <legend>去背景方式</legend>
+                        <label>
+                            <input type="radio" name="removeBgMethod" value="canvas">
+                            <span>快速去背景 <small>即时，适合纯色背景</small></span>
+                        </label>
+                        <label>
+                            <input type="radio" name="removeBgMethod" value="ai" checked>
+                            <span>AI 去背景 <small>深度学习，高质量</small></span>
+                        </label>
+                    </fieldset>
+
+                    <button id="removeBgBtn" class="btn btn-secondary" style="width:100%;">开始去除背景</button>
+                    <div class="progress" id="progressContainer" style="display: none;">
+                        <div class="progress-bar" id="progressBar"></div>
+                    </div>
+                </div>
+
+                <!-- 右列：预览 -->
+                <div class="advanced-right">
+                    <div class="image-box">
+                        <h4 id="imageTitle">待处理</h4>
+                        <div class="image-wrapper">
+                            <img id="mainImage" src="#" alt="处理后图片" class="bg-image" />
+                            <div class="image-placeholder" id="imagePlaceholder">
+                                <p>请先上传图片</p>
                             </div>
                         </div>
-                    </div>
-
-                    <div class="remove-bg-controls">
-                        <!-- 去背景方式选择 -->
-                        <fieldset class="remove-bg-method-selector">
-                            <legend>去背景方式</legend>
-                            <label>
-                                <input type="radio" name="removeBgMethod" value="canvas" checked>
-                                快速模式（即时，适合纯色背景）
-                            </label>
-                            <label>
-                                <input type="radio" name="removeBgMethod" value="ai">
-                                AI 模式（高质量，需下载模型 ~30MB）
-                            </label>
-                        </fieldset>
-                        <button id="removeBgBtn" class="btn btn-primary">开始去除背景</button>
-                        <div class="progress" id="progressContainer" style="display: none;">
-                            <div class="progress-bar" id="progressBar"></div>
-                        </div>
-                        <p class="processing-hint">快速模式：自动检测背景色即时完成 | AI 模式：深度学习高精度去背景</p>
                     </div>
                 </div>
             </div>
@@ -284,24 +300,26 @@ require_once ROOT_PATH . '/views/layout.php';
         margin-top: calc(var(--pico-spacing) * 0.25);
     }
 
-    /* 背景去除布局样式 */
-    .remove-bg-layout {
+    /* 高级模式样式 */
+    .advanced-layout {
         width: 100%;
     }
 
-    .remove-bg-main h3 {
-        margin-bottom: calc(var(--pico-spacing) * 0.5);
-        color: var(--pico-h3-color);
-        font-size: var(--pico-h3-font-size, 1.5rem);
+    .advanced-grid {
+        display: grid;
+        grid-template-columns: 320px 1fr;
+        gap: var(--pico-spacing);
+        align-items: start;
     }
 
-    .remove-bg-content {
-        width: 100%;
+    .advanced-left {
+        display: flex;
+        flex-direction: column;
+        gap: var(--pico-spacing);
     }
 
-    .single-image-container {
-        width: 100%;
-        margin-bottom: calc(var(--pico-spacing) * 0.5);
+    .advanced-right {
+        min-width: 0;
     }
 
     .image-box {
@@ -329,28 +347,33 @@ require_once ROOT_PATH . '/views/layout.php';
         padding: var(--pico-spacing);
     }
 
-    .remove-bg-controls {
-        text-align: center;
-        margin-top: calc(var(--pico-spacing) * 0.5);
-    }
-
+    .recognition-type-selector,
     .remove-bg-method-selector {
-        text-align: left;
-        margin-bottom: calc(var(--pico-spacing) * 0.75);
+        margin: 0;
         padding: calc(var(--pico-spacing) * 0.5);
         border: var(--pico-border-width) solid var(--pico-muted-border-color);
         border-radius: var(--pico-border-radius);
     }
 
+    .recognition-type-selector legend,
     .remove-bg-method-selector legend {
         font-weight: var(--pico-font-weight);
         margin-bottom: calc(var(--pico-spacing) * 0.25);
     }
 
+    .recognition-type-selector label,
     .remove-bg-method-selector label {
-        display: block;
-        margin: calc(var(--pico-spacing) * 0.15) 0;
+        display: flex;
+        align-items: center;
+        gap: calc(var(--pico-spacing) * 0.25);
         cursor: pointer;
+        padding: calc(var(--pico-spacing) * 0.15) calc(var(--pico-spacing) * 0.25);
+    }
+
+    .recognition-type-selector label:hover,
+    .remove-bg-method-selector label:hover {
+        background: var(--pico-card-sectioning-background-color);
+        border-radius: var(--pico-border-radius);
     }
 
     .progress {
@@ -368,13 +391,6 @@ require_once ROOT_PATH . '/views/layout.php';
         border-radius: var(--pico-border-radius);
         width: 0%;
         transition: width var(--pico-transition);
-    }
-
-    .processing-hint {
-        font-size: 0.75em;
-        color: var(--pico-muted-color);
-        margin-top: calc(var(--pico-spacing) * 0.25);
-        font-style: italic;
     }
 
     .crop-controls {
@@ -442,16 +458,6 @@ require_once ROOT_PATH . '/views/layout.php';
         margin: 0 auto calc(var(--pico-spacing) * 0.5);
     }
 
-    @keyframes spin {
-        0% {
-            transform: rotate(0deg);
-        }
-
-        100% {
-            transform: rotate(360deg);
-        }
-    }
-
     .result-container {
         margin-top: var(--pico-spacing);
         padding: var(--pico-spacing);
@@ -463,6 +469,15 @@ require_once ROOT_PATH . '/views/layout.php';
     .result-show {
         display: block;
         animation: fadeIn 0.5s ease;
+    }
+
+    .recognition-badge {
+        margin: calc(var(--pico-spacing) * 0.25) 0;
+        font-size: 0.875rem;
+    }
+
+    .recognition-badge .badge {
+        font-size: 0.8rem;
     }
 
     @keyframes fadeIn {
@@ -477,9 +492,10 @@ require_once ROOT_PATH . '/views/layout.php';
         }
     }
 
-    /* 响应式设计 */
     @media (max-width: 768px) {
-        .crop-layout {
+
+        .crop-layout,
+        .advanced-grid {
             grid-template-columns: 1fr;
             gap: calc(var(--pico-spacing) * 0.5);
         }
@@ -542,8 +558,8 @@ require_once ROOT_PATH . '/views/layout.php';
                 imagePreview: document.getElementById('imagePreview'),
                 mainImage: document.getElementById('mainImage'),
                 cropContainer: document.getElementById('cropContainer'),
-                cropLayout: document.getElementById('cropLayout'),
-                removeBgLayout: document.getElementById('removeBgLayout'),
+                quickLayout: document.getElementById('quickLayout'),
+                advancedLayout: document.getElementById('advancedLayout'),
                 cropPreview: document.getElementById('cropPreview'),
                 confirmCropBtn: document.getElementById('confirmCropBtn'),
                 cancelCropBtn: document.getElementById('cancelCropBtn'),
@@ -562,7 +578,7 @@ require_once ROOT_PATH . '/views/layout.php';
                 cropper: null,
                 originalFile: null,
                 isUploading: false,
-                currentMode: 'crop' // 'crop' 或 'remove-bg'
+                currentMode: 'quick' // 'quick' 或 'advanced'
             };
         }
 
@@ -689,28 +705,28 @@ require_once ROOT_PATH . '/views/layout.php';
         }
 
         updateLayoutVisibility(mode) {
-            const showCropMode = mode === 'crop';
-            const showRemoveBgMode = mode === 'remove-bg';
+            const showQuick = mode === 'quick';
+            const showAdvanced = mode === 'advanced';
 
-            this.elements.cropLayout.style.display = showCropMode ? 'grid' : 'none';
-            this.elements.removeBgLayout.style.display = showRemoveBgMode ? 'block' : 'none';
+            this.elements.quickLayout.style.display = showQuick ? 'block' : 'none';
+            this.elements.advancedLayout.style.display = showAdvanced ? 'block' : 'none';
 
             this.updateConfirmButton(mode);
         }
 
         updateConfirmButton(mode) {
-            if (mode === 'crop') {
-                this.elements.confirmCropBtn.textContent = '确认识别';
-            } else if (mode === 'remove-bg') {
-                this.elements.confirmCropBtn.textContent = '使用去背景图片识别';
+            if (mode === 'quick') {
+                this.elements.confirmCropBtn.textContent = '开始识别';
+            } else {
+                this.elements.confirmCropBtn.textContent = '开始识别（去背景后）';
             }
             this.elements.confirmCropBtn.style.display = 'inline-block';
         }
 
         reinitializeViewForCurrentMode() {
-            if (this.state.currentMode === 'crop') {
+            if (this.state.currentMode === 'quick') {
                 this.initCropper();
-            } else if (this.state.currentMode === 'remove-bg') {
+            } else if (this.state.currentMode === 'advanced') {
                 this.setupRemoveBgView();
             }
         }
@@ -763,10 +779,10 @@ require_once ROOT_PATH . '/views/layout.php';
         }
 
         updateImageViews(imageUrl) {
-            if (this.state.currentMode === 'crop') {
+            if (this.state.currentMode === 'quick') {
                 this.elements.imagePreview.src = imageUrl;
                 this.elements.mainImage.src = imageUrl;
-            } else if (this.state.currentMode === 'remove-bg') {
+            } else if (this.state.currentMode === 'advanced') {
                 this.elements.mainImage.src = imageUrl;
                 this.resetRemoveBgStatus();
             }
@@ -1018,36 +1034,44 @@ require_once ROOT_PATH . '/views/layout.php';
                 await this.uploadImage(blob);
 
             } catch (error) {
-                this.showError(`${this.state.currentMode === 'crop' ? '裁剪' : '处理'}失败: ${error.message}`);
+                this.showError(`处理失败: ${error.message}`);
             } finally {
                 this.setLoadingState(false);
             }
         }
 
         async getProcessedImageBlob() {
-            if (this.state.currentMode === 'crop') {
-                if (!this.state.cropper) {
-                    throw new Error('请先选择图片');
+            if (this.state.currentMode === 'quick') {
+                // 快速模式：直接上传原图或裁剪
+                if (this.state.cropper) {
+                    const croppedCanvas = this.state.cropper.getCroppedCanvas();
+                    return await this.canvasToBlob(croppedCanvas);
                 }
-                const croppedCanvas = this.state.cropper.getCroppedCanvas();
-                return await this.canvasToBlob(croppedCanvas);
+                // 未裁剪则用原始文件
+                return this.state.originalFile;
 
-            } else if (this.state.currentMode === 'remove-bg') {
-                return await this.getRemoveBgResultBlob();
+            } else if (this.state.currentMode === 'advanced') {
+                // 高级模式：先用原图/裁剪图去背景
+                if (!this.elements.mainImage.src || this.elements.mainImage.src === '#') {
+                    throw new Error('请先上传图片');
+                }
+
+                if (this.elements.imageTitle.textContent === '成功') {
+                    // 已有去背景结果
+                    const response = await fetch(this.elements.mainImage.src);
+                    return await response.blob();
+                }
+
+                // 先去背景再识别
+                await this.handleRemoveBackground();
+
+                if (this.elements.imageTitle.textContent !== '成功') {
+                    throw new Error('背景去除失败');
+                }
+
+                const response = await fetch(this.elements.mainImage.src);
+                return await response.blob();
             }
-        }
-
-        async getRemoveBgResultBlob() {
-            if (!this.elements.mainImage.src || this.elements.mainImage.src === '#') {
-                throw new Error('请先进行背景去除');
-            }
-
-            if (this.elements.imageTitle.textContent !== '成功') {
-                throw new Error('请先进行背景去除处理');
-            }
-
-            const response = await fetch(this.elements.mainImage.src);
-            return await response.blob();
         }
 
         handleCropCancel() {
@@ -1094,14 +1118,24 @@ require_once ROOT_PATH . '/views/layout.php';
 
         createFormData(blob) {
             const formData = new FormData();
-            const fileName = this.state.currentMode === 'remove-bg' ?
+            const fileName = this.state.currentMode === 'advanced' ?
                 `no_bg_${this.state.originalFile.name}` :
-                `cropped_${this.state.originalFile.name}`;
+                this.state.originalFile.name;
 
             const file = new File([blob], fileName, {
                 type: blob.type
             });
             formData.append('file', file);
+
+            // 高级模式中附加识别方式选择（快速模式默认 auto）
+            if (this.state.currentMode === 'advanced') {
+                const recognitionType = document.querySelector('input[name="recognitionType"]:checked');
+                if (recognitionType) {
+                    formData.append('recognition_type', recognitionType.value);
+                }
+            } else {
+                formData.append('recognition_type', 'auto');
+            }
 
             return formData;
         }
@@ -1198,27 +1232,45 @@ require_once ROOT_PATH . '/views/layout.php';
         // ========== 结果显示 ==========
 
         showResult(data) {
-            const characterName = data.result.label.split("/")[1];
-            const html = this.generateResultHTML(characterName, data.result);
+            const result = data.result || {};
+            // 顶层 error 优先，或从 result.error 取
+            const error = data.error || result.error;
+            if (error) {
+                this.showError(error);
+                return;
+            }
+            // 兼容37ac模型 (label 含 "角色名/文件名") 和 LLM 模型 (label 直接是名称)
+            const labelStr = result.label || '';
+            const characterName = labelStr.includes('/') ? labelStr.split("/")[1] : labelStr;
+            const recognitionType = data.recognition_type || result.recognition_type || 'local';
+            const html = this.generateResultHTML(characterName, result, recognitionType);
 
             this.elements.resultDiv.innerHTML = html;
             this.elements.resultDiv.classList.add('result-show');
         }
 
-        generateResultHTML(characterName, result) {
+        generateResultHTML(characterName, result, recognitionType) {
+            const typeLabel = {
+                local: '37ac模型',
+                llm: '大模型 API',
+                auto: '自动选择'
+            } [recognitionType] || recognitionType;
+            const classProbsHtml = result.class_probs && result.class_probs.length > 0 ?
+                `<div class="probability-list">
+                       <h4>概率分布:</h4>
+                       ${result.class_probs.map(item => this.generateProbabilityItem(item)).join('')}
+                   </div>` :
+                '';
+
             return `
             <div class="result-content">
                 <h3>识别结果: ${characterName}</h3>
                 <a href="https://zh.moegirl.org.cn/index.php?title=${characterName}" target="_blank">
                     ${characterName} - 萌娘百科
                 </a>
-                <p class="confidence"><strong>置信度:</strong> ${result.confidence}%</p>
-                
-                <div class="probability-list">
-                    <h4>概率分布:</h4>
-                    ${result.class_probs.map(item => this.generateProbabilityItem(item)).join('')}
-                </div>
-            </div>
+                <p class="recognition-badge">识别方式: <span class="badge">${typeLabel}</span></p>
+                <p class="confidence"><strong>置信度:</strong> ${result.confidence || '-'}%</p>
+                ${classProbsHtml}
         `;
         }
 

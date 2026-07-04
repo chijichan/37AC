@@ -132,7 +132,8 @@ const Auth = {
                 } else {
                     // 刷新失败，跳转到登录页
                     this.clearSession();
-                    if (window.location.pathname.startsWith('/dashboard')) {
+                    // 不在 /auth/ 页面才跳转，避免死循环
+                    if (!window.location.pathname.startsWith('/auth/')) {
                         window.location.href = '/auth/login';
                     }
                     return response;

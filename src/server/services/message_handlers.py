@@ -11,6 +11,7 @@ from config.log_config import get_logger
 from services.node_manager import node_manager, get_db_connection
 from services.protocol.json_protocol import json_protocol
 from services.async_processor import async_processor
+from services.sse_bus import sse_bus
 
 logger = get_logger("message_handlers")
 
@@ -137,6 +138,14 @@ def async_handle_task_result(conn, addr, msg):
                 cursor.execute(sql, (task_id, json.dumps(result), "completed"))
             conn.commit()
             logger.info("任务结果已保存: task_id=%s", task_id)
+
+            # 推送到 SSE 事件总线（实时通知前端）
+            sse_bus.publish(task_id, {
+                "status": "completed",
+                "message": "任务完成，结果已返回",
+                "task_id": task_id,
+                "result": result,
+            })
 
             if node_id:
                 node_manager.decrement_task_count(node_id)

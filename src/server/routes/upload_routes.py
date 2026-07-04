@@ -14,11 +14,13 @@ from flask import (
     jsonify,
     Blueprint,
     g,
+    Response,
 )
 from services.node_manager import get_db_connection
 from services.task_dispatcher import dispatch_task
 from services.file_service import save_uploaded_file
 from services.api_key_service import verify_api_key
+from services.sse_bus import sse_bus
 from middleware.auth_middleware import login_required
 
 upload_bp = Blueprint("upload", __name__)
@@ -113,21 +115,30 @@ def upload_and_predict():
 
 @upload_bp.route("/tasks/<task_id>", methods=["GET"])
 def get_task_result(task_id):
+    json_response = {
+        "type": "task_result",
+        "timestamp": int(datetime.now().timestamp()),
+        "status": "pending",
+        "message": "结果尚未返回",
+        "task_id": task_id,
+        "result": [],
+    }
+
+    conn = None
     try:
         conn = get_db_connection()
-        json_response = {
-            "type": "task_result",
-            "timestamp": int(datetime.now().timestamp()),
-            "status": "pending",
-            "message": "结果尚未返回",
-            "task_id": task_id,
-            "result": [],
-        }
+        if not conn:
+            json_response["status"] = "error"
+            json_response["message"] = "数据库连接失败"
+            return jsonify(json_response), 503
 
         with conn.cursor() as cursor:
             sql = "SELECT result, status FROM task_results WHERE task_id = %s"
             cursor.execute(sql, (task_id,))
             row = cursor.fetchone()
+
+        conn.close()
+        conn = None
 
         if row:
             result_json_str = row[0]
@@ -161,5 +172,51 @@ def get_task_result(task_id):
         return jsonify(json_response), 500
 
     finally:
-        if "conn" in locals():
+        if conn:
             conn.close()
+
+
+@upload_bp.route("/tasks/<task_id>/stream", methods=["GET"])
+def stream_task_result(task_id):
+    """SSE 实时流端点 — 节点返回结果后即时推送到前端。
+
+    前端用法（JavaScript）:
+        const es = new EventSource("/tasks/<task_id>/stream");
+        es.onmessage = (e) => { const data = JSON.parse(e.data); ... };
+        es.onerror = () => { es.close(); /* 可回退到轮询 /tasks/<task_id> */ };
+    """
+    def generate():
+        q = sse_bus.subscribe(task_id)
+        try:
+            # 先检查是否已有结果（竞态：结果在订阅前就已到达）
+            conn = get_db_connection()
+            if conn:
+                try:
+                    with conn.cursor() as cursor:
+                        cursor.execute(
+                            "SELECT result, status FROM task_results WHERE task_id = %s",
+                            (task_id,),
+                        )
+                        row = cursor.fetchone()
+                    if row and row[1] and row[1] != "pending":
+                        result = json.loads(row[0]) if row[0] else []
+                        yield f"data: {json.dumps({'status': 'completed', 'message': '任务已完成', 'task_id': task_id, 'result': result}, ensure_ascii=False)}\n\n"
+                        return
+                finally:
+                    conn.close()
+
+            # 阻塞等待 SSE 事件（最长 60 秒）
+            for event in sse_bus.iter_events(task_id, q, timeout=60):
+                yield event
+        finally:
+            sse_bus.unsubscribe(task_id, q)
+
+    return Response(
+        generate(),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",  # 禁用 nginx 缓冲
+            "Connection": "keep-alive",
+        },
+    )

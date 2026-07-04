@@ -6,6 +6,8 @@ import json
 import time
 import os
 import struct
+import errno
+import base64
 from prediction.predictor import predict_image
 from config.log_config import get_logger
 from config.base import (
@@ -183,37 +185,78 @@ def start_node_service():
     reconnect_attempts = 0
     tasks = []
 
+    def _safe_close(sock):
+        """安全关闭 socket：SO_LINGER 立即中止 + shutdown，静默处理所有错误。
+        避免重连时因 TIME_WAIT 导致 EADDRINUSE (WinError 10048)。"""
+        if not sock:
+            return
+        try:
+            try:
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))
+            except Exception:
+                pass
+            try:
+                sock.shutdown(socket.SHUT_RDWR)
+            except Exception:
+                pass
+            sock.close()
+        except Exception:
+            pass
+
     # === 连接并注册函数（辅助函数）===
     def connect_and_register():
         nonlocal s, reconnect_attempts
         try:
             logger.info("[节点] 尝试连接服务器...")
 
-            # 修改1：确保关闭之前的socket
+            # 修改1：确保关闭之前的socket（_safe_close 快速释放端口）
             if s:
                 try:
-                    s.close()
-                except:
+                    _safe_close(s)
+                except Exception:
                     pass
                 s = None
 
-            # 修改2：创建新socket并（可选）绑定到本地端口
+            # 修改2：创建新socket并绑定本地端口（支持重试+回退随机端口）
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # 允许地址重用
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
-            # 如果配置了 LOCAL_PORT（非 0/None），则尝试绑定到该端口；否则绑定到端口 0（由系统分配随机可用端口）
-            try:
-                if LOCAL_PORT:
-                    s.bind(("", LOCAL_PORT))
-                    logger.info(f"[节点] 已绑定本地端口: {LOCAL_PORT}")
+            assigned_port = None
+            bind_port = LOCAL_PORT if LOCAL_PORT else 0
+
+            if bind_port != 0:
+                max_bind_attempts = 5
+                for attempt in range(1, max_bind_attempts + 1):
+                    try:
+                        s.bind(("", bind_port))
+                        assigned_port = s.getsockname()[1]
+                        logger.info(f"[节点] 已绑定本地端口: {assigned_port}")
+                        break
+                    except OSError as bind_err:
+                        if getattr(bind_err, "winerror", None) == 10048 or getattr(bind_err, "errno", None) == errno.EADDRINUSE:
+                            logger.warning(
+                                f"[节点] 本地端口 {bind_port} 被占用 (尝试 {attempt}/{max_bind_attempts})：{bind_err}"
+                            )
+                            time.sleep(1)
+                            continue
+                        else:
+                            logger.warning(f"[节点] 本地端口绑定失败: {bind_err}（继续尝试连接）")
+                            break
                 else:
+                    # 多次重试仍失败，回退到随机端口
+                    try:
+                        s.bind(("", 0))
+                        assigned_port = s.getsockname()[1]
+                        logger.warning(f"[节点] 回退：绑定到随机本地端口 {assigned_port}")
+                    except Exception as e:
+                        logger.warning(f"[节点] 随机端口绑定也失败: {e}（继续尝试连接）")
+            else:
+                try:
                     s.bind(("", 0))
                     assigned_port = s.getsockname()[1]
-                    logger.info(
-                        f"[节点] 未配置 LOCAL_PORT，使用随机本地端口: {assigned_port}"
-                    )
-            except Exception as bind_err:
-                logger.warning(f"[节点] 本地端口绑定失败: {bind_err}（继续尝试连接）")
+                    logger.info(f"[节点] 未配置 LOCAL_PORT，使用随机本地端口: {assigned_port}")
+                except Exception as e:
+                    logger.warning(f"[节点] 随机端口绑定失败: {e}（继续尝试连接）")
 
             s.connect((TCP_HOST, TCP_PORT))
             logger.info(f"[节点] 已连接到服务器 {TCP_HOST}:{TCP_PORT}")
@@ -235,6 +278,7 @@ def start_node_service():
                     "token": TOKEN,
                     "tasks": tasks,
                     "max_tasks": MAX_TASKS,
+                    "local_port": assigned_port,
                 },
             }
             json_protocol.send_json(s, register_msg)
@@ -245,8 +289,8 @@ def start_node_service():
             logger.error(f"[节点] 连接或注册失败: {e}")
             if s:
                 try:
-                    s.close()
-                except:
+                    _safe_close(s)
+                except Exception:
                     pass
                 s = None
             return False
@@ -364,7 +408,6 @@ def start_node_service():
 
                         # 解码 base64 图片数据
                         try:
-                            import base64
 
                             image_bytes = base64.b64decode(image_data_b64)
 
@@ -450,8 +493,8 @@ def start_node_service():
         logger.info("[节点] 连接异常，准备重连...")
         if s:
             try:
-                s.close()
-            except:
+                _safe_close(s)
+            except Exception:
                 pass
             s = None
 
@@ -471,8 +514,8 @@ def start_node_service():
         logger.info("[节点] 当前连接异常或心跳超时，尝试重新连接...")
         if s:
             try:
-                s.close()
-            except:
+                _safe_close(s)
+            except Exception:
                 pass
         s = None
 
@@ -481,9 +524,7 @@ def start_node_service():
                 logger.info("[节点] 尝试重新连接服务器...")
                 if connect_and_register():
                     logger.info("[节点] 重连成功，继续运行...")
-                    # 递归调用自己来重启服务
-                    start_node_service()
-                    break  # 如果递归返回，说明服务结束
+                    break  # 跳出重连循环，外层 while True 将重启主循环
                 else:
                     logger.warning(
                         f"[节点] 重连失败，{RECONNECT_DELAY_SEC} 秒后重试..."

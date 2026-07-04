@@ -60,11 +60,23 @@ require_once ROOT_PATH . '/views/layout.php';
                     </div>
 
                     <div class="remove-bg-controls">
+                        <!-- 去背景方式选择 -->
+                        <fieldset class="remove-bg-method-selector">
+                            <legend>去背景方式</legend>
+                            <label>
+                                <input type="radio" name="removeBgMethod" value="canvas" checked>
+                                快速模式（即时，适合纯色背景）
+                            </label>
+                            <label>
+                                <input type="radio" name="removeBgMethod" value="ai">
+                                AI 模式（高质量，需下载模型 ~30MB）
+                            </label>
+                        </fieldset>
                         <button id="removeBgBtn" class="btn btn-primary">开始去除背景</button>
                         <div class="progress" id="progressContainer" style="display: none;">
                             <div class="progress-bar" id="progressBar"></div>
                         </div>
-                        <p class="processing-hint">首次使用需要下载AI模型，请耐心等待</p>
+                        <p class="processing-hint">快速模式：自动检测背景色即时完成 | AI 模式：深度学习高精度去背景</p>
                     </div>
                 </div>
             </div>
@@ -322,6 +334,25 @@ require_once ROOT_PATH . '/views/layout.php';
         margin-top: calc(var(--pico-spacing) * 0.5);
     }
 
+    .remove-bg-method-selector {
+        text-align: left;
+        margin-bottom: calc(var(--pico-spacing) * 0.75);
+        padding: calc(var(--pico-spacing) * 0.5);
+        border: var(--pico-border-width) solid var(--pico-muted-border-color);
+        border-radius: var(--pico-border-radius);
+    }
+
+    .remove-bg-method-selector legend {
+        font-weight: var(--pico-font-weight);
+        margin-bottom: calc(var(--pico-spacing) * 0.25);
+    }
+
+    .remove-bg-method-selector label {
+        display: block;
+        margin: calc(var(--pico-spacing) * 0.15) 0;
+        cursor: pointer;
+    }
+
     .progress {
         width: 100%;
         height: 20px;
@@ -492,9 +523,7 @@ require_once ROOT_PATH . '/views/layout.php';
 </style>
 
 <script type="module">
-    import {
-        removeBackground
-    } from 'https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.7.0/+esm';
+    import { removeBackground } from 'https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.7.0/+esm';
 
     class AnimeDetector {
         constructor() {
@@ -798,60 +827,159 @@ require_once ROOT_PATH . '/views/layout.php';
         async handleRemoveBackground() {
             if (!this.state.originalFile || this.state.isUploading) return;
 
+            const method = document.querySelector('input[name="removeBgMethod"]:checked').value;
+
             try {
-                this.startRemoveBgProcess();
+                this.startRemoveBgProcess(method);
 
-                const blob = await this.performBackgroundRemoval();
+                let blob;
+                if (method === 'canvas') {
+                    blob = await this._removeBgCanvas();
+                } else {
+                    blob = await this._removeBgAI();
+                }
+
                 const url = URL.createObjectURL(blob);
-
-                this.finishRemoveBgProcess(url);
+                this.finishRemoveBgProcess(url, method);
 
             } catch (error) {
-                this.handleRemoveBgError(error);
+                this.handleRemoveBgError(error, method);
             }
         }
 
-        startRemoveBgProcess() {
+        startRemoveBgProcess(method) {
             this.elements.removeBgBtn.disabled = true;
-            this.elements.progressContainer.style.display = 'block';
-            this.elements.progressBar.style.width = '0%';
+            this.elements.removeBgBtn.textContent = '处理中...';
+            if (method === 'ai') {
+                this.elements.progressContainer.style.display = 'block';
+                this.elements.progressBar.style.width = '0%';
+            }
             this.elements.imagePlaceholder.style.display = 'none';
         }
 
-        async performBackgroundRemoval() {
+        // ===== 快速模式：Canvas 色差 =====
+
+        async _removeBgCanvas() {
+            // ===== Canvas 像素色差 + 边缘柔化 =====
+            // 自动取四角采样 → 判定主背景色 → 透明化近色像素 → 边缘羽化
+            const img = await this._loadImage(this.state.originalFile);
+
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imageData.data;
+            const w = canvas.width, h = canvas.height;
+
+            // 1) 从四角采样，自动检测主背景色
+            const corners = [
+                [0,0], [w-2,0], [0,h-2], [w-2,h-2],
+                [Math.floor(w/4),0], [Math.floor(w*3/4),0],
+                [0,Math.floor(h/4)], [w-2,Math.floor(h/4)],
+            ];
+            let sumR=0, sumG=0, sumB=0, cnt=0;
+            for (const [cx,cy] of corners) {
+                const idx = (cy*w + cx) * 4;
+                sumR += data[idx]; sumG += data[idx+1]; sumB += data[idx+2]; cnt++;
+            }
+            const bgR = Math.round(sumR/cnt), bgG = Math.round(sumG/cnt), bgB = Math.round(sumB/cnt);
+
+            // 2) 动态阈值：背景色方差越大阈值越宽松
+            let varR=0, varG=0, varB=0;
+            for (const [cx,cy] of corners) {
+                const idx = (cy*w + cx) * 4;
+                varR += (data[idx]-bgR)**2; varG += (data[idx+1]-bgG)**2; varB += (data[idx+2]-bgB)**2;
+            }
+            const threshold = Math.max(25, Math.min(80, Math.round(Math.sqrt((varR+varG+varB)/(cnt*3)) * 1.5)));
+
+            // 3) 第一遍：标记透明像素
+            const alpha = new Uint8Array(w * h);
+            for (let i = 0; i < data.length; i += 4) {
+                if (Math.abs(data[i]-bgR) < threshold &&
+                    Math.abs(data[i+1]-bgG) < threshold &&
+                    Math.abs(data[i+2]-bgB) < threshold) {
+                    data[i+3] = 0;
+                    alpha[i>>2] = 0;
+                } else {
+                    alpha[i>>2] = 255;
+                }
+            }
+
+            // 4) 第二遍：边缘柔化（对透明/不透明边界做 3x3 alpha 渐变）
+            const softData = new Uint8ClampedArray(data);
+            for (let y = 1; y < h-1; y++) {
+                for (let x = 1; x < w-1; x++) {
+                    const idx = (y*w + x);
+                    if (alpha[idx] === 255) continue; // 完全不透明，跳过
+                    // 统计周围不透明像素数
+                    let opaque = 0;
+                    for (let dy=-1; dy<=1; dy++)
+                        for (let dx=-1; dx<=1; dx++)
+                            opaque += (alpha[(y+dy)*w + (x+dx)] === 255) ? 1 : 0;
+                    // 边缘像素：按周围不透明度比例保留
+                    const p = (idx) * 4;
+                    if (opaque >= 2 && opaque <= 6) {
+                        softData[p+3] = Math.round(255 * opaque / 9);
+                    }
+                }
+            }
+
+            ctx.putImageData(new ImageData(softData, w, h), 0, 0);
+            return await this._canvasToBlob(canvas);
+        }
+
+        _loadImage(file) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.onload = () => resolve(img);
+                img.onerror = reject;
+                img.src = URL.createObjectURL(file);
+            });
+        }
+
+        _canvasToBlob(canvas) {
+            return new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+        }
+
+        // ===== AI 模式：@imgly/background-removal =====
+
+        async _removeBgAI() {
             const config = {
                 publicPath: 'https://static.322337.xyz/file/package/dist/',
                 device: 'gpu',
-                // model: 'large',
-                // model: 'medium',
                 model: 'small',
-                output: {
-                    format: 'image/png',
-                    quality: 0.8
-                },
+                output: { format: 'image/png', quality: 0.8 },
                 progress: (key, current, total) => {
                     const progress = (current / total) * 100;
                     this.elements.progressBar.style.width = `${progress}%`;
                     console.log(`下载进度 ${key}: ${current} / ${total}`);
                 }
             };
-
             return await removeBackground(this.state.originalFile, config);
         }
 
-        finishRemoveBgProcess(url) {
+        finishRemoveBgProcess(url, method) {
             this.elements.mainImage.src = url;
             this.elements.imageTitle.textContent = '成功';
             this.elements.imageTitle.style.color = 'var(--pico-success-color)';
-            this.elements.progressContainer.style.display = 'none';
+            if (method === 'ai') {
+                this.elements.progressContainer.style.display = 'none';
+            }
             this.elements.removeBgBtn.disabled = false;
+            this.elements.removeBgBtn.textContent = '开始去除背景';
         }
 
-        handleRemoveBgError(error) {
+        handleRemoveBgError(error, method) {
             console.error('背景去除失败:', error);
             this.showError('背景去除失败，请重试或更换图片');
             this.elements.removeBgBtn.disabled = false;
-            this.elements.progressContainer.style.display = 'none';
+            this.elements.removeBgBtn.textContent = '开始去除背景';
+            if (method === 'ai') {
+                this.elements.progressContainer.style.display = 'none';
+            }
             this.elements.imagePlaceholder.style.display = this.elements.mainImage.src &&
                 this.elements.mainImage.src !== '#' ? 'none' : 'flex';
         }
@@ -913,7 +1041,8 @@ require_once ROOT_PATH . '/views/layout.php';
             const formData = this.createFormData(blob);
 
             try {
-                const response = await fetch(`${window.API_BASE_URL}/upload`, {
+                // 使用 Auth.fetch 自动携带 JWT 令牌（如有登录）
+                const response = await Auth.fetch(`${window.API_BASE_URL}/upload`, {
                     method: 'POST',
                     body: formData,
                     headers: {
@@ -929,7 +1058,8 @@ require_once ROOT_PATH . '/views/layout.php';
                 const data = await this.processUploadResponse(response);
 
                 if (data.status === 'queued' && data.task_id) {
-                    await this.pollTaskResult(data.task_id);
+                    // 优先使用 SSE 实时流，失败则降级到轮询
+                    await this.streamTaskResult(data.task_id);
                 } else {
                     throw new Error(data.message || '上传成功，但未返回任务ID');
                 }
@@ -958,7 +1088,45 @@ require_once ROOT_PATH . '/views/layout.php';
             return raw.data || raw;
         }
 
-        async pollTaskResult(taskId) {
+        async streamTaskResult(taskId) {
+            // === SSE 实时流（主方案）===
+            try {
+                const data = await new Promise((resolve, reject) => {
+                    const es = new EventSource(`${window.API_BASE_URL}/tasks/${taskId}/stream`);
+
+                    es.onmessage = (e) => {
+                        try {
+                            const data = JSON.parse(e.data);
+                            if (data.status === 'completed') {
+                                es.close();
+                                resolve(data);
+                            } else if (data.status === 'timeout' || data.status === 'error') {
+                                es.close();
+                                reject(new Error(data.message || '推理超时'));
+                            }
+                        } catch (parseErr) {
+                            es.close();
+                            reject(parseErr);
+                        }
+                    };
+
+                    es.onerror = () => {
+                        es.close();
+                        // SSE 连接失败，降级到轮询
+                        console.warn('SSE 连接失败，降级到轮询模式');
+                        this.pollTaskResultLegacy(taskId).then(resolve).catch(reject);
+                    };
+                });
+
+                this.showResult(data);
+            } catch (error) {
+                this.showError(error.message || '获取推理结果失败，请稍后重试');
+            }
+        }
+
+        // ========== 轮询降级方案 ==========
+
+        async pollTaskResultLegacy(taskId) {
             const maxAttempts = 15;
             let attempt = 0;
 
@@ -969,20 +1137,29 @@ require_once ROOT_PATH . '/views/layout.php';
                     const result = await this.fetchTaskResult(taskId);
 
                     if (result.status === 'completed') {
-                        this.showResult(result);
-                        return;
+                        return result;
                     } else if (result.status === 'pending') {
-                        await this.handlePendingResult(attempt, maxAttempts, poll);
+                        if (attempt < maxAttempts) {
+                            await new Promise(resolve => setTimeout(resolve, 2000));
+                            return poll();
+                        } else {
+                            throw new Error('推理超时，请稍后再试');
+                        }
                     } else {
                         throw new Error(result.message || '获取结果失败');
                     }
                 } catch (error) {
-                    await this.handlePollError(error, attempt, maxAttempts, poll);
+                    if (attempt < maxAttempts) {
+                        await new Promise(resolve => setTimeout(resolve, 2000));
+                        return poll();
+                    } else {
+                        throw error;
+                    }
                 }
             };
 
             await new Promise(resolve => setTimeout(resolve, 2000));
-            await poll();
+            return poll();
         }
 
         async fetchTaskResult(taskId) {
@@ -993,24 +1170,6 @@ require_once ROOT_PATH . '/views/layout.php';
 
             const raw = await response.json();
             return raw.data || raw;
-        }
-
-        async handlePendingResult(attempt, maxAttempts, pollCallback) {
-            if (attempt < maxAttempts) {
-                await new Promise(resolve => setTimeout(resolve, 2000));
-                await pollCallback();
-            } else {
-                throw new Error('推理超时，请稍后再试');
-            }
-        }
-
-        async handlePollError(error, attempt, maxAttempts, pollCallback) {
-            if (attempt < maxAttempts) {
-                await new Promise(resolve => setTimeout(resolve, 2000));
-                await pollCallback();
-            } else {
-                this.showError(error.message || '获取推理结果失败，请稍后重试');
-            }
         }
 
         // ========== 结果显示 ==========
@@ -1101,7 +1260,6 @@ require_once ROOT_PATH . '/views/layout.php';
     document.addEventListener('DOMContentLoaded', () => {
         new AnimeDetector();
     });
-    export default AnimeDetector;
 </script>
 <?php
 

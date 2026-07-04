@@ -40,6 +40,7 @@ from services.email_service import (
     send_password_reset_email,
     is_configured,
 )
+from services.sse_bus import SSEBus, sse_bus
 
 __all__ = [
     # auth
@@ -84,4 +85,7 @@ __all__ = [
     "send_email",
     "send_password_reset_email",
     "is_configured",
+    # sse
+    "SSEBus",
+    "sse_bus",
 ]

@@ -122,44 +122,64 @@
 ├─ src/
 │  ├─ cli/
 │  │  ├─ main.py
-│  │  ├─ config.py
+│  │  ├─ .env.example
+│  │  ├─ config/
+│  │  │  ├─ base.py
+│  │  │  └─ log_config.py
 │  │  ├─ data/dataset.py
 │  │  ├─ models/character_model.py
 │  │  ├─ training/trainer.py
-│  │  ├─ prediction/predictor.py
-│  │  ├─ services/node_service.py
-│  │  ├─ services/menu_service.py
-│  │  ├─ utils/file_utils.py
-│  │  ├─ utils/image_utils.py
-│  │  ├─ utils/validation_utils.py
+│  │  ├─ prediction/predictor.py          # 含 LLM API + _parse_llm_response
+│  │  ├─ services/
+│  │  │  ├─ node_service.py               # TCP 客户端 + 异步 LLM
+│  │  │  └─ menu_service.py
+│  │  ├─ utils/
+│  │  │  ├─ file_utils.py
+│  │  │  ├─ image_utils.py
+│  │  │  └─ validation_utils.py
 │  │  ├─ requirements.txt
 │  │  └─ saves/
+│  │     ├─ logs/
+│  │     └─ models/
+│  │        ├─ 37ac-v0.0.1.pth           # 模型权重
+│  │        └─ classes.txt                # 类别映射
 │  └─ server/
 │     ├─ runserver.py
+│     ├─ .env.example
 │     ├─ requirements.txt
 │     └─ AC_web/
 │        ├─ __init__.py
-│        ├─ config/base.py
-│        ├─ config/email_config.py
-│        ├─ config/log_config.py
+│        ├─ config/
+│        │  ├─ base.py
+│        │  ├─ email_config.py
+│        │  └─ log_config.py
 │        ├─ middleware/auth_middleware.py
-│        ├─ routes/*.py
-│        ├─ services/*.py
+│        ├─ routes/*.py                   # 7 个蓝图
+│        ├─ services/
+│        │  ├─ listen_service.py          # TCP 监听
+│        │  ├─ node_manager.py            # 节点管理
+│        │  ├─ task_manager.py            # 任务重试（LLM感知）
+│        │  ├─ task_dispatcher.py         # 任务分发
+│        │  ├─ message_handlers.py        # 消息处理 + SSE 推送
+│        │  ├─ sse_bus.py                 # SSE 事件总线
+│        │  ├─ async_processor.py         # 异步线程池
+│        │  ├─ protocol/json_protocol.py  # JSON 协议
+│        │  └─ auth/ / dashboard/ / p2p/
 │        └─ saves/
 ├─ www/
 │  ├─ public/index.php
-│  ├─ public/static/
 │  ├─ router.php
 │  ├─ controllers/
 │  ├─ models/
 │  ├─ views/
+│  │  ├─ home/upload.php                 # 快速/高级模式 + SSE
+│  │  ├─ dashboard/
+│  │  └─ ...
 │  ├─ DASHBOARD.md
-│  ├─ SECURITY.md
-│  └─ start-server.bat
-├─ docs/
-│  └─ 项目结构总结.md
+│  └─ SECURITY.md
+├─ docs/项目结构总结.md
 ├─ scripts/alter_tables.sql
-├─ tests/
+├─ .env.example
 ├─ verify_env.py
 └─ README.md
 ```
@@ -199,11 +219,12 @@ dataset/
 |------|------|
 | Python 3.9 | 开发语言 |
 | PyTorch | 模型训练与推理 |
-| ResNet18 | 识别网络 |
+| ResNet18 | 识别网络（37AC v0.0.1） |
 | Flask | Web/API 框架 |
 | Pillow | 图像处理 |
 | torchvision | 数据加载与增强 |
 | tqdm | 训练进度显示 |
+| requests | LLM API 调用 |
 
 ### 数据库与通信
 
@@ -219,7 +240,10 @@ dataset/
 |------|------|
 | PHP 7+ | 仪表盘后端 |
 | Pico CSS 2 | 响应式样式 |
-| jQuery | AJAX 与交互 |
+| Cropper.js | 图片裁剪 |
+| @imgly/background-removal | AI 去背景 |
+| Auth.js | JWT 认证模块 |
+| EventSource (SSE) | 实时结果推送 |
 
 ### 安全与认证
 
@@ -262,6 +286,26 @@ mysql -u root -p < scripts/alter_tables.sql
 
 编辑 `src/server/AC_web/config/base.py`，配置数据库连接、JWT 密钥等。
 
+也可通过根目录 `.env` 文件配置（推荐）：
+
+```env
+# 服务端配置
+DB_HOST=localhost
+DB_USER=root
+DB_PASSWORD=your_password
+DB_NAME=37ac
+JWT_SECRET=your_jwt_secret
+
+# 节点配置
+NODE_ID=1
+TOKEN=your_node_token
+LLM_RECOGNITION_ENABLED=false
+LLM_API_KEY=your_api_key
+
+# 模型配置
+MODEL_FILENAME=37ac-v0.0.1.pth
+```
+
 ### 5. 可选：PHP 仪表盘环境
 
 如果需要仪表盘，安装 PHP 7+，并将 `www/public/` 作为 Web 根目录。
@@ -283,8 +327,8 @@ python src/cli/main.py
 ```
 
 训练结果：
-- `src/cli/saves/character_resnet18.pth`
-- `src/cli/saves/classes.txt`
+- `src/cli/saves/models/37ac-v0.0.1.pth`
+- `src/cli/saves/models/classes.txt`
 
 ### 2. 启动 Flask 服务端
 
@@ -371,6 +415,26 @@ python src/cli/main.py --mode 4
 - CLI 图片校验：`python src/cli/main.py --mode 3`
 - 单张命令行预测：`python src/cli/main.py --mode 2`
 - 环境检查：`python verify_env.py`
+
+### 第三方大模型（LLM）识别
+
+在 `.env` 中启用 LLM 识别后可获得更精确的识别结果：
+
+```env
+LLM_RECOGNITION_ENABLED=true
+LLM_API_KEY=your_api_key
+LLM_API_URL=https://api.deepseek.com/v1/chat/completions
+LLM_MODEL_NAME=deepseek-vl2
+LLM_TIMEOUT_SEC=30
+```
+
+LLM 推理在单独的后台线程中执行，不会阻塞节点的主消息循环。
+
+### 前端识别模式
+
+上传页面支持两种模式：
+- **快速模式**：默认使用 `auto` 识别方式（由节点自动选择 local/LLM），一键上传识别
+- **高级模式**：可自定义识别方式（local/LLM/auto）和去背景方式（快速Canvas/AI深度学习）
 
 ---
 

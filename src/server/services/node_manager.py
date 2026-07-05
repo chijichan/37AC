@@ -2,6 +2,7 @@
 
 import time
 import threading
+import socket
 from datetime import datetime
 
 import pymysql
@@ -194,8 +195,20 @@ class NodeManager:
                 if current_time - info["last_heartbeat"] > timeout:
                     self._logger.info("节点 %s 超时未心跳，将被移除", node_id)
                     self.update_db_node_status(node_id, "offline")
-                    to_remove.append(node_id)
-            for node_id in to_remove:
+                    to_remove.append((node_id, info))
+            for node_id, info in to_remove:
+                # 关闭 socket 连接，触发 handle_client 线程退出
+                sock = info.get("socket")
+                if sock:
+                    try:
+                        sock.settimeout(0.1)
+                        sock.shutdown(socket.SHUT_RDWR)
+                    except Exception:
+                        pass
+                    try:
+                        sock.close()
+                    except Exception:
+                        pass
                 del self.nodes[node_id]
 
     def show_all_nodes(self):

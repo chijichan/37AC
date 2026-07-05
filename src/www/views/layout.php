@@ -1,10 +1,55 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-CN">
 
 <head>
+    <?php
+    $site_name = '37AC';
+    $page_title = isset($title) && $title ? $title : $site_name;
+    $page_title_full = $page_title === $site_name ? $site_name : $page_title . ' - ' . $site_name;
+    $page_description = isset($description) && $description ? $description : '37AC 是一款面向二次元爱好者的 AI 角色识别与管理平台，支持上传图片识别动漫和游戏角色。';
+    $page_keywords = isset($keywords) && $keywords ? $keywords : '37AC,动漫角色识别,二次元识别,AI识别,角色识别';
+    $page_robots = isset($robots) && $robots ? $robots : 'index,follow,max-image-preview:large';
+    $page_og_type = isset($og_type) && $og_type ? $og_type : 'website';
+    $page_og_image = isset($og_image) && $og_image ? $og_image : 'https://static.322337.xyz/view.php/3c2d0a0c603703e2a99ce22f85eb3087.ico';
+    $page_canonical = isset($canonical_url) && $canonical_url ? $canonical_url : ((isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? '127.0.0.1') . ($_SERVER['REQUEST_URI'] ?? '/');
+    if (strpos($page_canonical, 'http') !== 0) {
+        $page_canonical = ((isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? '127.0.0.1') . $page_canonical;
+    }
+    ?>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo $title ?? ''; ?> - 37AC</title>
+    <meta name="description" content="<?php echo htmlspecialchars($page_description, ENT_QUOTES, 'UTF-8'); ?>" />
+    <meta name="keywords" content="<?php echo htmlspecialchars($page_keywords, ENT_QUOTES, 'UTF-8'); ?>" />
+    <meta name="robots" content="<?php echo htmlspecialchars($page_robots, ENT_QUOTES, 'UTF-8'); ?>" />
+    <meta name="author" content="37AC Team" />
+    <meta name="theme-color" content="#0f172a" />
+    <meta property="og:title" content="<?php echo htmlspecialchars($page_title_full, ENT_QUOTES, 'UTF-8'); ?>" />
+    <meta property="og:description" content="<?php echo htmlspecialchars($page_description, ENT_QUOTES, 'UTF-8'); ?>" />
+    <meta property="og:type" content="<?php echo htmlspecialchars($page_og_type, ENT_QUOTES, 'UTF-8'); ?>" />
+    <meta property="og:url" content="<?php echo htmlspecialchars($page_canonical, ENT_QUOTES, 'UTF-8'); ?>" />
+    <meta property="og:image" content="<?php echo htmlspecialchars($page_og_image, ENT_QUOTES, 'UTF-8'); ?>" />
+    <meta property="og:site_name" content="37AC" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="<?php echo htmlspecialchars($page_title_full, ENT_QUOTES, 'UTF-8'); ?>" />
+    <meta name="twitter:description" content="<?php echo htmlspecialchars($page_description, ENT_QUOTES, 'UTF-8'); ?>" />
+    <meta name="twitter:image" content="<?php echo htmlspecialchars($page_og_image, ENT_QUOTES, 'UTF-8'); ?>" />
+    <link rel="canonical" href="<?php echo htmlspecialchars($page_canonical, ENT_QUOTES, 'UTF-8'); ?>" />
+    <link rel="sitemap" type="application/xml" title="Sitemap" href="/sitemap.xml" />
+    <title><?php echo htmlspecialchars($page_title_full, ENT_QUOTES, 'UTF-8'); ?></title>
+    <script type="application/ld+json">
+        {
+            "@context": "https://schema.org",
+            "@type": "WebSite",
+            "name": "37AC",
+            "url": "<?php echo htmlspecialchars(((isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? '127.0.0.1'), ENT_QUOTES, 'UTF-8'); ?>",
+            "description": "<?php echo htmlspecialchars($page_description, ENT_QUOTES, 'UTF-8'); ?>",
+            "potentialAction": {
+                "@type": "SearchAction",
+                "target": "<?php echo htmlspecialchars(((isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? '127.0.0.1') . '/upload', ENT_QUOTES, 'UTF-8'); ?>",
+                "query-input": "required name=search"
+            }
+        }
+    </script>
     <!-- <link rel="stylesheet" type="text/css" href="/static/content/bootstrap.min.css" /> -->
     <link rel="stylesheet" type="text/css" href="/static/css/pico.min.css" />
     <link rel="stylesheet" type="text/css"

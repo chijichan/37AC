@@ -87,6 +87,35 @@ def upload_and_predict():
                                    recognition_type=recognition_type)
             print(f"[调度结果] 任务 {task_id}: {result}")
 
+            # 如果任务分发失败（如图片过大），将错误写入数据库并推送 SSE
+            if result.get("status") in ("failed", "error"):
+                try:
+                    conn = get_db_connection()
+                    if conn:
+                        with conn.cursor() as cursor:
+                            cursor.execute(
+                                "INSERT INTO task_results (task_id, result, status) "
+                                "VALUES (%s, %s, %s) "
+                                "ON DUPLICATE KEY UPDATE result=VALUES(result), status=VALUES(status)",
+                                (task_id, json.dumps({"error": result.get("message", "分发失败")}),
+                                 "failed"),
+                            )
+                            conn.commit()
+                        # 推送 SSE 通知前端
+                        sse_bus.publish(task_id, {
+                            "status": "failed",
+                            "message": result.get("message", "分发失败"),
+                            "task_id": task_id,
+                            "error": result.get("message", "分发失败"),
+                            "result": [],
+                        })
+                except Exception as e:
+                    print(f"[调度结果] 保存失败记录出错: {e}")
+                finally:
+                    if conn:
+                        conn.close()
+                return
+
             # 保存 API Key 使用记录到 task_results
             try:
                 conn = get_db_connection()

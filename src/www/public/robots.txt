@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /dashboard/
+Disallow: /auth/reset-password
+
+Sitemap: https://www.322337.xyz/sitemap.xml

@@ -24,8 +24,11 @@ if (file_exists($envFile)) {
             $key = trim($key);
             $value = trim($value);
             if (!empty($key)) {
-                putenv("$key=$value");
+                if (function_exists('putenv')) {
+                    putenv("$key=$value");
+                }
                 $_ENV[$key] = $value;
+                $_SERVER[$key] = $value;
             }
         }
     }
@@ -35,7 +38,14 @@ require_once ROOT_PATH . '/router.php';
 require_once ROOT_PATH . '/controllers/controller.php';
 
 // 后端 API 基础 URL（从环境变量读取，优先从 .env 加载）
-define('API_BASE_URL', getenv('API_BASE_URL') ?: 'http://127.0.0.1:13138');
+$apiBaseUrl = getenv('API_BASE_URL');
+if (empty($apiBaseUrl) && isset($_ENV['API_BASE_URL'])) {
+    $apiBaseUrl = $_ENV['API_BASE_URL'];
+}
+if (empty($apiBaseUrl) && isset($_SERVER['API_BASE_URL'])) {
+    $apiBaseUrl = $_SERVER['API_BASE_URL'];
+}
+define('API_BASE_URL', $apiBaseUrl ?: 'http://127.0.0.1:13138');
 
 spl_autoload_register(function ($class) {
     $file = ROOT_PATH . '/controllers/' . $class . '.php';

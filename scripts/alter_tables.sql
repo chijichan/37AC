@@ -1,8 +1,10 @@
 -- =============================================
 -- 37AC 数据库变更脚本
 -- 1. nodes 表添加 user_id 字段
--- 2. 创建 api_keys 表
--- 3. task_results 表添加 user_id 和 api_key_id 字段
+-- 2. nodes 表添加 capabilities 字段
+-- 3. 创建 api_keys 表
+-- 4. task_results 表添加 user_id 和 api_key_id 字段
+-- 5. 创建 password_reset_tokens 表
 -- =============================================
 
 -- 1. nodes 表添加 user_id 字段
@@ -10,7 +12,11 @@ ALTER TABLE nodes
     ADD COLUMN user_id INT(11) DEFAULT NULL COMMENT '所属用户ID' AFTER id,
     ADD INDEX idx_user_id (user_id);
 
--- 2. 创建 api_keys 表
+-- 2. nodes 表添加 capabilities 字段（节点能力标识，如 "local,llm"）
+ALTER TABLE nodes
+    ADD COLUMN capabilities JSON DEFAULT NULL COMMENT '节点能力列表，JSON 数组，如 ["local","llm"]' AFTER token;
+
+-- 3. 创建 api_keys 表
 CREATE TABLE IF NOT EXISTS api_keys (
     id INT(11) NOT NULL AUTO_INCREMENT COMMENT '主键ID',
     user_id INT(11) NOT NULL COMMENT '所属用户ID',
@@ -29,14 +35,14 @@ CREATE TABLE IF NOT EXISTS api_keys (
     INDEX idx_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='API密钥表';
 
--- 3. task_results 表添加 user_id 和 api_key_id 字段
+-- 5. task_results 表添加 user_id 和 api_key_id 字段
 ALTER TABLE task_results
     ADD COLUMN user_id INT(11) DEFAULT NULL COMMENT '所属用户ID' AFTER task_id,
     ADD COLUMN api_key_id INT(11) DEFAULT NULL COMMENT '使用的API密钥ID' AFTER user_id,
     ADD INDEX idx_user_id (user_id),
     ADD INDEX idx_api_key_id (api_key_id);
 
--- 4. 创建 password_reset_tokens 表
+-- 6. 创建 password_reset_tokens 表
 CREATE TABLE IF NOT EXISTS password_reset_tokens (
     id INT(11) NOT NULL AUTO_INCREMENT COMMENT '主键ID',
     user_id INT(11) NOT NULL COMMENT '用户ID',

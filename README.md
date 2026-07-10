@@ -99,6 +99,7 @@
 - 边缘节点负责模型推理，降低服务器负载
 - 包含节点注册、心跳检测、任务派发、结果回传
 - 支持并发任务与动态节点调度
+- **能力感知分发**：节点注册时声明支持的能力（local/LLM），服务端按识别类型自动匹配
 - 结果写入 **MySQL** 数据库，支持历史查询
 
 ### 管理仪表盘
@@ -164,7 +165,8 @@
 │        │  ├─ sse_bus.py                 # SSE 事件总线
 │        │  ├─ async_processor.py         # 异步线程池
 │        │  ├─ protocol/json_protocol.py  # JSON 协议
-│        │  └─ auth/ / dashboard/ / p2p/
+│        │  ├─ auth/                      # 认证工具
+│        │  └─ dashboard/                 # 仪表盘服务
 │        └─ saves/
 ├─ www/
 │  ├─ public/index.php
@@ -379,12 +381,52 @@ python src/cli/main.py --mode 4
 
 | 类型 | 方向 | 说明 |
 |------|------|------|
-| register | 节点 -> 服务器 | 节点注册 |
+| register | 节点 -> 服务器 | 节点注册（含 capabilities 等元数据） |
 | register_ack | 服务器 -> 节点 | 注册确认 |
 | heartbeat | 节点 -> 服务器 | 心跳 |
 | heartbeat_ack | 服务器 -> 节点 | 心跳确认 |
-| task | 服务器 -> 节点 | 推理任务 |
+| task | 服务器 -> 节点 | 推理任务（含 recognition_type） |
 | task_result | 节点 -> 服务器 | 结果回传 |
+
+### 注册消息示例
+
+```json
+{
+  "type": "register",
+  "timestamp": 1700000000,
+  "data": {
+    "node_id": 1,
+    "token": "your-node-token",
+    "max_tasks": 5,
+    "capabilities": "[\"local\",\"llm\"]"
+  }
+}
+```
+
+- `capabilities`：JSON 数组字符串，声明节点支持的推理能力
+  - `["local"]` — 仅支持本地 ResNet 模型（默认）
+  - `["local","llm"]` — 同时支持本地模型和第三方多模态大模型
+- 服务端 `NodeManager.get_idle_node_by_capability()` 根据 `recognition_type` 匹配具备相应能力的空闲节点，实现智能分发
+
+### 任务下发消息示例
+
+```json
+{
+  "type": "task",
+  "timestamp": 1700000000,
+  "data": {
+    "task_id": "uuid",
+    "image_filename": "test.jpg",
+    "image_data": "base64_encoded...",
+    "recognition_type": "local"
+  }
+}
+```
+
+- `recognition_type`：由服务端根据节点能力自动选择后下发
+  - `local` — 使用本地 ResNet 模型
+  - `llm` — 使用第三方多模态大模型 API
+  - `auto` — 由节点根据自身配置决定
 
 ### 错误码示例
 

@@ -3,6 +3,7 @@
 
 from datetime import datetime
 from flask import render_template, request, flash, jsonify, Blueprint
+import json
 from middleware.auth_middleware import login_required
 from services.dashboard.node_service import create_node
 from services.node_manager import node_manager
@@ -71,13 +72,17 @@ def add_node():
         name = (data.get("name") or "").strip()
         token = (data.get("token") or "").strip()
         addr = (data.get("addr") or "").strip()
+        capabilities_raw = (data.get("capabilities") or "local").strip()
+        # 将逗号分隔字符串转为 JSON 数组格式（用于 DB 存储）
+        capabilities_list = [c.strip() for c in capabilities_raw.split(",")]
+        capabilities_json = json.dumps(capabilities_list, ensure_ascii=False)
 
         if not name:
             return jsonify({"success": False, "message": "节点名称不能为空"}), 400
         if not token:
             return jsonify({"success": False, "message": "节点 Token 不能为空"}), 400
 
-        node_id = create_node(name, token, addr if addr else None)
+        node_id = create_node(name, token, addr if addr else None, capabilities=capabilities_json)
         if not node_id:
             return (
                 jsonify(
@@ -91,7 +96,7 @@ def add_node():
                 {
                     "success": True,
                     "message": "节点添加成功",
-                    "data": {"id": node_id},
+                    "data": {"id": node_id, "capabilities": capabilities_list},
                 }
             ),
             201,

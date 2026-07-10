@@ -1,5 +1,6 @@
 """节点管理器 - 管理 TCP 节点的注册、心跳、状态和负载"""
 
+import json
 import time
 import threading
 import socket
@@ -31,11 +32,13 @@ class NodeManager:
         self.lock = threading.Lock()
         self._logger = get_logger("NodeManager")
 
-    def register_node(self, node_id, addr, socket_obj=None, max_tasks=None):
+    def register_node(self, node_id, addr, socket_obj=None, max_tasks=None, capabilities=None):
         """注册节点"""
         with self.lock:
             if max_tasks is None:
                 max_tasks = 5
+            if capabilities is None:
+                capabilities = '["local"]'  # 默认仅支持本地模型
 
             self.nodes[node_id] = {
                 "addr": addr,
@@ -44,10 +47,12 @@ class NodeManager:
                 "status": "idle",
                 "max_tasks": max_tasks,
                 "current_tasks": 0,
+                "capabilities": capabilities,
             }
             self._logger.info(
-                "节点 %s (%s) 已注册，状态：空闲，最大任务数：%s",
-                node_id, f"{addr[0]}:{addr[1]}" if isinstance(addr, tuple) else str(addr), max_tasks
+                "节点 %s (%s) 已注册，状态：空闲，最大任务数：%s，能力：%s",
+                node_id, f"{addr[0]}:{addr[1]}" if isinstance(addr, tuple) else str(addr),
+                max_tasks, capabilities
             )
             return True
 
@@ -143,6 +148,7 @@ class NodeManager:
                         "status": info["status"],
                         "max_tasks": info["max_tasks"],
                         "current_tasks": info["current_tasks"],
+                        "capabilities": info.get("capabilities", '["local"]'),
                         "load_percentage": (
                             (info["current_tasks"] / info["max_tasks"]) * 100
                             if info["max_tasks"] > 0 else 0
@@ -171,12 +177,42 @@ class NodeManager:
                         "addr": f"{info['addr'][0]}:{info['addr'][1]}",
                         "max_tasks": info["max_tasks"],
                         "current_tasks": info["current_tasks"],
+                        "capabilities": info.get("capabilities", '["local"]'),
                         "load_percentage": (
                             (info["current_tasks"] / info["max_tasks"]) * 100
                             if info["max_tasks"] > 0 else 0
                         ),
                     })
         return idle_nodes
+
+    def get_idle_node_by_capability(self, recognition_type):
+        """根据识别能力获取一个匹配的空闲节点。
+
+        Args:
+            recognition_type: 识别方式类型
+                              "local" – 需要支持本地模型推理的节点
+                              "llm"   – 需要支持第三方大模型推理的节点
+                              "auto"  – 任意可用节点均可
+
+        Returns:
+            (node_id, node_info) or (None, None)
+        """
+        with self.lock:
+            for node_id, info in self.nodes.items():
+                if (info.get("socket") is not None
+                        and info["status"] == "idle"
+                        and info["current_tasks"] < info["max_tasks"]):
+                    node_caps = info.get("capabilities", '["local"]')
+                    caps_list = json.loads(node_caps)
+
+                    if recognition_type == "auto":
+                        # auto 模式下任意空闲节点都可
+                        return node_id, info
+                    elif recognition_type in caps_list:
+                        # 节点具备所需能力
+                        return node_id, info
+
+        return None, None
 
     def get_node_socket(self, node_id):
         """获取节点的 socket 对象"""
@@ -222,6 +258,7 @@ class NodeManager:
                 last_hb = info.get("last_heartbeat", "N/A")
                 max_tasks = info.get("max_tasks", "N/A")
                 current_tasks = info.get("current_tasks", "N/A")
+                capabilities = info.get("capabilities", '["local"]')
 
                 ts_str = (
                     datetime.fromtimestamp(last_hb).strftime("%Y-%m-%d %H:%M:%S")
@@ -236,8 +273,8 @@ class NodeManager:
                 )
 
                 self._logger.debug(
-                    "节点ID: %-20s | 地址: %s:%s | 状态: %s | 任务: %s/%s | 负载: %.1f%% | 心跳: %s",
-                    node_id, ip, port, status, current_tasks, max_tasks, load_percent, ts_str
+                    "节点ID: %-20s | 地址: %s:%s | 状态: %s | 任务: %s/%s | 负载: %.1f%% | 能力: %s | 心跳: %s",
+                    node_id, ip, port, status, current_tasks, max_tasks, load_percent, capabilities, ts_str
                 )
 
     def update_db_node_status(self, node_id, status, addr=None):
@@ -268,7 +305,25 @@ class NodeManager:
         finally:
             if "conn" in locals() and conn:
                 conn.close()
-
+    def update_db_node_capabilities(self, node_id, capabilities):
+        """更新节点在数据库中的能力标识"""
+        try:
+            conn = get_db_connection()
+            if not conn:
+                self._logger.error("无法连接数据库，无法更新节点 %s 能力", node_id)
+                return False
+            with conn.cursor() as cursor:
+                sql = "UPDATE nodes SET capabilities = %s, updated_at = NOW() WHERE id = %s"
+                cursor.execute(sql, (capabilities, node_id))
+            conn.commit()
+            self._logger.debug("节点 %s 能力更新为 %s", node_id, capabilities)
+            return True
+        except Exception as e:
+            self._logger.error("更新节点能力失败: %s", e)
+            return False
+        finally:
+            if "conn" in locals() and conn:
+                conn.close()
 
 # 模块级全局实例
 node_manager = NodeManager()

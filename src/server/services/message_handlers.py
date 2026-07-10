@@ -21,6 +21,7 @@ def async_handle_register(conn, addr, msg):
     node_id = msg["data"].get("node_id")
     token = msg["data"].get("token")
     max_tasks = msg["data"].get("max_tasks", 5)
+    capabilities = msg["data"].get("capabilities", '["local"]')
 
     if not node_id or not token or not isinstance(max_tasks, (int, float)):
         register_ack = {
@@ -46,7 +47,7 @@ def async_handle_register(conn, addr, msg):
     try:
         cursor = conn_db.cursor(pymysql.cursors.DictCursor)
         query = """
-            SELECT id, name, token, status, addr, is_active, created_at, updated_at
+            SELECT id, name, token, capabilities, status, addr, is_active, created_at, updated_at
             FROM nodes
             WHERE id = %s AND token = %s AND is_active = 1
         """
@@ -55,12 +56,15 @@ def async_handle_register(conn, addr, msg):
 
         if result:
             if node_id in node_manager.nodes:
+                # 节点已注册，更新能力信息
+                node_manager.nodes[node_id]["capabilities"] = capabilities
+                node_manager.update_db_node_capabilities(node_id, capabilities)
                 register_ack = {
                     "type": "register_ack",
                     "timestamp": int(time.time()),
                     "status": "success",
                     "message": f"节点已注册，最大任务数: {node_manager.get_node_max_tasks(node_id)}",
-                    "data": {"max_tasks": max_tasks},
+                    "data": {"max_tasks": max_tasks, "capabilities": capabilities},
                 }
                 json_protocol.send_json(conn, register_ack)
                 return
@@ -68,19 +72,21 @@ def async_handle_register(conn, addr, msg):
             if max_tasks <= 0 or max_tasks > 100:
                 max_tasks = 5
 
-            node_manager.register_node(node_id, addr, conn, max_tasks)
+            node_manager.register_node(node_id, addr, conn, max_tasks, capabilities)
             node_manager.update_db_node_status(node_id, "online", addr=addr)
+            node_manager.update_db_node_capabilities(node_id, capabilities)
             node_manager.set_node_idle(node_id)
 
             register_ack = {
                 "type": "register_ack",
                 "timestamp": int(time.time()),
                 "status": "success",
-                "message": f"节点注册成功，最大任务数: {max_tasks}",
-                "data": {"max_tasks": max_tasks},
+                "message": f"节点注册成功，最大任务数: {max_tasks}，能力: {capabilities}",
+                "data": {"max_tasks": max_tasks, "capabilities": capabilities},
             }
             json_protocol.send_json(conn, register_ack)
-            logger.info("注册成功: node_id=%s, addr=%s, max_tasks=%s", node_id, addr, max_tasks)
+            logger.info("注册成功: node_id=%s, addr=%s, max_tasks=%s, capabilities=%s",
+                        node_id, addr, max_tasks, capabilities)
         else:
             register_ack = {
                 "type": "register_ack",

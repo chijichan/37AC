@@ -1,6 +1,7 @@
 # config/base.py
 """基础配置 - 训练、节点服务、路径等（从环境变量读取）"""
 
+import json
 import os
 from pathlib import Path
 
@@ -66,6 +67,15 @@ LLM_PROMPT_TEMPLATE = os.getenv(
     '警告：禁止输出描述、分析、评论或任何非 JSON 内容。\n'
     '示例：{"label": "原神/神里绫华", "confidence": 98}'
 )
+
+# ==================== 节点能力配置 ====================
+# 节点支持的识别能力列表，自动根据配置推导
+# "local" 表示支持本地 ResNet 模型推理（始终可用）
+# "llm" 表示支持第三方多模态大模型推理
+_CAPABILITIES = ["local"]
+if LLM_RECOGNITION_ENABLED:
+    _CAPABILITIES.append("llm")
+CAPABILITIES = json.dumps(_CAPABILITIES, ensure_ascii=False)
 
 # ==================== 路径配置 ====================
 # 暂存

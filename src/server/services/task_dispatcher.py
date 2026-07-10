@@ -38,11 +38,19 @@ def dispatch_task(image_path: str, image_data, task_id: str,
         "data": {"task_id": task_id},
     }
 
-    node_id, node_info = node_manager.get_idle_node()
+    # 根据识别能力类型获取匹配的空闲节点
+    node_id, node_info = node_manager.get_idle_node_by_capability(recognition_type)
     if not node_id:
-        response["message"] = "没有空闲节点"
-        response["status"] = "waiting"
-        return response
+        # 降级：如果没有匹配能力的空闲节点，尝试获取任意空闲节点
+        node_id, node_info = node_manager.get_idle_node()
+        if not node_id:
+            response["message"] = "没有空闲节点"
+            response["status"] = "waiting"
+            return response
+        logger.warning(
+            "没有支持 %s 能力的空闲节点，降级分发到任意节点 node_id=%s",
+            recognition_type, node_id
+        )
 
     socket_obj = node_info.get("socket")
     if not socket_obj:

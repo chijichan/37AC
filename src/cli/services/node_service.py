@@ -24,6 +24,7 @@ from config.base import (
     IMAGE_PATH,
     LLM_RECOGNITION_ENABLED,
     LLM_TIMEOUT_SEC,
+    CAPABILITIES,
 )
 
 logger = get_logger("node_service")
@@ -302,6 +303,7 @@ def start_node_service():
                     "tasks": tasks,
                     "max_tasks": MAX_TASKS,
                     "local_port": assigned_port,
+                    "capabilities": CAPABILITIES,
                 },
             }
             json_protocol.send_json(s, register_msg)

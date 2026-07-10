@@ -214,6 +214,17 @@ if (!$isAjax) {
 <script>
     var allNodes = [];
 
+    // 格式化能力列表 JSON 为可读文本
+    function formatCapabilities(caps) {
+        if (!caps) return 'local';
+        try {
+            const arr = JSON.parse(caps);
+            return Array.isArray(arr) ? arr.join(', ') : caps;
+        } catch (e) {
+            return caps;
+        }
+    }
+
     // 复制文本
     function copyText(text, successMsg = '已复制') {
         navigator.clipboard.writeText(text).then(() => {
@@ -316,6 +327,7 @@ if (!$isAjax) {
                             ${ownerInfo}
                             · Token: <span class="node-token" onclick="copyText('${node.token}', 'Token 已复制')" title="点击复制 Token">${node.token ? node.token.slice(0, 12) + '…' : '--'}</span>
                             · ID: ${node.id}
+                            · 能力: ${formatCapabilities(node.capabilities)}
                         </div>
 
                         <div class="card-footer">
@@ -380,6 +392,10 @@ if (!$isAjax) {
                 <span>${node.max_tasks ?? 0}</span>
             </div>
             <div class="node-detail-row">
+                <span class="node-detail-label">识别能力</span>
+                <span>${formatCapabilities(node.capabilities)}</span>
+            </div>
+            <div class="node-detail-row">
                 <span class="node-detail-label">创建时间</span>
                 <span>${node.created_at || '--'}</span>
             </div>
@@ -415,6 +431,14 @@ if (!$isAjax) {
                     <input type="text" name="addr" placeholder="例如：192.168.1.100:13137" />
                     <small>可选，节点 IP 和端口</small>
                 </label>
+                <label>
+                    识别能力
+                    <select name="capabilities">
+                        <option value="local">仅本地模型 (local)</option>
+                        <option value="local,llm">本地模型 + LLM (local,llm)</option>
+                    </select>
+                    <small>节点支持的识别能力类型，可通过客户端 LLM_RECOGNITION_ENABLED 配置</small>
+                </label>
             </form>
         `;
 
@@ -438,6 +462,7 @@ if (!$isAjax) {
             name: form.name.value.trim(),
             token: form.token.value.trim(),
             addr: form.addr.value.trim() || undefined,
+            capabilities: form.capabilities.value.trim() || "local",
         };
 
         if (!data.name) {

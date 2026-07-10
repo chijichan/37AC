@@ -5,7 +5,7 @@ import pymysql
 from services.node_manager import get_db_connection
 
 
-def create_node(name, token, addr=None, is_active=True, user_id=None):
+def create_node(name, token, addr=None, is_active=True, user_id=None, capabilities='["local"]'):
     """向数据库新增节点记录"""
     conn = None
     try:
@@ -15,8 +15,8 @@ def create_node(name, token, addr=None, is_active=True, user_id=None):
 
         with conn.cursor() as cursor:
             cursor.execute(
-                """INSERT INTO nodes (name, token, addr, status, is_active, user_id, created_at, updated_at)
-                   VALUES (%s, %s, %s, %s, %s, %s, NOW(), NOW())""",
+                """INSERT INTO nodes (name, token, addr, status, is_active, user_id, capabilities, created_at, updated_at)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, NOW(), NOW())""",
                 (
                     name,
                     token,
@@ -24,6 +24,7 @@ def create_node(name, token, addr=None, is_active=True, user_id=None):
                     "offline",
                     1 if is_active else 0,
                     user_id,
+                    capabilities,
                 ),
             )
             conn.commit()
@@ -46,7 +47,7 @@ def get_all_nodes_from_db():
 
         with conn.cursor(pymysql.cursors.DictCursor) as cursor:
             cursor.execute(
-                """SELECT n.id, n.name, n.token, n.status, n.addr, n.is_active,
+                """SELECT n.id, n.name, n.token, n.capabilities, n.status, n.addr, n.is_active,
                           n.user_id, n.created_at, n.updated_at, u.username
                    FROM nodes n
                    LEFT JOIN users u ON n.user_id = u.id
@@ -60,6 +61,7 @@ def get_all_nodes_from_db():
                     "id": row.get("id"),
                     "name": row.get("name") or row.get("node_name") or row.get("id"),
                     "token": row.get("token"),
+                    "capabilities": row.get("capabilities") or "local",
                     "status": row.get("status"),
                     "addr": row.get("addr"),
                     "is_active": bool(row.get("is_active")),
@@ -97,7 +99,7 @@ def get_user_nodes_from_db(user_id):
 
         with conn.cursor(pymysql.cursors.DictCursor) as cursor:
             cursor.execute(
-                """SELECT n.id, n.name, n.token, n.status, n.addr, n.is_active,
+                """SELECT n.id, n.name, n.token, n.capabilities, n.status, n.addr, n.is_active,
                           n.user_id, n.created_at, n.updated_at, u.username
                    FROM nodes n
                    LEFT JOIN users u ON n.user_id = u.id
@@ -113,6 +115,7 @@ def get_user_nodes_from_db(user_id):
                     "id": row.get("id"),
                     "name": row.get("name") or row.get("node_name") or row.get("id"),
                     "token": row.get("token"),
+                    "capabilities": row.get("capabilities") or '["local"]',
                     "status": row.get("status"),
                     "addr": row.get("addr"),
                     "is_active": bool(row.get("is_active")),

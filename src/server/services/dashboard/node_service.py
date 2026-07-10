@@ -36,6 +36,47 @@ def create_node(name, token, addr=None, is_active=True, user_id=None, capabiliti
             conn.close()
 
 
+def update_node(node_id, name=None, addr=None, capabilities=None, is_active=None):
+    """更新节点记录"""
+    conn = None
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return False
+
+        fields = []
+        params = []
+        if name is not None:
+            fields.append("name = %s")
+            params.append(name)
+        if addr is not None:
+            fields.append("addr = %s")
+            params.append(addr)
+        if capabilities is not None:
+            fields.append("capabilities = %s")
+            params.append(capabilities)
+        if is_active is not None:
+            fields.append("is_active = %s")
+            params.append(1 if is_active else 0)
+
+        if not fields:
+            return True  # 无字段需要更新
+
+        fields.append("updated_at = NOW()")
+        params.append(node_id)
+
+        with conn.cursor() as cursor:
+            sql = "UPDATE nodes SET {} WHERE id = %s".format(", ".join(fields))
+            cursor.execute(sql, tuple(params))
+            conn.commit()
+            return cursor.rowcount > 0
+    except Exception:
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+
 def get_all_nodes_from_db():
     """从数据库获取所有节点信息"""
     nodes = []

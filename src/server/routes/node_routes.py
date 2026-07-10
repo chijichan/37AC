@@ -2,10 +2,10 @@
 """节点管理路由"""
 
 from datetime import datetime
-from flask import render_template, request, flash, jsonify, Blueprint
+from flask import request, jsonify, Blueprint
 import json
 from middleware.auth_middleware import login_required
-from services.dashboard.node_service import create_node
+from services.dashboard.node_service import create_node, update_node
 from services.node_manager import node_manager
 
 node_bp = Blueprint("node", __name__)
@@ -21,46 +21,33 @@ def get_all_nodes():
     返回 JSON 时的数据结构参考 `NodeManager.get_available_nodes()`。
     """
     is_ajax = request.headers.get("X-Requested-With") == "XMLHttpRequest"
-    wants_json = is_ajax or request.accept_mimetypes.accept_json
 
     try:
         nodes = node_manager.get_available_nodes()
 
-        if wants_json:
-            return (
-                jsonify(
-                    {
-                        "type": "nodes_list",
-                        "timestamp": int(datetime.now().timestamp()),
-                        "data": nodes,
-                    }
-                ),
-                200,
-            )
-        else:
-            # 普通浏览器访问，渲染页面，由 JS 进行刷新
-            return render_template(
-                "nodes.html", title="节点管理", year=datetime.now().year
-            )
+        return (
+            jsonify(
+                {
+                    "type": "nodes_list",
+                    "timestamp": int(datetime.now().timestamp()),
+                    "data": nodes,
+                }
+            ),
+            200,
+        )
 
     except Exception as e:
-        if wants_json:
-            return (
-                jsonify(
-                    {
-                        "type": "nodes_list",
-                        "timestamp": int(datetime.now().timestamp()),
-                        "data": [],
-                        "error": str(e),
-                    }
-                ),
-                500,
-            )
-        else:
-            flash(f"获取节点信息失败: {e}")
-            return render_template(
-                "nodes.html", title="节点管理", year=datetime.now().year
-            )
+        return (
+            jsonify(
+                {
+                    "type": "nodes_list",
+                    "timestamp": int(datetime.now().timestamp()),
+                    "data": [],
+                    "error": str(e),
+                }
+            ),
+            500,
+        )
 
 
 @node_bp.route("/nodes", methods=["POST"])
@@ -101,5 +88,37 @@ def add_node():
             ),
             201,
         )
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@node_bp.route("/nodes/<int:node_id>", methods=["PUT"])
+@login_required
+def edit_node(node_id):
+    """修改节点记录"""
+    try:
+        data = request.get_json(force=True, silent=True) or {}
+
+        name = (data.get("name") or "").strip()
+        addr = (data.get("addr") or "").strip()
+        capabilities_raw = (data.get("capabilities") or "").strip()
+
+        kwargs = {}
+        if name:
+            kwargs["name"] = name
+        if addr:
+            kwargs["addr"] = addr if addr else None
+        if capabilities_raw:
+            capabilities_list = [c.strip() for c in capabilities_raw.split(",")]
+            kwargs["capabilities"] = json.dumps(capabilities_list, ensure_ascii=False)
+
+        if not kwargs:
+            return jsonify({"success": False, "message": "没有需要更新的字段"}), 400
+
+        success = update_node(node_id, **kwargs)
+        if not success:
+            return jsonify({"success": False, "message": "更新节点失败，请确认节点存在"}), 500
+
+        return jsonify({"success": True, "message": "节点更新成功"}), 200
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500

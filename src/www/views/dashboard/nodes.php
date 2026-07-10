@@ -325,14 +325,14 @@ if (!$isAjax) {
 
                         <div style="font-size: 0.85rem; color: var(--pico-muted-color);">
                             ${ownerInfo}
-                            · Token: <span class="node-token" onclick="copyText('${node.token}', 'Token 已复制')" title="点击复制 Token">${node.token ? node.token.slice(0, 12) + '…' : '--'}</span>
+                            · ${APIKEYS_ICON_SVG} Token: <span class="node-token" onclick="copyText('${node.token}', 'Token 已复制')" title="点击复制 Token">${node.token ? node.token.slice(0, 12) + '…' : '--'}</span>
                             · ID: ${node.id}
                             · 能力: ${formatCapabilities(node.capabilities)}
                         </div>
 
                         <div class="card-footer">
                             <button class="secondary outline" onclick="showNodeDetail(${node.id})">${HISTORY_ICON_SVG} 详情</button>
-                            <button class="outline" onclick="copyText('${node.token}', 'Token 已复制')">${APIKEYS_ICON_SVG} 复制 Token</button>
+                            <button class="outline" onclick="showEditNodeModal(${node.id})">${SETTINGS_ICON_SVG} 修改</button>
                         </div>
                     </article>
                 `;
@@ -490,6 +490,95 @@ if (!$isAjax) {
                 loadNodes();
             } else {
                 Notify.error(result.message || '添加失败');
+            }
+        } catch (e) {
+            Notify.error('网络错误，请检查服务器连接');
+        } finally {
+            if (btn) btn.removeAttribute('aria-busy');
+        }
+    }
+
+    // 修改节点弹窗（使用 PicoCSS 模态框）
+    function showEditNodeModal(nodeId) {
+        const node = allNodes.find(n => n.id === nodeId);
+        if (!node) return;
+
+        // 解析 capabilities 为逗号分隔字符串用于 select 匹配
+        let capsStr = 'local';
+        try {
+            const arr = JSON.parse(node.capabilities);
+            capsStr = Array.isArray(arr) ? arr.join(',') : node.capabilities;
+        } catch (e) {
+            capsStr = node.capabilities || 'local';
+        }
+
+        const bodyHtml = `
+            <p>修改节点 <strong>${node.name || '未命名'}</strong> 的配置。</p>
+            <form id="form-edit-node">
+                <input type="hidden" name="node_id" value="${node.id}" />
+                <label>
+                    节点名称
+                    <input type="text" name="name" value="${node.name || ''}" placeholder="例如：推理节点-01" required maxlength="50" />
+                </label>
+                <label>
+                    节点地址
+                    <input type="text" name="addr" value="${node.addr || ''}" placeholder="例如：192.168.1.100:13137" />
+                    <small>可选，节点 IP 和端口</small>
+                </label>
+                <label>
+                    识别能力
+                    <select name="capabilities">
+                        <option value="local" ${capsStr === 'local' ? 'selected' : ''}>仅本地模型 (local)</option>
+                        <option value="local,llm" ${capsStr === 'local,llm' ? 'selected' : ''}>本地模型 + LLM (local,llm)</option>
+                    </select>
+                    <small>节点支持的识别能力类型</small>
+                </label>
+            </form>
+        `;
+
+        Modal.show(SETTINGS_ICON_SVG + ' 修改节点', bodyHtml, [{
+                text: '取消',
+                class: 'secondary',
+                click: () => Modal.close()
+            },
+            {
+                text: '确认修改',
+                click: () => submitEditNode(node.id)
+            }
+        ]);
+    }
+
+    async function submitEditNode(nodeId) {
+        const form = document.getElementById('form-edit-node');
+        if (!form) return;
+
+        const data = {
+            name: form.name.value.trim(),
+            addr: form.addr.value.trim() || undefined,
+            capabilities: form.capabilities.value.trim() || "local",
+        };
+
+        if (!data.name) {
+            Notify.error('节点名称不能为空');
+            return;
+        }
+
+        const modalContent = Modal._dialog ? Modal._dialog.querySelector('article') : null;
+        const btn = modalContent ? modalContent.querySelector('footer button:last-child') : null;
+        if (btn) btn.setAttribute('aria-busy', 'true');
+
+        try {
+            const response = await Auth.fetch(`${window.API_BASE_URL}/nodes/${nodeId}`, {
+                method: 'PUT',
+                body: JSON.stringify(data)
+            });
+            const result = await response.json();
+            if (result.success) {
+                Modal.close();
+                Notify.success('节点修改成功！');
+                loadNodes();
+            } else {
+                Notify.error(result.message || '修改失败');
             }
         } catch (e) {
             Notify.error('网络错误，请检查服务器连接');

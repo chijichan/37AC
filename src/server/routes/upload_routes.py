@@ -22,6 +22,7 @@ from services.file_service import save_uploaded_file
 from services.api_key_service import verify_api_key
 from services.sse_bus import sse_bus
 from middleware.auth_middleware import login_required
+from middleware.rate_limiter import rate_limit
 
 upload_bp = Blueprint("upload", __name__)
 
@@ -49,6 +50,7 @@ def _require_api_key():
 
 
 @upload_bp.route("/upload", methods=["GET", "POST"])
+@rate_limit
 def upload_and_predict():
     if request.method == "POST":
         # 验证 API Key（从请求头获取）
@@ -146,7 +148,17 @@ def upload_and_predict():
                 }
             )
 
-    return render_template("upload.html", title="上传图片", year=datetime.now().year)
+    # GET 请求：返回 API 说明，前端页面由 PHP 仪表盘提供
+    return jsonify({
+        "type": "info",
+        "message": "37AC 上传 API",
+        "usage": {
+            "method": "POST",
+            "url": "/upload",
+            "headers": {"X-API-Key": "your_api_key"},
+            "body": {"file": "image_file"},
+        },
+    }), 200
 
 
 @upload_bp.route("/tasks/<task_id>", methods=["GET"])

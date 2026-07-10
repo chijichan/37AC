@@ -69,18 +69,24 @@ class SSEBus:
         """生成器：阻塞等待事件，超时则发送 heartbeat 并继续。
 
         用于 Flask SSE 路由中的 Response 生成器。
+        对 waiting 状态不结束流，继续等待最终结果。
         """
         deadline = time.time() + timeout
         while time.time() < deadline:
             try:
                 data = q.get(timeout=5.0)  # 每 5 秒检查一次超时
+                parsed = json.loads(data)
+                # waiting 状态不结束流，继续等待最终结果
+                if parsed.get("status") == "waiting":
+                    yield f"data: {data}\n\n"
+                    continue
                 yield f"data: {data}\n\n"
-                return  # 拿到结果后结束流
+                return  # 拿到最终结果后结束流
             except queue.Empty:
                 # 发送 SSE heartbeat 注释，保持连接活跃
                 yield ": heartbeat\n\n"
         # 超时
-        yield f"data: {json.dumps({'status': 'timeout', 'message': '等待超时'}, ensure_ascii=False)}\n\n"
+        yield f"data: {json.dumps({'status': 'timeout', 'message': '等待超时', 'task_id': task_id}, ensure_ascii=False)}\n\n"
 
 
 # 全局单例

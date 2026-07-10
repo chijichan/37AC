@@ -46,6 +46,9 @@ def dispatch_task(image_path: str, image_data, task_id: str,
         if not node_id:
             response["message"] = "没有空闲节点"
             response["status"] = "waiting"
+            # 即使没有空闲节点，也要注册 pending 任务，让 task_manager 重试
+            if register_pending:
+                task_manager.register_task(task_id, image_path, recognition_type=recognition_type)
             return response
         logger.warning(
             "没有支持 %s 能力的空闲节点，降级分发到任意节点 node_id=%s",

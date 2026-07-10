@@ -46,7 +46,7 @@
 系统主要组成：
 
 - `src/cli/`：训练、预测与边缘节点客户端
-- `src/server/`：Flask 服务端、API、节点管理
+- `src/server/`：Flask 服务端、API、节点管理、限流中间件
 - `www/`：PHP 仪表盘与前端页面
 
 ---
@@ -89,10 +89,11 @@
 - 自动保存最佳模型权重与类别映射
 
 ### 在线角色识别
-- 提供 **Flask Web UI** + **PHP 仪表盘** 双渠道访问
+- 提供 **Flask 流式API** + **PHP 仪表盘** 双渠道访问
 - 支持图片上传、异步推理、结果展示
 - 图片格式支持 `.jpg/.jpeg/.png`
 - 可视化显示角色置信度与概率分布
+- **流式上传**：POST `/upload` 携带 `X-Stream-Response: true` 直接返回 SSE 流，无需二次连接
 
 ### 分布式边缘推理
 - 中心服务器通过 **TCP** 下发推理任务
@@ -308,7 +309,13 @@ LLM_API_KEY=your_api_key
 MODEL_FILENAME=37ac-v0.0.1.pth
 ```
 
-### 5. 可选：PHP 仪表盘环境
+### 5. 配置数据库表结构
+
+```bash
+mysql -u root -p < scripts/alter_tables.sql
+```
+
+### 6. 可选：PHP 仪表盘环境
 
 如果需要仪表盘，安装 PHP 7+，并将 `www/public/` 作为 Web 根目录。
 
@@ -381,7 +388,7 @@ python src/cli/main.py --mode 4
 
 | 类型 | 方向 | 说明 |
 |------|------|------|
-| register | 节点 -> 服务器 | 节点注册（含 capabilities 等元数据） |
+| register | 节点 -> 服务器 | 节点注册（含 capabilities / max_tasks 等元数据） |
 | register_ack | 服务器 -> 节点 | 注册确认 |
 | heartbeat | 节点 -> 服务器 | 心跳 |
 | heartbeat_ack | 服务器 -> 节点 | 心跳确认 |
@@ -446,9 +453,10 @@ python src/cli/main.py --mode 4
 
 | 服务 | 地址 |
 |------|------|
-| Flask Web | `http://localhost:13138` |
+| Flask Web / API | `http://localhost:13138` |
 | PHP 仪表盘 | `http://localhost:8000` |
-| API 接口 | `http://localhost:13138/api/` |
+| 上传流式接口 | `POST http://localhost:13138/upload` (Accept: `text/event-stream`) |
+| SSE 结果流 | `GET http://localhost:13138/tasks/<task_id>/stream` |
 
 ---
 

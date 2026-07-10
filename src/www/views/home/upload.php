@@ -1088,7 +1088,18 @@ require_once ROOT_PATH . '/views/layout.php';
             const formData = this.createFormData(blob);
 
             try {
-                // 使用 Auth.fetch 自动携带 JWT 令牌（如有登录）
+                // === 方案1: 流式上传 (POST /upload + SSE 流) ===
+                try {
+                    await this.streamUpload(formData);
+                    return;
+                } catch (streamErr) {
+                    // 流式上传失败（如服务端不支持），降级到传统方式
+                    console.warn('流式上传降级:', streamErr.message);
+                }
+
+                // === 方案2: 传统方式 (JSON + SSE 推送) ===
+                this.showLoading(null, formData.get('recognition_type') || 'auto');
+
                 const response = await Auth.fetch(`${window.API_BASE_URL}/upload`, {
                     method: 'POST',
                     body: formData,
@@ -1105,7 +1116,6 @@ require_once ROOT_PATH . '/views/layout.php';
                 const data = await this.processUploadResponse(response);
 
                 if (data.status === 'queued' && data.task_id) {
-                    // 优先使用 SSE 实时流，失败则降级到轮询
                     await this.streamTaskResult(data.task_id);
                 } else {
                     throw new Error(data.message || '上传成功，但未返回任务ID');
@@ -1114,6 +1124,95 @@ require_once ROOT_PATH . '/views/layout.php';
             } catch (error) {
                 throw error;
             }
+        }
+
+        async streamUpload(formData) {
+            // 尝试流式上传：POST /upload 返回 SSE 流，直接在 HTTP 响应中推送结果
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', `${window.API_BASE_URL}/upload`);
+            xhr.setRequestHeader('X-API-Key', '37ac_ls340v2qkcbqqt7xbdi0d1kvb9cd1qz4cfgp3s4z');
+            xhr.setRequestHeader('X-Stream-Response', 'true');
+
+            return new Promise((resolve, reject) => {
+                let resultData = null;
+                let taskId = null;
+                let buffer = '';
+
+                xhr.onreadystatechange = () => {
+                    // 等待拿到响应头确认 content-type
+                    if (xhr.readyState === XMLHttpRequest.HEADERS_RECEIVED) {
+                        const contentType = xhr.getResponseHeader('Content-Type') || '';
+                        if (!contentType.includes('text/event-stream')) {
+                            // 服务端不支持流式，终止请求并降级
+                            xhr.abort();
+                            reject(new Error('服务端不支持流式响应'));
+                            return;
+                        }
+                    }
+
+                    if (xhr.readyState === XMLHttpRequest.LOADING || xhr.readyState === XMLHttpRequest.DONE) {
+                        buffer += xhr.responseText;
+                        // 按行解析 SSE 数据
+                        const lines = buffer.split('\n');
+                        buffer = lines.pop() || ''; // 保留未完成行
+
+                        for (const line of lines) {
+                            const match = line.match(/^data:\s*(.*)/);
+                            if (!match) continue;
+                            try {
+                                const data = JSON.parse(match[1]);
+
+                                if (data.task_id) taskId = data.task_id;
+
+                                if (data.status === 'queued') {
+                                    // 显示加载状态
+                                    this.showLoading(taskId, data.recognition_type);
+                                } else if (data.status === 'waiting') {
+                                    // 更新提示：等待空闲节点
+                                    this.showLoading(taskId, 'waiting');
+                                    const spinnerText = document.querySelector('.loading-spinner p');
+                                    if (spinnerText) {
+                                        spinnerText.textContent = '等待空闲节点中... 节点上线后自动分配推理';
+                                    }
+                                } else if (data.status === 'completed') {
+                                    this.showResult(data);
+                                    resolve(data);
+                                    return;
+                                } else if (data.status === 'failed' || data.status === 'error') {
+                                    reject(new Error(data.message || data.error || '推理失败'));
+                                    return;
+                                } else if (data.status === 'timeout') {
+                                    reject(new Error(data.message || '推理超时'));
+                                    return;
+                                }
+                            } catch (e) {
+                                // 忽略解析错误，继续等待
+                            }
+                        }
+
+                        // 流结束但没有结果，降级
+                        if (xhr.readyState === XMLHttpRequest.DONE && !resultData) {
+                            if (taskId) {
+                                // 至少拿到了 taskId，尝试 SSE 端点
+                                reject(new Error('STREAM_DONE_FALLBACK:' + taskId));
+                            } else {
+                                reject(new Error('未收到任何任务数据'));
+                            }
+                        }
+                    }
+                };
+
+                xhr.onerror = () => reject(new Error('网络错误'));
+                xhr.send(formData);
+            }).catch(err => {
+                if (err.message && err.message.startsWith('STREAM_DONE_FALLBACK:')) {
+                    const taskId = err.message.split(':')[1];
+                    return this.streamTaskResult(taskId).then(data => {
+                        this.showResult(data);
+                    });
+                }
+                throw err;
+            });
         }
 
         createFormData(blob) {
@@ -1157,6 +1256,12 @@ require_once ROOT_PATH . '/views/layout.php';
                             if (data.status === 'completed') {
                                 es.close();
                                 resolve(data);
+                            } else if (data.status === 'waiting') {
+                                // 任务在等待队列中，更新提示信息，保持连接等待
+                                const spinnerText = document.querySelector('.loading-spinner p');
+                                if (spinnerText) {
+                                    spinnerText.textContent = '等待空闲节点中... 节点上线后自动分配推理';
+                                }
                             } else if (data.status === 'timeout' || data.status === 'error') {
                                 es.close();
                                 reject(new Error(data.message || '推理超时'));
@@ -1232,6 +1337,9 @@ require_once ROOT_PATH . '/views/layout.php';
         // ========== 结果显示 ==========
 
         showResult(data) {
+            // 隐藏加载动画
+            this.setLoadingState(false);
+
             const result = data.result || {};
             // 顶层 error 优先，或从 result.error 取
             const error = data.error || result.error;
@@ -1288,6 +1396,9 @@ require_once ROOT_PATH . '/views/layout.php';
         }
 
         showError(message) {
+            // 隐藏加载动画
+            this.setLoadingState(false);
+
             this.elements.resultDiv.innerHTML = `
             <div class="error-message">
                 <span style="color: var(--pico-form-element-invalid-border-color);">
@@ -1299,6 +1410,18 @@ require_once ROOT_PATH . '/views/layout.php';
         `;
 
             this.elements.resultDiv.classList.add('result-show');
+        }
+
+        showLoading(taskId, recognitionType) {
+            this.setLoadingState(true);
+            // 更新加载提示文字
+            const spinnerText = this.elements.loadingSpinner.querySelector('p');
+            if (spinnerText) {
+                const modeText = recognitionType === 'llm' ? '大模型深度思考' :
+                    recognitionType === 'local' ? '本地模型快速识别' :
+                    '自动选择识别方式';
+                spinnerText.textContent = `正在识别中，请稍候... (${modeText})`;
+            }
         }
 
         hideResult() {

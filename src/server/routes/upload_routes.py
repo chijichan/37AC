@@ -6,14 +6,9 @@ import json
 import threading
 from datetime import datetime
 from flask import (
-    render_template,
     request,
-    redirect,
-    url_for,
-    flash,
     jsonify,
     Blueprint,
-    g,
     Response,
 )
 from services.node_manager import get_db_connection
@@ -21,7 +16,6 @@ from services.task_dispatcher import dispatch_task
 from services.file_service import save_uploaded_file
 from services.api_key_service import verify_api_key
 from services.sse_bus import sse_bus
-from middleware.auth_middleware import login_required
 from middleware.rate_limiter import rate_limit
 
 upload_bp = Blueprint("upload", __name__)
@@ -59,21 +53,18 @@ def upload_and_predict():
             return error_response, status_code
 
         if "file" not in request.files:
-            flash("没有选择文件")
-            return redirect(request.url)
+            return jsonify({"success": False, "message": "没有选择文件"}), 400
 
         file = request.files["file"]
         if file.filename == "":
-            flash("没有选择文件")
-            return redirect(request.url)
+            return jsonify({"success": False, "message": "没有选择文件"}), 400
 
         image_data = file.read()
         file.seek(0)
 
         filepath = save_uploaded_file(file)
         if not filepath:
-            flash("请上传 png/jpg/jpeg 格式的图片")
-            return redirect(request.url)
+            return jsonify({"success": False, "message": "请上传 png/jpg/jpeg 格式的图片"}), 400
 
         # 生成任务ID
         task_id = str(uuid.uuid4())
@@ -83,14 +74,21 @@ def upload_and_predict():
         if recognition_type not in ("local", "llm", "auto"):
             recognition_type = "local"
 
-        # 启动一个线程去分发任务（非阻塞）
+        # 判断客户端是否期望流式响应
+        wants_stream = (
+            request.accept_mimetypes.best == "text/event-stream"
+            or request.headers.get("X-Stream-Response", "").lower() == "true"
+        )
+
+        # 启动分发线程（两种模式共用）
         def dispatch():
             result = dispatch_task(filepath, image_data, task_id,
                                    recognition_type=recognition_type)
             print(f"[调度结果] 任务 {task_id}: {result}")
 
-            # 如果任务分发失败（如图片过大），将错误写入数据库并推送 SSE
-            if result.get("status") in ("failed", "error"):
+            status = result.get("status")
+
+            if status in ("failed", "error"):
                 try:
                     conn = get_db_connection()
                     if conn:
@@ -103,7 +101,6 @@ def upload_and_predict():
                                  "failed"),
                             )
                             conn.commit()
-                        # 推送 SSE 通知前端
                         sse_bus.publish(task_id, {
                             "status": "failed",
                             "message": result.get("message", "分发失败"),
@@ -118,7 +115,17 @@ def upload_and_predict():
                         conn.close()
                 return
 
-            # 保存 API Key 使用记录到 task_results
+            if status == "waiting":
+                # 任务进入等待队列，task_manager 会重试，推送等待通知
+                sse_bus.publish(task_id, {
+                    "status": "waiting",
+                    "message": "没有空闲节点，任务已进入等待队列，节点上线后自动分发",
+                    "task_id": task_id,
+                    "result": [],
+                })
+                # waiting 状态下 task_manager 已注册，无需更新 API Key
+                return
+
             try:
                 conn = get_db_connection()
                 if conn:
@@ -136,6 +143,30 @@ def upload_and_predict():
 
         threading.Thread(target=dispatch, daemon=True).start()
 
+        # === 流式响应模式 ===
+        if wants_stream:
+            def generate():
+                # 先发一个 queued 事件
+                yield f"data: {json.dumps({'status': 'queued', 'message': '任务已提交，等待推理...', 'task_id': task_id, 'recognition_type': recognition_type}, ensure_ascii=False)}\n\n"
+
+                q = sse_bus.subscribe(task_id)
+                try:
+                    for event in sse_bus.iter_events(task_id, q, timeout=120):
+                        yield event
+                finally:
+                    sse_bus.unsubscribe(task_id, q)
+
+            return Response(
+                generate(),
+                mimetype="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "X-Accel-Buffering": "no",
+                    "Connection": "keep-alive",
+                },
+            )
+
+        # === 传统 JSON 响应模式 ===
         if request.headers.get("X-Requested-With") == "XMLHttpRequest":
             return jsonify(
                 {
@@ -148,15 +179,25 @@ def upload_and_predict():
                 }
             )
 
-    # GET 请求：返回 API 说明，前端页面由 PHP 仪表盘提供
+        return jsonify({
+            "type": "dispatch_task",
+            "timestamp": int(datetime.now().timestamp()),
+            "status": "queued",
+            "message": "图片已上传，等待推理...",
+            "task_id": task_id,
+            "recognition_type": recognition_type,
+        })
+
+    # GET 请求：返回 API 说明
     return jsonify({
         "type": "info",
         "message": "37AC 上传 API",
         "usage": {
             "method": "POST",
             "url": "/upload",
-            "headers": {"X-API-Key": "your_api_key"},
+            "headers": {"X-API-Key": "your_api_key", "Accept": "text/event-stream"},
             "body": {"file": "image_file"},
+            "streaming": "设置 Accept: text/event-stream 或 X-Stream-Response: true 获取流式响应",
         },
     }), 200
 
@@ -249,7 +290,7 @@ def stream_task_result(task_id):
                     conn.close()
 
             # 阻塞等待 SSE 事件
-            for event in sse_bus.iter_events(task_id, q, timeout=60):
+            for event in sse_bus.iter_events(task_id, q, timeout=120):
                 yield event
         finally:
             sse_bus.unsubscribe(task_id, q)

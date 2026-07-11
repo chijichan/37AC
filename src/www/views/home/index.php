@@ -158,15 +158,14 @@ require_once ROOT_PATH . '/views/layout.php';
     <div class="article__poster">
         <div class="poster__info">
             <h2
-                style="color: rgba(0, 0, 0, 0.8); text-shadow: -1px 1px 0 rgba(255, 255, 255, 0.9), 1px 1px 0 rgba(255, 255, 255, 0.9), 1px -1px 0 rgba(255, 255, 255, 0.9), -1px -1px 0 rgba(255, 255, 255, 0.9); margin-top: -80px;">
+                style="color: rgb(116,225,223,0.9); margin-top: -80px;">
                 #SECOND</h2>
             <p
-                style="color: rgba(0, 0, 0, 0.8); text-shadow: -1px 1px 0 rgba(255, 255, 255, 0.9), 1px 1px 0 rgba(255, 255, 255, 0.9), 1px -1px 0 rgba(255, 255, 255, 0.9), -1px -1px 0 rgba(255, 255, 255, 0.9);">
+                style="color: rgb(116,225,223,0.9);">
                 角色识别案例</p>
         </div>
-        <!-- <img class="img-responsive" src="https://static.322337.xyz/view.php/47a0df48f93aaab740ad020f82a50c26.png" -->
-        <img class="img-responsive" src="https://upload-bbs.miyoushe.com/upload/2026/05/16/313131301/47a0df48f93aaab740ad020f82a50c26_3771695543515120247.png"
-            alt="欸嘿嘿" />
+        <img class="img-responsive" src="https://upload-bbs.miyoushe.com/upload/2026/05/16/313131301/0c4ac0a32f95757ab03f112f6bca3a70_1548251836036077026.jpg" alt="欸嘿" />
+        <!-- <img class="img-responsive" src="https://static.322337.xyz/view.php/0c4ac0a32f95757ab03f112f6bca3a70.jpg" alt="欸嘿" /> -->
     </div>
     <div class="article__info">
         <h2>高清识别</h2>
@@ -177,14 +176,14 @@ require_once ROOT_PATH . '/views/layout.php';
     <div class="article__poster">
         <div class="poster__info">
             <h2
-                style="color: rgb(116,225,223,0.8); text-shadow: -1px 1px 0 rgba(255, 255, 255, 0.9), 1px 1px 0 rgba(255, 255, 255, 0.9), 1px -1px 0 rgba(255, 255, 255, 0.9), -1px -1px 0 rgba(255, 255, 255, 0.9);">
+                style="color: rgba(0, 0, 0, 0.8);">
                 #THIRD</h2>
             <p
-                style="color: rgb(116,225,223,0.8); text-shadow: -1px 1px 0 rgba(255, 255, 255, 0.9), 1px 1px 0 rgba(255, 255, 255, 0.9), 1px -1px 0 rgba(255, 255, 255, 0.9), -1px -1px 0 rgba(255, 255, 255, 0.9);">
+                style="color: rgba(0, 0, 0, 0.8);">
                 智能匹配</p>
         </div>
-        <!-- <img class="img-responsive" src="https://static.322337.xyz/view.php/0c4ac0a32f95757ab03f112f6bca3a70.jpg" alt="欸嘿嘿嘿" /> -->
-        <img class="img-responsive" src="https://upload-bbs.miyoushe.com/upload/2026/05/16/313131301/0c4ac0a32f95757ab03f112f6bca3a70_1548251836036077026.jpg" alt="欸嘿嘿嘿" />
+        <img class="img-responsive" src="https://upload-bbs.miyoushe.com/upload/2026/05/16/313131301/47a0df48f93aaab740ad020f82a50c26_3771695543515120247.png" alt="欸嘿嘿" />
+        <!-- <img class="img-responsive" src="https://static.322337.xyz/view.php/47a0df48f93aaab740ad020f82a50c26.png" alt="欸嘿嘿" /> -->
     </div>
     <div class="article__info">
         <h2>没有多平台支持</h2>

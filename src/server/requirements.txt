@@ -14,6 +14,9 @@ PyMySQL==1.2.0
 # JWT 认证
 PyJWT==2.13.0
 
+# 密码哈希
+bcrypt==4.3.0
+
 # 环境变量加载
 python-dotenv==1.2.2
 

@@ -11,8 +11,8 @@ from services.task_manager import task_manager
 
 logger = get_logger("task_dispatcher")
 
-# 图片大小限制（15MB）
-MAX_IMAGE_SIZE = 1024 * 1024 * 15
+# 图片大小限制（10MB）
+MAX_IMAGE_SIZE = 1024 * 1024 * 10
 
 
 def dispatch_task(image_path: str | None, image_data, task_id: str,

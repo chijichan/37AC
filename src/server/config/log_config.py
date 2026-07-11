@@ -31,6 +31,9 @@ def get_logger(name: str) -> logging.Logger:
     - 统一的文件输出
     - 统一的控制台输出
 
+    子 logger 不添加任何处理器，完全由根 logger 统一输出，
+    避免重复打印。
+
     Args:
         name: logger 名称，通常传入 __name__
 
@@ -45,19 +48,13 @@ def get_logger(name: str) -> logging.Logger:
 
     logger.setLevel(get_log_level())
 
-    # 如果 logger 已有处理器（可能来自根日志配置），跳过添加
+    # 如果 logger 已有处理器（可能来自根日志配置），跳过
     if logger.handlers:
         _loggers_configured.add(name)
         return logger
 
-    # 子 logger 只添加控制台处理器，文件处理器由根 logger 统一管理
+    # 不添加处理器，由根 logger（init_logging 配置）统一处理
     logger.propagate = True
-
-    # 控制台处理器
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(get_log_level())
-    console_handler.setFormatter(logging.Formatter(LOG_FORMAT, datefmt=LOG_DATE_FORMAT))
-    logger.addHandler(console_handler)
 
     _loggers_configured.add(name)
     return logger

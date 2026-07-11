@@ -14,6 +14,14 @@ from config.log_config import get_logger
 
 logger = get_logger(__name__)
 
+# YOLO 人物检测（可选）
+try:
+    from detection.yolo_detector import crop_best_character
+    YOLO_AVAILABLE = True
+except ImportError:
+    YOLO_AVAILABLE = False
+    logger.debug("YOLO 检测模块不可用，使用全图分类")
+
 # 数据预处理
 PREDICT_TRANSFORMS = transforms.Compose(
     [
@@ -146,6 +154,31 @@ def predict_image(image_path, model_path=None, classes_file=None, use_cache=True
             return result
 
         # ======================
+        # === YOLO 快速定位（可选）===
+        # ======================
+        # 优先使用 YOLO 检测并裁剪人物区域，提高识别精度
+        effective_image = image_path
+        yolo_info = None
+        if YOLO_ENABLED and YOLO_AVAILABLE:
+            try:
+                crop_path, det_info = crop_best_character(image_path)
+                if crop_path and os.path.exists(crop_path):
+                    effective_image = crop_path
+                    yolo_info = det_info
+                    logger.info(
+                        "YOLO 定位到角色区域: %s, 类别=%s, 置信度=%.2f",
+                        det_info["bbox"] if det_info else "N/A",
+                        det_info["class_name"] if det_info else "N/A",
+                        det_info["confidence"] if det_info else 0,
+                    )
+                else:
+                    logger.info("YOLO 未检测到角色区域，使用全图分类")
+            except Exception as e:
+                logger.warning("YOLO 检测异常（降级到全图分类）: %s", e)
+        elif not YOLO_AVAILABLE:
+            logger.debug("YOLO 模块未安装，使用全图分类")
+
+        # ======================
         # === 加载类别（带缓存） ===
         # ======================
         global _classes_cache
@@ -189,7 +222,8 @@ def predict_image(image_path, model_path=None, classes_file=None, use_cache=True
         transform = PREDICT_TRANSFORMS
 
         try:
-            image = Image.open(image_path).convert("RGB")
+            # 使用 YOLO 裁剪后的图片（如有）进行分类
+            image = Image.open(effective_image).convert("RGB")
             image_tensor = transform(image).unsqueeze(0).to(DEVICE)
 
             with torch.no_grad():
@@ -218,11 +252,13 @@ def predict_image(image_path, model_path=None, classes_file=None, use_cache=True
                         "label": label,
                         "confidence": round(confidence_value, 2),
                         "class_probs": class_probs,
+                        "yolo_detected": yolo_info is not None,
                     }
                 )
 
                 logger.info(
                     f"预测成功: {image_path} -> {label} ({confidence_value:.2f}%)"
+                    + (f" [YOLO定位]" if yolo_info else "")
                 )
                 return result
 

@@ -35,10 +35,6 @@ TSAC_DEBUG = os.getenv("TSAC_DEBUG", "False").lower() == "true"
 TCP_HOST = os.getenv("TCP_HOST", "0.0.0.0")
 TCP_PORT = int(os.getenv("TCP_PORT", "13137"))
 
-# 暂存
-IMAGE_PATH = ROOT_PATH / "saves" / "uploads"
-IMAGE_PATH.mkdir(exist_ok=True)
-
 # - 日志配置
 LOGS_PATH = ROOT_PATH / "saves" / "logs"
 LOGS_PATH.mkdir(exist_ok=True)

@@ -24,25 +24,54 @@ TRAIN_TRANSFORMS = transforms.Compose(
 )
 
 
-def train_model():
+def train_model(dataset_dir=None, use_yolo_crop=False):
+    # 确定训练用数据集目录
+    train_dir = dataset_dir or str(DATASET_DIR)
+
     # 检查数据集目录
-    if not os.path.exists(DATASET_DIR):
-        logger.error(f"数据集目录不存在: {DATASET_DIR}")
+    if not os.path.exists(train_dir):
+        logger.error(f"数据集目录不存在: {train_dir}")
         logger.error(
             "请先创建数据集目录，在每个IP文件夹下，为每个角色创建一个子文件夹，子文件夹内放入对应角色的图片。"
         )
         return
 
-    if not os.access(DATASET_DIR, os.R_OK):
-        logger.error(f"数据集目录不可读: {DATASET_DIR}")
+    if not os.access(train_dir, os.R_OK):
+        logger.error(f"数据集目录不可读: {train_dir}")
         return
+
+    # ======================
+    # === YOLO 数据集裁剪 ===
+    # ======================
+    if use_yolo_crop:
+        logger.info("用户选择使用 YOLO 裁剪数据集图片...")
+        try:
+            from detection.yolo_detector import crop_dataset
+            output_dir = str(CROPPED_DATASET_DIR)
+            result = crop_dataset(train_dir, output_dir)
+            if result["processed"] > 0:
+                logger.info(
+                    "YOLO 裁剪完成: 处理 %d 张, 跳过 %d 张, 失败 %d 张",
+                    result["processed"], result["skipped"], result["failed"]
+                )
+            else:
+                logger.info("YOLO 未裁剪新图片（可能已全部处理过）")
+            # 用裁剪后的数据集训练
+            train_dir = output_dir
+            logger.info("使用 YOLO 裁剪后的数据集: %s", train_dir)
+        except ImportError:
+            logger.warning("YOLO 模块未安装 (ultralytics)，跳过裁剪步骤")
+        except Exception as e:
+            logger.error("YOLO 裁剪过程出错: %s", e)
+    else:
+        logger.info("使用数据集: %s", train_dir)
 
     # 数据预处理
     data_transform = TRAIN_TRANSFORMS
 
     try:
         # 使用自定义的 IPRoleImageFolder 加载数据集
-        train_dataset = IPRoleImageFolder(root=DATASET_DIR, transform=data_transform)
+        train_dataset = IPRoleImageFolder(root=train_dir, transform=data_transform)
         class_names = train_dataset.classes
         NUM_CLASSES = len(class_names)
         logger.info(f"使用 {NUM_CLASSES} 个角色类别进行训练: {class_names}")

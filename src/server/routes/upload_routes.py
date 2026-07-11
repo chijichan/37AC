@@ -13,7 +13,6 @@ from flask import (
 )
 from services.node_manager import get_db_connection
 from services.task_dispatcher import dispatch_task
-from services.file_service import save_uploaded_file
 from services.api_key_service import verify_api_key
 from services.sse_bus import sse_bus
 from middleware.rate_limiter import rate_limit
@@ -59,12 +58,11 @@ def upload_and_predict():
         if file.filename == "":
             return jsonify({"success": False, "message": "没有选择文件"}), 400
 
-        image_data = file.read()
-        file.seek(0)
-
-        filepath = save_uploaded_file(file)
-        if not filepath:
+        if not file.filename.lower().endswith((".png", ".jpg", ".jpeg", ".jfif")):
             return jsonify({"success": False, "message": "请上传 png/jpg/jpeg 格式的图片"}), 400
+
+        image_data = file.read()
+        image_filename = file.filename or f"{uuid.uuid4()}.jpg"
 
         # 生成任务ID
         task_id = str(uuid.uuid4())
@@ -80,10 +78,15 @@ def upload_and_predict():
             or request.headers.get("X-Stream-Response", "").lower() == "true"
         )
 
-        # 启动分发线程（两种模式共用）
+        # 定义分发函数（两种模式共用）
         def dispatch():
-            result = dispatch_task(filepath, image_data, task_id,
-                                   recognition_type=recognition_type)
+            result = dispatch_task(
+                None,
+                image_data,
+                task_id,
+                image_filename=image_filename,
+                recognition_type=recognition_type,
+            )
             print(f"[调度结果] 任务 {task_id}: {result}")
 
             status = result.get("status")
@@ -141,15 +144,17 @@ def upload_and_predict():
                 if conn:
                     conn.close()
 
-        threading.Thread(target=dispatch, daemon=True).start()
-
-        # === 流式响应模式 ===
+        # === 流式响应模式：先订阅 SSE，再启动 dispatch 线程 ===
         if wants_stream:
+            # 先订阅（确保 dispatch 线程 publish 时队列已就绪）
+            q = sse_bus.subscribe(task_id)
+
+            threading.Thread(target=dispatch, daemon=True).start()
+
             def generate():
                 # 先发一个 queued 事件
                 yield f"data: {json.dumps({'status': 'queued', 'message': '任务已提交，等待推理...', 'task_id': task_id, 'recognition_type': recognition_type}, ensure_ascii=False)}\n\n"
 
-                q = sse_bus.subscribe(task_id)
                 try:
                     for event in sse_bus.iter_events(task_id, q, timeout=120):
                         yield event
@@ -166,7 +171,8 @@ def upload_and_predict():
                 },
             )
 
-        # === 传统 JSON 响应模式 ===
+        # === 非流式模式：启动 dispatch 线程后返回 JSON ===
+        threading.Thread(target=dispatch, daemon=True).start()
         if request.headers.get("X-Requested-With") == "XMLHttpRequest":
             return jsonify(
                 {

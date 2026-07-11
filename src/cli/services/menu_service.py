@@ -83,3 +83,31 @@ def show_menu():
     print("4. 启动节点")
     print("0. 退出程序")
     print("-" * 40)
+
+
+def ask_dataset_choice():
+    """询问用户选择数据集：原始数据集 或 已裁剪数据集 或 裁剪新数据集"""
+    from config.base import DATASET_DIR, CROPPED_DATASET_DIR
+
+    print()
+    print("=" * 40)
+    print("  选择训练数据集")
+    print("=" * 40)
+    print(f"  [1] 原始数据集: {DATASET_DIR}")
+    print(f"  [2] 已裁剪数据集: {CROPPED_DATASET_DIR}")
+    print(f"  [3] 使用 YOLO 裁剪原始数据集后训练")
+    print("-" * 40)
+    print("  [2] 使用已存在的 _yolo 裁剪结果（如有）")
+    print("  [3] 从头裁剪原始数据集，保存到 saves/dataset/")
+    print("-" * 40)
+
+    while True:
+        choice = input("请选择 (1/2/3): ").strip()
+        if choice == "1":
+            return str(DATASET_DIR), False
+        elif choice == "2":
+            return str(CROPPED_DATASET_DIR), False
+        elif choice == "3":
+            return str(DATASET_DIR), True
+        else:
+            print("无效选择，请输入 1、2 或 3")

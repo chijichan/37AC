@@ -36,7 +36,7 @@ class TaskManager:
         """根据识别类型返回重试间隔（秒）"""
         return TASK_RETRY_INTERVAL_LLM if recognition_type == "llm" else TASK_RETRY_INTERVAL_LOCAL
 
-    def register_task(self, task_id, image_path, max_retries=None, recognition_type="local"):
+    def register_task(self, task_id, image_path=None, image_data=None, max_retries=None, recognition_type="local"):
         """注册一个待处理任务"""
         if max_retries is None:
             max_retries = self.max_retries
@@ -48,6 +48,7 @@ class TaskManager:
             if entry is None:
                 self.pending_tasks[task_id] = {
                     "image_path": image_path,
+                    "image_data": image_data,
                     "attempts": 1,
                     "max_retries": max_retries,
                     "last_dispatch": now,
@@ -56,6 +57,7 @@ class TaskManager:
                 }
             else:
                 entry["image_path"] = image_path
+                entry["image_data"] = image_data
                 entry["attempts"] = 1
                 entry["max_retries"] = max_retries
                 entry["last_dispatch"] = now
@@ -122,11 +124,18 @@ class TaskManager:
         from services.task_dispatcher import dispatch_task
 
         image_path = entry["image_path"]
-        try:
-            with open(image_path, "rb") as f:
-                image_data = f.read()
-        except Exception as e:
-            self._logger.error("读取重试图片失败: %s", e)
+        image_data = entry.get("image_data")
+        if image_data is None and image_path:
+            try:
+                with open(image_path, "rb") as f:
+                    image_data = f.read()
+            except Exception as e:
+                self._logger.error("读取重试图片失败: %s", e)
+                self.mark_task_completed(task_id)
+                return
+
+        if image_data is None:
+            self._logger.error("无法重试任务 %s：缺少图片数据", task_id)
             self.mark_task_completed(task_id)
             return
 

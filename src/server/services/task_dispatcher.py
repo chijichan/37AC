@@ -15,18 +15,20 @@ logger = get_logger("task_dispatcher")
 MAX_IMAGE_SIZE = 1024 * 1024 * 10
 
 
-def dispatch_task(image_path: str, image_data, task_id: str,
+def dispatch_task(image_path: str | None, image_data, task_id: str,
+                  image_filename: str | None = None,
                   register_pending: bool = True,
                   recognition_type: str = "local"):
     """优先通过 TCP 将 image_file（图片二进制）发送给节点。
 
     Args:
-        image_path: 图片服务器本地路径
+        image_path: 图片服务器本地路径，不保存到磁盘时为 None
         image_data: 二进制或 file-like 对象
         task_id: 唯一任务 ID
+        image_filename: 原始图片文件名，用于下发给节点
         register_pending: 是否注册到任务管理器
         recognition_type: 识别方式类型
-                          "local"  – 本地 ResNet 模型（默认）
+                          "local"  – 本地 YOLO+ResNet 模型（默认）
                           "llm"    – 第三方大模型 API（如 DeepSeek）
                           "auto"   – 由节点根据自身配置自动选择
     """
@@ -48,7 +50,12 @@ def dispatch_task(image_path: str, image_data, task_id: str,
             response["status"] = "waiting"
             # 即使没有空闲节点，也要注册 pending 任务，让 task_manager 重试
             if register_pending:
-                task_manager.register_task(task_id, image_path, recognition_type=recognition_type)
+                task_manager.register_task(
+                    task_id,
+                    image_path,
+                    image_data=image_data if isinstance(image_data, bytes) else None,
+                    recognition_type=recognition_type,
+                )
             return response
         logger.warning(
             "没有支持 %s 能力的空闲节点，降级分发到任意节点 node_id=%s",
@@ -63,7 +70,9 @@ def dispatch_task(image_path: str, image_data, task_id: str,
         return response
 
     try:
-        image_filename = os.path.basename(image_path)
+        image_filename = image_filename or (
+            os.path.basename(image_path) if image_path else f"{task_id}.jpg"
+        )
 
         # 处理不同类型的 image_data
         if hasattr(image_data, "read"):
@@ -109,7 +118,12 @@ def dispatch_task(image_path: str, image_data, task_id: str,
         response["data"]["node_id"] = node_id
 
         if register_pending:
-            task_manager.register_task(task_id, image_path, recognition_type=recognition_type)
+            task_manager.register_task(
+                task_id,
+                image_path,
+                image_data=image_bytes,
+                recognition_type=recognition_type,
+            )
 
         return response
 

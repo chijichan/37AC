@@ -20,7 +20,8 @@ _loggers_configured = set()
 
 def get_log_level():
     """获取当前日志级别"""
-    return logging.DEBUG  # CLI 默认为 DEBUG 级别
+    from config.base import TSAC_DEBUG
+    return logging.DEBUG if TSAC_DEBUG else logging.INFO
 
 
 def get_logger(name: str) -> logging.Logger:

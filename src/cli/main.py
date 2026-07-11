@@ -15,7 +15,7 @@ ImageFile.LOAD_TRUNCATED_IMAGES = True
 # 导入各个模块
 from training.trainer import train_model
 from prediction.predictor import predict_character
-from services.menu_service import verify_images_function, show_menu
+from services.menu_service import verify_images_function, show_menu, ask_dataset_choice
 from services.node_service import start_node_service
 
 
@@ -23,6 +23,8 @@ def main():
     parser = argparse.ArgumentParser(description="mode")
     parser.add_argument("--mode", type=int, help="模式", default=None)
     parser.add_argument("--gpu", type=bool, default=False)
+    parser.add_argument("--yolo-crop", action="store_true", help="使用 YOLO 裁剪原始数据集并训练")
+    parser.add_argument("--dataset", type=str, default=None, help="训练数据集路径（默认使用 .env 配置或交互选择）")
     args = parser.parse_args()
     print(args)
     print(args.mode)
@@ -30,7 +32,11 @@ def main():
 
     if args.mode == 1:
         logger.info("\n=== 1. 训练模型 ===")
-        train_model()
+        if args.dataset:
+            train_model(dataset_dir=args.dataset, use_yolo_crop=args.yolo_crop)
+        else:
+            dataset_dir, use_yolo = ask_dataset_choice()
+            train_model(dataset_dir=dataset_dir, use_yolo_crop=use_yolo)
         return
     elif args.mode == 2:
         logger.info("\n=== 2. 预测角色 ===")
@@ -52,7 +58,8 @@ def main():
 
             if choice == "1":
                 logger.info("\n=== 1. 训练模型 ===")
-                train_model()
+                dataset_dir, use_yolo = ask_dataset_choice()
+                train_model(dataset_dir=dataset_dir, use_yolo_crop=use_yolo)
             elif choice == "2":
                 logger.info("\n=== 2. 预测角色 ===")
                 predict_character()

@@ -12,6 +12,9 @@ load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 ROOT_PATH = Path(__file__).resolve().parent.parent
 
+# ==================== 调试模式 ====================
+TSAC_DEBUG = os.getenv("TSAC_DEBUG", "False").lower() == "true"
+
 # ==================== 设备配置 ====================
 AUTO_DEVICE = os.getenv("AUTO_DEVICE", "True").lower() == "true"
 DEVICE = None
@@ -30,6 +33,11 @@ LEARNING_RATE = float(os.getenv("LEARNING_RATE", "1e-4"))
 
 # ==================== 预测相关配置 ====================
 MODEL_LOAD_PATH = MODEL_PATH
+
+# ==================== 数据集路径配置 ====================
+# 原始数据集目录（由 DATASET_DIR 指定，如 W:/Img）
+# YOLO 裁剪后的数据集目录（自动生成，不覆盖原图）
+CROPPED_DATASET_DIR = ROOT_PATH / "saves" / "dataset"
 
 # ==================== 节点服务配置 ====================
 TCP_HOST = os.getenv("TCP_HOST", "127.0.0.1")
@@ -70,12 +78,22 @@ LLM_PROMPT_TEMPLATE = os.getenv(
 
 # ==================== 节点能力配置 ====================
 # 节点支持的识别能力列表，自动根据配置推导
-# "local" 表示支持本地 ResNet 模型推理（始终可用）
+# "local" 表示支持本地 YOLO+ResNet 模型推理（始终可用）
 # "llm" 表示支持第三方多模态大模型推理
 _CAPABILITIES = ["local"]
 if LLM_RECOGNITION_ENABLED:
     _CAPABILITIES.append("llm")
 CAPABILITIES = json.dumps(_CAPABILITIES, ensure_ascii=False)
+
+# ==================== YOLO 检测配置 ====================
+# YOLO（快速定位）+ ResNet（角色分类）技术架构
+YOLO_ENABLED = os.getenv("YOLO_ENABLED", "True").lower() == "true"
+# 模型名称：yolov8n.pt（nano，最快）/ yolov8s.pt / yolov8m.pt
+# 默认放在 saves/models/ 目录下
+_DEFAULT_YOLO_MODEL = str((MODEL_DIR / "yolov8n.pt").resolve())
+YOLO_MODEL_PATH = os.getenv("YOLO_MODEL_PATH", _DEFAULT_YOLO_MODEL)
+# 检测置信度阈值（低于此值的目标被忽略）
+YOLO_CONFIDENCE = float(os.getenv("YOLO_CONFIDENCE", "0.25"))
 
 # ==================== 路径配置 ====================
 # 暂存

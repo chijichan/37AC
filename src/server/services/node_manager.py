@@ -38,7 +38,7 @@ class NodeManager:
             if max_tasks is None:
                 max_tasks = 5
             if capabilities is None:
-                capabilities = '["local"]'  # 默认仅支持本地模型
+                capabilities = '["local"]'  # 默认仅支持本地 YOLO+ResNet 模型
 
             self.nodes[node_id] = {
                 "addr": addr,
@@ -162,6 +162,9 @@ class NodeManager:
             for node_id, info in self.nodes.items():
                 if info["status"] == "idle" and info.get("socket") is not None:
                     return node_id, info
+        self._logger.debug(
+            "get_idle_node() 未找到空闲节点，当前节点数=%d", len(self.nodes)
+        )
         return None, None
 
     def get_idle_nodes(self):
@@ -190,7 +193,7 @@ class NodeManager:
 
         Args:
             recognition_type: 识别方式类型
-                              "local" – 需要支持本地模型推理的节点
+                              "local" – 需要支持本地 YOLO+ResNet 模型推理的节点
                               "llm"   – 需要支持第三方大模型推理的节点
                               "auto"  – 任意可用节点均可
 
@@ -199,18 +202,34 @@ class NodeManager:
         """
         with self.lock:
             for node_id, info in self.nodes.items():
-                if (info.get("socket") is not None
-                        and info["status"] == "idle"
-                        and info["current_tasks"] < info["max_tasks"]):
-                    node_caps = info.get("capabilities", '["local"]')
+                has_socket = info.get("socket") is not None
+                is_idle = info["status"] == "idle"
+                has_capacity = info["current_tasks"] < info["max_tasks"]
+                node_caps = info.get("capabilities", '["local"]')
+                try:
                     caps_list = json.loads(node_caps)
+                except Exception:
+                    caps_list = ["local"]
+                caps_match = recognition_type == "auto" or recognition_type in caps_list
 
-                    if recognition_type == "auto":
-                        # auto 模式下任意空闲节点都可
-                        return node_id, info
-                    elif recognition_type in caps_list:
-                        # 节点具备所需能力
-                        return node_id, info
+                if has_socket and is_idle and has_capacity and caps_match:
+                    return node_id, info
+
+            # DEBUG: 记录所有节点诊断信息
+            self._logger.debug(
+                "get_idle_node_by_capability(%s) 未找到匹配节点，当前节点数=%d",
+                recognition_type, len(self.nodes)
+            )
+            for nid, ninfo in self.nodes.items():
+                self._logger.debug(
+                    "  节点 %s: socket=%s, status=%s, tasks=%s/%s, caps=%s",
+                    nid,
+                    "有" if ninfo.get("socket") is not None else "无",
+                    ninfo.get("status"),
+                    ninfo.get("current_tasks"),
+                    ninfo.get("max_tasks"),
+                    ninfo.get("capabilities"),
+                )
 
         return None, None
 

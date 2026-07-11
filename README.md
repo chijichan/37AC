@@ -4,9 +4,10 @@
 
 **37AC**（**A**nime **C**haracter recognition）—— 基于深度学习与分布式推理的二次元角色识别平台。
 
-![Python](https://img.shields.io/badge/Python-3.9-blue)
-![PyTorch](https://img.shields.io/badge/PyTorch-2.0-orange)
-![Flask](https://img.shields.io/badge/Flask-3.0-green)
+![Python](https://img.shields.io/badge/Python-3.14-blue)
+![PyTorch](https://img.shields.io/badge/PyTorch-2.13-orange)
+![YOLO](https://img.shields.io/badge/YOLOv8-00CCFF)
+![Flask](https://img.shields.io/badge/Flask-3.1-green)
 ![PHP](https://img.shields.io/badge/PHP-7+-purple)
 ![MySQL](https://img.shields.io/badge/MySQL-5.7-blue)
 ![License](https://img.shields.io/badge/License-Internal%20Research-red)
@@ -82,7 +83,7 @@
 ## 功能特性
 
 ### 模型训练与预测
-- 基于 **ResNet18** 的角色识别模型
+- **YOLO + ResNet** 双阶段架构：YOLOv8 快速定位角色区域，ResNet18 精确分类
 - 自动从文件夹读取类别标签
 - 支持图片数据校验，排查损坏文件
 - 实时展示训练损失与准确率
@@ -220,12 +221,14 @@ dataset/
 
 | 技术 | 用途 |
 |------|------|
-| Python 3.9 | 开发语言 |
-| PyTorch | 模型训练与推理 |
-| ResNet18 | 识别网络（37AC v0.0.1） |
-| Flask | Web/API 框架 |
-| Pillow | 图像处理 |
-| torchvision | 数据加载与增强 |
+| Python 3.14 | 开发语言（原生 `str \| None` 联合类型） |
+| PyTorch 2.13 | 模型训练与推理 |
+| YOLOv8 (Ultralytics 8.4) | 人物快速定位（检测+裁剪，可选） |
+| ResNet18 | 角色分类网络（37AC v0.0.1） |
+| Flask 3.1 | Web/API 框架 |
+| Pillow 12.3 | 图像处理 |
+| torchvision 0.28 | 数据加载与增强 |
+| opencv-python 5.0 | YOLO 依赖与图像处理 |
 | tqdm | 训练进度显示 |
 | requests | LLM API 调用 |
 
@@ -307,6 +310,11 @@ LLM_API_KEY=your_api_key
 
 # 模型配置
 MODEL_FILENAME=37ac-v0.0.1.pth
+YOLO_ENABLED=True
+YOLO_CONFIDENCE=0.25
+
+# DEBUG
+TSAC_DEBUG=False
 ```
 
 ### 5. 配置数据库表结构

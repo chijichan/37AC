@@ -24,11 +24,25 @@ def check_package(package_name, import_name=None):
         return True
 
 
+def check_python_version():
+    """检查 Python 版本是否满足最低要求"""
+    required = (3, 14)
+    current = sys.version_info[:2]
+    if current >= required:
+        print(f"✓ Python 版本 {current[0]}.{current[1]} >= {required[0]}.{required[1]}，符合要求")
+        return True
+    else:
+        print(f"✗ Python 版本 {current[0]}.{current[1]} < {required[0]}.{required[1]}，请升级")
+        return False
+
+
 def main():
     print("=" * 50)
     print("验证Python环境")
     print(f"Python版本: {sys.version}")
     print("=" * 50)
+
+    version_ok = check_python_version()
 
     # 核心深度学习包
     print("\n1. 深度学习框架:")
@@ -66,7 +80,7 @@ def main():
     print("环境验证完成")
 
     # 检查关键包
-    critical_packages = [torch_ok, flask_ok, pillow_ok, numpy_ok]
+    critical_packages = [version_ok, torch_ok, flask_ok, pillow_ok, numpy_ok]
     if all(critical_packages):
         print("✅ 核心包全部正常，环境准备就绪！")
         return 0

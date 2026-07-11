@@ -344,5 +344,17 @@ class NodeManager:
             if "conn" in locals() and conn:
                 conn.close()
 
+    def remove_node(self, node_id):
+        """从内存中移除节点并设置离线状态（线程安全）"""
+        with self.lock:
+            if node_id not in self.nodes:
+                return False
+            info = self.nodes[node_id]
+            self.update_db_node_status(node_id, "offline")
+            self._logger.info("节点 %s 已标记为离线", node_id)
+            del self.nodes[node_id]
+            self._logger.info("节点 %s 已从内存中移除", node_id)
+            return True
+
 # 模块级全局实例
 node_manager = NodeManager()

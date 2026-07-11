@@ -77,8 +77,33 @@ def update_node(node_id, name=None, addr=None, capabilities=None, is_active=None
             conn.close()
 
 
-def get_all_nodes_from_db():
-    """从数据库获取所有节点信息"""
+def _row_to_node_dict(row):
+    """将数据库行转换为节点字典"""
+    return {
+        "id": row.get("id"),
+        "name": row.get("name") or row.get("node_name") or row.get("id"),
+        "token": row.get("token"),
+        "capabilities": row.get("capabilities") or '["local"]',
+        "status": row.get("status"),
+        "addr": row.get("addr"),
+        "is_active": bool(row.get("is_active")),
+        "user_id": row.get("user_id"),
+        "username": row.get("username"),
+        "created_at": (
+            row.get("created_at").strftime("%Y-%m-%d %H:%M:%S")
+            if hasattr(row.get("created_at"), "strftime")
+            else row.get("created_at")
+        ),
+        "updated_at": (
+            row.get("updated_at").strftime("%Y-%m-%d %H:%M:%S")
+            if hasattr(row.get("updated_at"), "strftime")
+            else row.get("updated_at")
+        ),
+    }
+
+
+def _query_nodes(where_clause="", params=None):
+    """查询节点通用方法"""
     nodes = []
     conn = None
     try:
@@ -87,39 +112,17 @@ def get_all_nodes_from_db():
             return nodes
 
         with conn.cursor(pymysql.cursors.DictCursor) as cursor:
-            cursor.execute(
-                """SELECT n.id, n.name, n.token, n.capabilities, n.status, n.addr, n.is_active,
+            sql = f"""SELECT n.id, n.name, n.token, n.capabilities, n.status, n.addr, n.is_active,
                           n.user_id, n.created_at, n.updated_at, u.username
                    FROM nodes n
                    LEFT JOIN users u ON n.user_id = u.id
+                   {where_clause}
                    ORDER BY n.updated_at DESC"""
-            )
+            cursor.execute(sql, params or ())
             rows = cursor.fetchall()
 
         for row in rows:
-            nodes.append(
-                {
-                    "id": row.get("id"),
-                    "name": row.get("name") or row.get("node_name") or row.get("id"),
-                    "token": row.get("token"),
-                    "capabilities": row.get("capabilities") or "local",
-                    "status": row.get("status"),
-                    "addr": row.get("addr"),
-                    "is_active": bool(row.get("is_active")),
-                    "user_id": row.get("user_id"),
-                    "username": row.get("username"),
-                    "created_at": (
-                        row.get("created_at").strftime("%Y-%m-%d %H:%M:%S")
-                        if hasattr(row.get("created_at"), "strftime")
-                        else row.get("created_at")
-                    ),
-                    "updated_at": (
-                        row.get("updated_at").strftime("%Y-%m-%d %H:%M:%S")
-                        if hasattr(row.get("updated_at"), "strftime")
-                        else row.get("updated_at")
-                    ),
-                }
-            )
+            nodes.append(_row_to_node_dict(row))
     except Exception:
         pass
     finally:
@@ -127,57 +130,13 @@ def get_all_nodes_from_db():
             conn.close()
 
     return nodes
+
+
+def get_all_nodes_from_db():
+    """从数据库获取所有节点信息"""
+    return _query_nodes()
 
 
 def get_user_nodes_from_db(user_id):
     """获取指定用户的节点信息"""
-    nodes = []
-    conn = None
-    try:
-        conn = get_db_connection()
-        if not conn:
-            return nodes
-
-        with conn.cursor(pymysql.cursors.DictCursor) as cursor:
-            cursor.execute(
-                """SELECT n.id, n.name, n.token, n.capabilities, n.status, n.addr, n.is_active,
-                          n.user_id, n.created_at, n.updated_at, u.username
-                   FROM nodes n
-                   LEFT JOIN users u ON n.user_id = u.id
-                   WHERE n.user_id = %s
-                   ORDER BY n.updated_at DESC""",
-                (user_id,),
-            )
-            rows = cursor.fetchall()
-
-        for row in rows:
-            nodes.append(
-                {
-                    "id": row.get("id"),
-                    "name": row.get("name") or row.get("node_name") or row.get("id"),
-                    "token": row.get("token"),
-                    "capabilities": row.get("capabilities") or '["local"]',
-                    "status": row.get("status"),
-                    "addr": row.get("addr"),
-                    "is_active": bool(row.get("is_active")),
-                    "user_id": row.get("user_id"),
-                    "username": row.get("username"),
-                    "created_at": (
-                        row.get("created_at").strftime("%Y-%m-%d %H:%M:%S")
-                        if hasattr(row.get("created_at"), "strftime")
-                        else row.get("created_at")
-                    ),
-                    "updated_at": (
-                        row.get("updated_at").strftime("%Y-%m-%d %H:%M:%S")
-                        if hasattr(row.get("updated_at"), "strftime")
-                        else row.get("updated_at")
-                    ),
-                }
-            )
-    except Exception:
-        pass
-    finally:
-        if conn:
-            conn.close()
-
-    return nodes
+    return _query_nodes("WHERE n.user_id = %s", (user_id,))

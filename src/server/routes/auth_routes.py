@@ -3,7 +3,8 @@
 
 from flask import Blueprint, request, jsonify
 
-from services.auth_service import register, login, refresh_token, generate_reset_token, validate_reset_token, reset_password
+from services.auth_service import register, login, refresh_token
+from services.auth.password_service import generate_reset_token, validate_reset_token, reset_password
 from middleware.auth_middleware import login_required
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/auth")

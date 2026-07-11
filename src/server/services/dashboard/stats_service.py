@@ -55,6 +55,7 @@ def get_dashboard_stats():
     try:
         stats["online_nodes"] = len(node_manager.get_available_nodes())
         stats["idle_nodes"] = len(node_manager.get_idle_nodes())
+        # TODO: 从数据库统计真实活跃用户数，当前按在线节点数 * 3 估算
         stats["active_users"] = max(1, stats["online_nodes"] * 3)
     except Exception:
         pass
@@ -81,7 +82,8 @@ def get_recent_tasks(limit=10):
                 rows = cursor.fetchall()
 
             for row in rows:
-                parsed = _parse_task_result(row[1] if len(row) > 1 else "")
+                raw_result = row[1] if len(row) > 1 else ""
+                parsed = _parse_task_result(raw_result)
                 task_dict = {
                     "task_id": row[0],
                     "status": row[2],

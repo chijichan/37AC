@@ -2,7 +2,7 @@
 
 import time
 import threading
-from collections import defaultdict
+from collections import defaultdict, deque
 from functools import wraps
 
 from flask import request, jsonify
@@ -18,7 +18,7 @@ class SlidingWindowRateLimiter:
 
     def __init__(self):
         # client_key -> deque of timestamps
-        self._windows = defaultdict(list)
+        self._windows = defaultdict(deque)
         self._lock = threading.Lock()
         # 后台清理线程
         self._cleanup_thread = threading.Thread(target=self._cleanup_loop, daemon=True)
@@ -54,7 +54,7 @@ class SlidingWindowRateLimiter:
             timestamps = self._windows[client_key]
             # 移除窗口外的时间戳
             while timestamps and timestamps[0] < window_start:
-                timestamps.pop(0)
+                timestamps.popleft()
 
             if len(timestamps) >= RATE_LIMIT_REQUESTS:
                 logger.warning(

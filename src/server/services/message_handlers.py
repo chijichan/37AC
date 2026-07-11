@@ -169,6 +169,8 @@ def async_handle_task_result(conn, addr, msg):
 
 def async_handle_unknown_message(conn, addr, msg):
     """异步处理未知消息类型"""
-    conn.sendall(
-        json.dumps({"type": "msg", "status": "error", "message": "未知消息类型"}).encode("utf-8")
-    )
+    json_protocol.send_json(conn, {
+        "type": "msg",
+        "status": "error",
+        "message": "未知消息类型",
+    })

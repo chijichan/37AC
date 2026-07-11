@@ -72,8 +72,6 @@ def api_dashboard_tasks():
         # 获取查询参数
         page = request.args.get("page", 1, type=int)
         limit = request.args.get("limit", 15, type=int)
-        time_range = request.args.get("time_range", 30, type=int)
-        status_filter = request.args.get("status", "")
 
         tasks = get_recent_tasks(limit=limit)
 

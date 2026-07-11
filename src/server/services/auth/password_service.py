@@ -1,33 +1,30 @@
-"""密码服务模块 - 提供密码哈希、重置令牌管理、密码修改等功能"""
+"""密码服务模块 - 提供密码哈希（bcrypt）、重置令牌管理、密码修改等功能"""
 
 import hashlib
 import secrets
 from datetime import datetime, timedelta
 
+import bcrypt
 import pymysql
 
-from config.base import DB_CONFIG, FRONTEND_URL
+from config.base import FRONTEND_URL
 from config.email_config import RESET_RATE_LIMIT
 from config.log_config import get_logger
+from services.db import get_connection
 from services.email_service import is_configured as smtp_is_configured, send_password_reset_email
-from .validators import validate_email, validate_password
+from .validators import validate_password
 
 logger = get_logger("password_service")
 
 
-def _get_connection():
-    """获取数据库连接"""
-    return pymysql.connect(**DB_CONFIG)
-
-
 def hash_password(password: str) -> str:
-    """使用 SHA-256 哈希密码"""
-    return hashlib.sha256(password.encode("utf-8")).hexdigest()
+    """使用 bcrypt 哈希密码（自动加盐）"""
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
 def verify_password(password: str, password_hash: str) -> bool:
     """验证密码"""
-    return hash_password(password) == password_hash
+    return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
 
 
 def change_password(user_id: int, old_password: str, new_password: str) -> dict:
@@ -36,9 +33,10 @@ def change_password(user_id: int, old_password: str, new_password: str) -> dict:
     if not valid:
         return {"success": False, "message": msg}
 
-    conn = None
+    conn = get_connection()
+    if not conn:
+        return {"success": False, "message": "数据库连接失败"}
     try:
-        conn = _get_connection()
         with conn.cursor() as cursor:
             cursor.execute("SELECT password_hash FROM users WHERE id = %s", (user_id,))
             row = cursor.fetchone()
@@ -66,9 +64,10 @@ def change_password(user_id: int, old_password: str, new_password: str) -> dict:
 
 def _count_recent_reset_requests(email: str) -> int:
     """统计指定邮箱在限流时间窗口内的重置请求次数"""
-    conn = None
+    conn = get_connection()
+    if not conn:
+        return 0
     try:
-        conn = _get_connection()
         with conn.cursor() as cursor:
             window_minutes = RESET_RATE_LIMIT.get("window_minutes", 15)
             cursor.execute(
@@ -89,9 +88,10 @@ def _count_recent_reset_requests(email: str) -> int:
 
 def _cleanup_expired_tokens() -> int:
     """清理已过期且未使用的重置令牌，返回清理数量"""
-    conn = None
+    conn = get_connection()
+    if not conn:
+        return 0
     try:
-        conn = _get_connection()
         with conn.cursor() as cursor:
             cursor.execute(
                 "DELETE FROM password_reset_tokens WHERE expires_at < NOW() AND used = 0"
@@ -111,9 +111,10 @@ def _cleanup_expired_tokens() -> int:
 
 def generate_reset_token(email: str) -> dict:
     """生成密码重置令牌并发送邮件（如果 SMTP 已配置）"""
-    conn = None
+    conn = get_connection()
+    if not conn:
+        return {"success": False, "message": "数据库连接失败"}
     try:
-        conn = _get_connection()
         with conn.cursor(pymysql.cursors.DictCursor) as cursor:
             cursor.execute("SELECT id, username, email FROM users WHERE email = %s", (email,))
             user = cursor.fetchone()
@@ -190,7 +191,6 @@ def generate_reset_token(email: str) -> dict:
                     }
                 }
         else:
-            # SMTP 未配置，开发模式：直接返回令牌
             return {
                 "success": True,
                 "message": "SMTP 未配置，重置令牌已生成（仅开发/调试模式）",
@@ -213,9 +213,10 @@ def validate_reset_token(token: str) -> dict:
         return {"success": False, "message": "重置令牌不能为空"}
 
     token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
-    conn = None
+    conn = get_connection()
+    if not conn:
+        return {"success": False, "message": "数据库连接失败"}
     try:
-        conn = _get_connection()
         with conn.cursor(pymysql.cursors.DictCursor) as cursor:
             cursor.execute(
                 """SELECT prt.id, prt.user_id, prt.expires_at, u.username
@@ -267,9 +268,10 @@ def reset_password(token: str, new_password: str) -> dict:
     token_id = validation["data"]["token_id"]
     new_hash = hash_password(new_password)
 
-    conn = None
+    conn = get_connection()
+    if not conn:
+        return {"success": False, "message": "数据库连接失败"}
     try:
-        conn = _get_connection()
         with conn.cursor() as cursor:
             cursor.execute(
                 "UPDATE users SET password_hash = %s WHERE id = %s",

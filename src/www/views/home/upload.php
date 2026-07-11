@@ -26,7 +26,7 @@ require_once ROOT_PATH . '/views/layout.php';
             </div>
         </div>
 
-        <!-- ======== 快速模式（快速模式）：默认 auto + canvas 去背景 ======== -->
+        <!-- ======== 快速模式：默认 auto，直接裁剪识别 ======== -->
         <div id="quickLayout">
             <div class="crop-layout">
                 <div class="crop-main">
@@ -43,7 +43,7 @@ require_once ROOT_PATH . '/views/layout.php';
             </div>
         </div>
 
-        <!-- ======== 高级模式（高级模式）：自定义识别 + 去背景 ======== -->
+        <!-- ======== 高级模式：自定义识别 + 角色框选/去背景 ======== -->
         <div id="advancedLayout" class="advanced-layout" style="display: none;">
             <div class="advanced-grid">
                 <!-- 左列：识别方式 -->
@@ -64,20 +64,20 @@ require_once ROOT_PATH . '/views/layout.php';
                         </label>
                     </fieldset>
 
-                    <!-- 去背景方式（仅在高级模式显示） -->
+                    <!-- 角色框选（仅在高级模式显示） -->
                     <fieldset class="remove-bg-method-selector">
-                        <legend>去背景方式</legend>
+                        <legend>角色框选</legend>
                         <label>
-                            <input type="radio" name="removeBgMethod" value="canvas">
-                            <span>快速去背景 <small>即时，适合纯色背景</small></span>
+                            <input type="radio" name="removeBgMethod" value="canvas" checked>
+                            <span>快速框选 <small>即时，适合纯色背景</small></span>
                         </label>
                         <label>
-                            <input type="radio" name="removeBgMethod" value="ai" checked>
+                            <input type="radio" name="removeBgMethod" value="ai">
                             <span>AI 去背景 <small>深度学习，高质量</small></span>
                         </label>
                     </fieldset>
 
-                    <button id="removeBgBtn" class="btn btn-secondary" style="width:100%;">开始去除背景</button>
+                    <button id="removeBgBtn" class="btn btn-secondary" style="width:100%;">开始框选角色</button>
                     <div class="progress" id="progressContainer" style="display: none;">
                         <div class="progress-bar" id="progressBar"></div>
                     </div>
@@ -89,6 +89,7 @@ require_once ROOT_PATH . '/views/layout.php';
                         <h4 id="imageTitle">待处理</h4>
                         <div class="image-wrapper">
                             <img id="mainImage" src="#" alt="处理后图片" class="bg-image" />
+                            <canvas id="bboxOverlay" class="bbox-overlay"></canvas>
                             <div class="image-placeholder" id="imagePlaceholder">
                                 <p>请先上传图片</p>
                             </div>
@@ -283,6 +284,21 @@ require_once ROOT_PATH . '/views/layout.php';
         height: auto;
         display: block;
         object-fit: contain;
+        transition: opacity 0.25s ease;
+    }
+
+    .bg-image.fade-out {
+        opacity: 0;
+    }
+
+    .bbox-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: 10;
     }
 
     .preview-box {
@@ -564,6 +580,7 @@ require_once ROOT_PATH . '/views/layout.php';
                 confirmCropBtn: document.getElementById('confirmCropBtn'),
                 cancelCropBtn: document.getElementById('cancelCropBtn'),
                 removeBgBtn: document.getElementById('removeBgBtn'),
+                bboxOverlay: document.getElementById('bboxOverlay'),
                 loadingSpinner: document.getElementById('loadingSpinner'),
                 resultDiv: document.getElementById('result'),
                 progressContainer: document.getElementById('progressContainer'),
@@ -605,8 +622,8 @@ require_once ROOT_PATH . '/views/layout.php';
 
         setupNavTabs() {
             document.querySelectorAll('.nav-tab').forEach(tab => {
-                tab.addEventListener('click', (e) => {
-                    this.switchMode(e.target.dataset.mode);
+                tab.addEventListener('click', async (e) => {
+                    await this.switchMode(e.target.dataset.mode);
                 });
             });
         }
@@ -624,6 +641,14 @@ require_once ROOT_PATH . '/views/layout.php';
         setupRemoveBgButton() {
             this.elements.removeBgBtn.addEventListener('click', () => {
                 this.handleRemoveBackground();
+            });
+
+            // 监听框选/去背景方式切换，更新按钮文字
+            document.querySelectorAll('input[name="removeBgMethod"]').forEach(radio => {
+                radio.addEventListener('change', () => {
+                    const method = document.querySelector('input[name="removeBgMethod"]:checked').value;
+                    this.elements.removeBgBtn.textContent = method === 'canvas' ? '开始框选角色' : '开始去除背景';
+                });
             });
         }
 
@@ -688,7 +713,7 @@ require_once ROOT_PATH . '/views/layout.php';
 
         // ========== 模式切换 ==========
 
-        switchMode(mode) {
+        async switchMode(mode) {
             this.state.currentMode = mode;
             this.updateNavTabs(mode);
             this.updateLayoutVisibility(mode);
@@ -718,7 +743,7 @@ require_once ROOT_PATH . '/views/layout.php';
             if (mode === 'quick') {
                 this.elements.confirmCropBtn.textContent = '开始识别';
             } else {
-                this.elements.confirmCropBtn.textContent = '开始识别（去背景后）';
+                this.elements.confirmCropBtn.textContent = '开始识别（处理后）';
             }
             this.elements.confirmCropBtn.style.display = 'inline-block';
         }
@@ -761,12 +786,12 @@ require_once ROOT_PATH . '/views/layout.php';
             this.loadImageForProcessing(file);
         }
 
-        loadImageForProcessing(file) {
+        async loadImageForProcessing(file) {
             const reader = new FileReader();
 
-            reader.onload = (e) => {
+            reader.onload = async (e) => {
                 const imageUrl = e.target.result;
-                this.updateImageViews(imageUrl);
+                await this.updateImageViews(imageUrl);
                 this.showCropInterface();
                 this.reinitializeViewForCurrentMode();
             };
@@ -778,12 +803,12 @@ require_once ROOT_PATH . '/views/layout.php';
             reader.readAsDataURL(file);
         }
 
-        updateImageViews(imageUrl) {
+        async updateImageViews(imageUrl) {
             if (this.state.currentMode === 'quick') {
                 this.elements.imagePreview.src = imageUrl;
                 this.elements.mainImage.src = imageUrl;
             } else if (this.state.currentMode === 'advanced') {
-                this.elements.mainImage.src = imageUrl;
+                await this._fadeImageTo(this.elements.mainImage, imageUrl);
                 this.resetRemoveBgStatus();
             }
         }
@@ -835,6 +860,7 @@ require_once ROOT_PATH . '/views/layout.php';
         }
 
         resetRemoveBgStatus() {
+            this._hideBoundingBox();
             this.elements.imageTitle.textContent = '待处理';
             this.elements.imageTitle.style.color = '';
             this.elements.imagePlaceholder.style.display = this.elements.mainImage.src &&
@@ -852,13 +878,13 @@ require_once ROOT_PATH . '/views/layout.php';
 
                 let blob;
                 if (method === 'canvas') {
-                    blob = await this._removeBgCanvas();
+                    blob = await this._quickSelectCanvas();
                 } else {
                     blob = await this._removeBgAI();
                 }
 
                 const url = URL.createObjectURL(blob);
-                this.finishRemoveBgProcess(url, method);
+                await this.finishRemoveBgProcess(url, method);
 
             } catch (error) {
                 this.handleRemoveBgError(error, method);
@@ -875,23 +901,25 @@ require_once ROOT_PATH . '/views/layout.php';
             this.elements.imagePlaceholder.style.display = 'none';
         }
 
-        // ===== 快速模式：Canvas 色差 =====
+        // ===== 快速框选：Canvas 色差 + 密度分析 =====
 
-        async _removeBgCanvas() {
-            // ===== Canvas 像素色差 + 边缘柔化 =====
-            // 自动取四角采样 → 判定主背景色 → 透明化近色像素 → 边缘羽化
+        /**
+         * 检测画面主体的包围盒
+         * @returns {{x:number, y:number, w:number, h:number}|null}
+         */
+        async _detectBoundingBox() {
             const img = await this._loadImage(this.state.originalFile);
+            const w = img.width,
+                h = img.height;
 
             const canvas = document.createElement('canvas');
-            canvas.width = img.width;
-            canvas.height = img.height;
+            canvas.width = w;
+            canvas.height = h;
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0);
 
-            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const imageData = ctx.getImageData(0, 0, w, h);
             const data = imageData.data;
-            const w = canvas.width,
-                h = canvas.height;
 
             // 1) 从四角采样，自动检测主背景色
             const corners = [
@@ -919,7 +947,7 @@ require_once ROOT_PATH . '/views/layout.php';
                 bgG = Math.round(sumG / cnt),
                 bgB = Math.round(sumB / cnt);
 
-            // 2) 动态阈值：背景色方差越大阈值越宽松
+            // 2) 动态阈值
             let varR = 0,
                 varG = 0,
                 varB = 0;
@@ -929,42 +957,278 @@ require_once ROOT_PATH . '/views/layout.php';
                 varG += (data[idx + 1] - bgG) ** 2;
                 varB += (data[idx + 2] - bgB) ** 2;
             }
-            const threshold = Math.max(25, Math.min(80, Math.round(Math.sqrt((varR + varG + varB) / (cnt * 3)) * 1.5)));
+            const threshold = Math.max(25, Math.min(80,
+                Math.round(Math.sqrt((varR + varG + varB) / (cnt * 3)) * 1.5)));
 
-            // 3) 第一遍：标记透明像素
-            const alpha = new Uint8Array(w * h);
+            // 3) 标记前景像素
+            const isFg = new Uint8Array(w * h);
             for (let i = 0; i < data.length; i += 4) {
-                if (Math.abs(data[i] - bgR) < threshold &&
+                const idx = i >> 2;
+                isFg[idx] = (Math.abs(data[i] - bgR) < threshold &&
                     Math.abs(data[i + 1] - bgG) < threshold &&
-                    Math.abs(data[i + 2] - bgB) < threshold) {
-                    data[i + 3] = 0;
-                    alpha[i >> 2] = 0;
-                } else {
-                    alpha[i >> 2] = 255;
-                }
+                    Math.abs(data[i + 2] - bgB) < threshold) ? 0 : 1;
             }
 
-            // 4) 第二遍：边缘柔化（对透明/不透明边界做 3x3 alpha 渐变）
-            const softData = new Uint8ClampedArray(data);
-            for (let y = 1; y < h - 1; y++) {
-                for (let x = 1; x < w - 1; x++) {
-                    const idx = (y * w + x);
-                    if (alpha[idx] === 255) continue; // 完全不透明，跳过
-                    // 统计周围不透明像素数
-                    let opaque = 0;
-                    for (let dy = -1; dy <= 1; dy++)
-                        for (let dx = -1; dx <= 1; dx++)
-                            opaque += (alpha[(y + dy) * w + (x + dx)] === 255) ? 1 : 0;
-                    // 边缘像素：按周围不透明度比例保留
-                    const p = (idx) * 4;
-                    if (opaque >= 2 && opaque <= 6) {
-                        softData[p + 3] = Math.round(255 * opaque / 9);
+            // 4) 密度网格
+            const GS = 32;
+            const cols = Math.ceil(w / GS),
+                rows = Math.ceil(h / GS);
+            const density = new Float32Array(cols * rows);
+            for (let y = 0; y < h; y++)
+                for (let x = 0; x < w; x++)
+                    if (isFg[y * w + x]) density[Math.floor(y / GS) * cols + Math.floor(x / GS)]++;
+
+            let maxD = 0;
+            for (const d of density)
+                if (d > maxD) maxD = d;
+            if (maxD > 0)
+                for (let i = 0; i < density.length; i++) density[i] /= maxD;
+
+            // 5) 包围盒
+            const DT = 0.08;
+            let minGX = cols,
+                maxGX = 0,
+                minGY = rows,
+                maxGY = 0,
+                hasFg = false;
+            for (let gy = 0; gy < rows; gy++)
+                for (let gx = 0; gx < cols; gx++)
+                    if (density[gy * cols + gx] >= DT) {
+                        hasFg = true;
+                        if (gx < minGX) minGX = gx;
+                        if (gx > maxGX) maxGX = gx;
+                        if (gy < minGY) minGY = gy;
+                        if (gy > maxGY) maxGY = gy;
                     }
-                }
+
+            if (!hasFg) return null;
+
+            const PAD = 20;
+            return {
+                x: Math.max(0, minGX * GS - PAD),
+                y: Math.max(0, minGY * GS - PAD),
+                w: Math.min(w - Math.max(0, minGX * GS - PAD), (maxGX - minGX + 1) * GS + PAD * 2),
+                h: Math.min(h - Math.max(0, minGY * GS - PAD), (maxGY - minGY + 1) * GS + PAD * 2),
+            };
+        }
+
+        /**
+         * 在预览图上绘制框选矩形（最终帧，无动画）
+         * @param {{x:number, y:number, w:number, h:number}|null} box
+         */
+        _drawBoundingBox(box) {
+            if (!box) {
+                this._hideBoundingBox();
+                return;
+            }
+            this._drawScaledBoundingBox(box, 1);
+        }
+
+        _hideBoundingBox() {
+            const canvas = this.elements.bboxOverlay;
+            canvas.width = 0;
+            canvas.height = 0;
+        }
+
+        async _cropToBox(box) {
+            const img = await this._loadImage(this.state.originalFile);
+            const canvas = document.createElement('canvas');
+            canvas.width = box.w;
+            canvas.height = box.h;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, box.x, box.y, box.w, box.h, 0, 0, box.w, box.h);
+            return await this._canvasToBlob(canvas);
+        }
+
+        /**
+         * 平滑切换 img 的 src（淡出 → 换图 → 淡入）
+         * @param {HTMLImageElement} imgEl
+         * @param {string} newSrc
+         * @returns {Promise<void>}
+         */
+        async _fadeImageTo(imgEl, newSrc) {
+            // 淡出
+            imgEl.classList.add('fade-out');
+            await new Promise(r => setTimeout(r, 150));
+
+            imgEl.src = newSrc;
+
+            // 等待加载
+            if (!imgEl.complete) {
+                await new Promise((resolve) => {
+                    imgEl.addEventListener('load', resolve, {
+                        once: true
+                    });
+                    imgEl.addEventListener('error', resolve, {
+                        once: true
+                    });
+                });
             }
 
-            ctx.putImageData(new ImageData(softData, w, h), 0, 0);
-            return await this._canvasToBlob(canvas);
+            // 淡入
+            imgEl.classList.remove('fade-out');
+            await new Promise(r => setTimeout(r, 250));
+        }
+
+        /**
+         * 将预览区切换回原始图像（带平滑过渡）
+         */
+        async _restoreOriginalImage() {
+            const url = URL.createObjectURL(this.state.originalFile);
+            await this._fadeImageTo(this.elements.mainImage, url);
+            this.elements.imageTitle.textContent = '待处理';
+            this.elements.imageTitle.style.color = '';
+        }
+
+        /**
+         * 用 requestAnimationFrame 实现框选矩形从中心展开的动画
+         */
+        async _animateBoundingBox(box) {
+            const duration = 450; // ms
+            const start = performance.now();
+
+            const img = this.elements.mainImage;
+            const wrapper = img.parentElement;
+
+            return new Promise((resolve) => {
+                const animate = (now) => {
+                    const elapsed = now - start;
+                    const t = Math.min(elapsed / duration, 1);
+                    // easeOutCubic: 1-(1-t)^3，先快后慢更自然
+                    const ease = 1 - Math.pow(1 - t, 3);
+
+                    this._drawScaledBoundingBox(box, ease);
+
+                    if (t < 1) {
+                        requestAnimationFrame(animate);
+                    } else {
+                        resolve();
+                    }
+                };
+                requestAnimationFrame(animate);
+            });
+        }
+
+        /**
+         * 按缩放比例 t (0→1) 绘制框选矩形（从中心展开）
+         */
+        _drawScaledBoundingBox(box, t) {
+            const canvas = this.elements.bboxOverlay;
+            const img = this.elements.mainImage;
+            const wrapper = img.parentElement;
+
+            // 重置 canvas（含清除画布）
+            canvas.width = wrapper.clientWidth;
+            canvas.height = wrapper.clientHeight;
+            const ctx = canvas.getContext('2d');
+
+            // 图像显示空间映射
+            const imgW = img.naturalWidth,
+                imgH = img.naturalHeight;
+            const containerW = canvas.width,
+                containerH = canvas.height;
+            const scale = Math.min(containerW / imgW, containerH / imgH, 1);
+            const dispW = imgW * scale,
+                dispH = imgH * scale;
+            const offsetX = (containerW - dispW) / 2;
+            const offsetY = (containerH - dispH) / 2;
+
+            // 框选目标位置（像素空间 → 显示空间）
+            const rx = offsetX + box.x * scale;
+            const ry = offsetY + box.y * scale;
+            const rw = box.w * scale;
+            const rh = box.h * scale;
+
+            // 从中心按 t 缩放
+            const cx = rx + rw / 2;
+            const cy = ry + rh / 2;
+            const sw = rw * t;
+            const sh = rh * t;
+            const sx = cx - sw / 2;
+            const sy = cy - sh / 2;
+
+            if (t <= 0.01) return;
+
+            // 半透明暗色遮罩
+            ctx.fillStyle = 'rgba(0,0,0,0.35)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // 挖出高亮区域
+            ctx.clearRect(sx, sy, sw, sh);
+
+            // 边框（虚线逐渐变实线）
+            const dashLen = Math.max(4, 10 * (1 - t));
+            ctx.strokeStyle = '#00ff88';
+            ctx.lineWidth = 2 + t * 2;
+            ctx.setLineDash([dashLen, dashLen]);
+            ctx.strokeRect(sx, sy, sw, sh);
+
+            // 四角角标（透明度随 t 淡入）
+            if (t > 0.3) {
+                const cornerT = (t - 0.3) / 0.7; // 0.3~1.0 之间淡入
+                ctx.lineWidth = 4;
+                ctx.setLineDash([]);
+                ctx.globalAlpha = cornerT;
+
+                const cl = Math.min(16, 12 + 4 * t);
+                // 左上
+                ctx.beginPath();
+                ctx.moveTo(sx, sy + cl);
+                ctx.lineTo(sx, sy);
+                ctx.lineTo(sx + cl, sy);
+                ctx.stroke();
+                // 右上
+                ctx.beginPath();
+                ctx.moveTo(sx + sw - cl, sy);
+                ctx.lineTo(sx + sw, sy);
+                ctx.lineTo(sx + sw, sy + cl);
+                ctx.stroke();
+                // 左下
+                ctx.beginPath();
+                ctx.moveTo(sx, sy + sh - cl);
+                ctx.lineTo(sx, sy + sh);
+                ctx.lineTo(sx + cl, sy + sh);
+                ctx.stroke();
+                // 右下
+                ctx.beginPath();
+                ctx.moveTo(sx + sw - cl, sy + sh);
+                ctx.lineTo(sx + sw, sy + sh);
+                ctx.lineTo(sx + sw, sy + sh - cl);
+                ctx.stroke();
+
+                ctx.globalAlpha = 1;
+            }
+        }
+
+        /**
+         * 完整的快速框选流程：切回原图 → 检测 → 动画 → 裁剪
+         */
+        async _quickSelectCanvas() {
+            // 1) 切换回原始图像（动画舞台）
+            await this._restoreOriginalImage();
+
+            // 2) 检测画面主体包围盒
+            const box = await this._detectBoundingBox();
+
+            if (!box) {
+                this._hideBoundingBox();
+                const img = await this._loadImage(this.state.originalFile);
+                const c = document.createElement('canvas');
+                c.width = img.width;
+                c.height = img.height;
+                c.getContext('2d').drawImage(img, 0, 0);
+                return await this._canvasToBlob(c);
+            }
+
+            // 3) 动画：框选矩形从中心展开（450ms，easeOutCubic）
+            await this._animateBoundingBox(box);
+
+            // 4) 保持显示片刻让用户看到结果
+            await new Promise(r => setTimeout(r, 350));
+
+            // 5) 隐藏框选，裁剪角色区域
+            this._hideBoundingBox();
+            return await this._cropToBox(box);
         }
 
         _loadImage(file) {
@@ -977,7 +1241,8 @@ require_once ROOT_PATH . '/views/layout.php';
         }
 
         _canvasToBlob(canvas) {
-            return new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+            // 用 JPEG 压缩避免图片体积超大
+            return new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.9));
         }
 
         // ===== AI 模式：@imgly/background-removal =====
@@ -1000,22 +1265,22 @@ require_once ROOT_PATH . '/views/layout.php';
             return await removeBackground(this.state.originalFile, config);
         }
 
-        finishRemoveBgProcess(url, method) {
-            this.elements.mainImage.src = url;
+        async finishRemoveBgProcess(url, method) {
+            await this._fadeImageTo(this.elements.mainImage, url);
             this.elements.imageTitle.textContent = '成功';
             this.elements.imageTitle.style.color = 'var(--pico-success-color)';
             if (method === 'ai') {
                 this.elements.progressContainer.style.display = 'none';
             }
             this.elements.removeBgBtn.disabled = false;
-            this.elements.removeBgBtn.textContent = '开始去除背景';
+            this.elements.removeBgBtn.textContent = method === 'canvas' ? '开始框选角色' : '开始去除背景';
         }
 
         handleRemoveBgError(error, method) {
             console.error('背景去除失败:', error);
             this.showError('背景去除失败，请重试或更换图片');
             this.elements.removeBgBtn.disabled = false;
-            this.elements.removeBgBtn.textContent = '开始去除背景';
+            this.elements.removeBgBtn.textContent = method === 'canvas' ? '开始框选角色' : '开始去除背景';
             if (method === 'ai') {
                 this.elements.progressContainer.style.display = 'none';
             }
@@ -1051,22 +1316,22 @@ require_once ROOT_PATH . '/views/layout.php';
                 return this.state.originalFile;
 
             } else if (this.state.currentMode === 'advanced') {
-                // 高级模式：先用原图/裁剪图去背景
+                // 高级模式：先用原图进行框选或去背景预处理
                 if (!this.elements.mainImage.src || this.elements.mainImage.src === '#') {
                     throw new Error('请先上传图片');
                 }
 
                 if (this.elements.imageTitle.textContent === '成功') {
-                    // 已有去背景结果
+                    // 已有预处理结果
                     const response = await fetch(this.elements.mainImage.src);
                     return await response.blob();
                 }
 
-                // 先去背景再识别
+                // 先框选/去背景再识别
                 await this.handleRemoveBackground();
 
                 if (this.elements.imageTitle.textContent !== '成功') {
-                    throw new Error('背景去除失败');
+                    throw new Error('角色框选或去背景失败');
                 }
 
                 const response = await fetch(this.elements.mainImage.src);

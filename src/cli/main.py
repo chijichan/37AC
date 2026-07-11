@@ -19,6 +19,40 @@ from services.menu_service import verify_images_function, show_menu, ask_dataset
 from services.node_service import start_node_service
 
 
+# 菜单操作映射：mode → (名称, 处理函数)
+def _action_train(args):
+    """训练模型"""
+    logger.info("\n=== 1. 训练模型 ===")
+    if args and args.dataset:
+        train_model(dataset_dir=args.dataset, use_yolo_crop=args.yolo_crop)
+    else:
+        dataset_dir, use_yolo = ask_dataset_choice()
+        train_model(dataset_dir=dataset_dir, use_yolo_crop=use_yolo)
+
+
+def _action_predict(_args=None):
+    logger.info("\n=== 2. 预测角色 ===")
+    predict_character()
+
+
+def _action_verify(_args=None):
+    logger.info("\n=== 3. 验证图像文件 ===")
+    verify_images_function()
+
+
+def _action_node(_args=None):
+    logger.info("\n=== 4. 启动节点服务 ===")
+    start_node_service()
+
+
+MENU_ACTIONS = {
+    "1": _action_train,
+    "2": _action_predict,
+    "3": _action_verify,
+    "4": _action_node,
+}
+
+
 def main():
     parser = argparse.ArgumentParser(description="mode")
     parser.add_argument("--mode", type=int, help="模式", default=None)
@@ -26,52 +60,28 @@ def main():
     parser.add_argument("--yolo-crop", action="store_true", help="使用 YOLO 裁剪原始数据集并训练")
     parser.add_argument("--dataset", type=str, default=None, help="训练数据集路径（默认使用 .env 配置或交互选择）")
     args = parser.parse_args()
-    print(args)
-    print(args.mode)
-    print(args.gpu)
+    logger.debug("命令行参数: mode=%s, gpu=%s, yolo_crop=%s, dataset=%s",
+                 args.mode, args.gpu, args.yolo_crop, args.dataset)
 
-    if args.mode == 1:
-        logger.info("\n=== 1. 训练模型 ===")
-        if args.dataset:
-            train_model(dataset_dir=args.dataset, use_yolo_crop=args.yolo_crop)
-        else:
-            dataset_dir, use_yolo = ask_dataset_choice()
-            train_model(dataset_dir=dataset_dir, use_yolo_crop=use_yolo)
-        return
-    elif args.mode == 2:
-        logger.info("\n=== 2. 预测角色 ===")
-        predict_character()
-        return
-    elif args.mode == 3:
-        logger.info("\n=== 3. 验证图像文件 ===")
-        verify_images_function()
-        return
-    elif args.mode == 4:
-        logger.info("\n=== 4. 启动节点服务 ===")
-        start_node_service()
+    # 命令行模式
+    if args.mode and str(args.mode) in MENU_ACTIONS:
+        handler = MENU_ACTIONS[str(args.mode)]
+        handler(args)
         return
 
+    # 交互模式
     while True:
         try:
             show_menu()
             choice = input("请输入你的选择 (1/2/3/4/0): ").strip()
 
-            if choice == "1":
-                logger.info("\n=== 1. 训练模型 ===")
-                dataset_dir, use_yolo = ask_dataset_choice()
-                train_model(dataset_dir=dataset_dir, use_yolo_crop=use_yolo)
-            elif choice == "2":
-                logger.info("\n=== 2. 预测角色 ===")
-                predict_character()
-            elif choice == "3":
-                logger.info("\n=== 3. 验证图像文件 ===")
-                verify_images_function()
-            elif choice == "4":
-                logger.info("\n=== 4. 启动节点服务 ===")
-                start_node_service()
-            elif choice == "0":
+            if choice == "0":
                 logger.info("再见啦！期待下次见面~")
                 break
+
+            handler = MENU_ACTIONS.get(choice)
+            if handler:
+                handler(args)
             else:
                 logger.info("请输入 1、2、3、4 或 0 哦")
         except KeyboardInterrupt:

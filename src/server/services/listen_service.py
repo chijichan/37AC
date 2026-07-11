@@ -74,16 +74,7 @@ def handle_client(conn, addr):
         logger.info("连接断开: %s:%s", addr[0], addr[1])
     finally:
         if node_id:
-            with node_manager.lock:
-                if node_id in node_manager.nodes:
-                    # 立即更新状态为离线并同步到数据库
-                    node_manager.nodes[node_id]["status"] = "offline"
-                    node_manager.update_db_node_status(node_id, "offline")
-                    logger.info("节点 %s 连接异常断开，立即标记为离线", node_id)
-
-                    # 从内存中移除节点
-                    del node_manager.nodes[node_id]
-                    logger.info("节点 %s 已从内存中移除", node_id)
+            node_manager.remove_node(node_id)
 
         try:
             conn.close()

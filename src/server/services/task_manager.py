@@ -4,21 +4,9 @@ import time
 import threading
 from config.log_config import get_logger
 from config.base import TASK_RETRY_INTERVAL_LOCAL, TASK_RETRY_INTERVAL_LLM, TASK_MAX_RETRIES
+from services.node_manager import get_db_connection
 
 logger = get_logger("TaskManager")
-
-
-def get_db_connection():
-    """获取数据库连接（由外部配置）"""
-    # 延迟导入避免循环依赖
-    import pymysql
-    from config.base import DB_CONFIG
-    try:
-        conn = pymysql.connect(**DB_CONFIG)
-        return conn
-    except Exception as e:
-        logger.error("数据库连接失败: %s", e)
-        return None
 
 
 class TaskManager:
@@ -138,9 +126,6 @@ class TaskManager:
             self._logger.error("无法重试任务 %s：缺少图片数据", task_id)
             self.mark_task_completed(task_id)
             return
-
-        from services.node_manager import get_db_connection as _unused
-        _unused  # 确保导入可用
 
         response = dispatch_task(
             image_path,

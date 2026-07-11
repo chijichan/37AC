@@ -50,18 +50,8 @@ def get_logger(name: str) -> logging.Logger:
         _loggers_configured.add(name)
         return logger
 
-    # 为每个 logger 添加独立的处理器，避免传播到根 logger 造成重复
-    logger.propagate = False
-
-    # 文件处理器 - 输出到统一日志文件
-    file_handler = logging.FileHandler(
-        SERVER_LOG_FILE,
-        encoding="utf-8",
-        mode="a",
-    )
-    file_handler.setLevel(get_log_level())
-    file_handler.setFormatter(logging.Formatter(LOG_FORMAT, datefmt=LOG_DATE_FORMAT))
-    logger.addHandler(file_handler)
+    # 子 logger 只添加控制台处理器，文件处理器由根 logger 统一管理
+    logger.propagate = True
 
     # 控制台处理器
     console_handler = logging.StreamHandler(sys.stdout)

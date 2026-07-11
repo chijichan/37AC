@@ -38,7 +38,6 @@ TCP_PORT = int(os.getenv("TCP_PORT", "13137"))
 # - 日志配置
 LOGS_PATH = ROOT_PATH / "saves" / "logs"
 LOGS_PATH.mkdir(exist_ok=True)
-monitor_counter = 0
 
 # JWT 配置（从环境变量读取，不提供硬编码默认值）
 JWT_SECRET = os.getenv("JWT_SECRET")

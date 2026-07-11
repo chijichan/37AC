@@ -16,8 +16,10 @@ from services.task_dispatcher import dispatch_task
 from services.api_key_service import verify_api_key
 from services.sse_bus import sse_bus
 from middleware.rate_limiter import rate_limit
+from config.log_config import get_logger
 
 upload_bp = Blueprint("upload", __name__)
+logger = get_logger("upload_routes")
 
 
 def _require_api_key():
@@ -87,7 +89,7 @@ def upload_and_predict():
                 image_filename=image_filename,
                 recognition_type=recognition_type,
             )
-            print(f"[调度结果] 任务 {task_id}: {result}")
+            logger.info("任务 %s 调度结果: %s", task_id, result)
 
             status = result.get("status")
 
@@ -112,7 +114,7 @@ def upload_and_predict():
                             "result": [],
                         })
                 except Exception as e:
-                    print(f"[调度结果] 保存失败记录出错: {e}")
+                    logger.error("保存失败记录出错: %s", e)
                 finally:
                     if conn:
                         conn.close()
@@ -139,7 +141,7 @@ def upload_and_predict():
                         )
                         conn.commit()
             except Exception as e:
-                print(f"[API Key] 更新任务记录失败: {e}")
+                logger.error("更新任务 API Key 记录失败: %s", e)
             finally:
                 if conn:
                     conn.close()

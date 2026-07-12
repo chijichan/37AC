@@ -5,8 +5,6 @@ import argparse
 
 from config.log_config import init_logging, get_logger
 
-# 初始化统一日志系统
-init_logging()
 logger = get_logger(__name__)
 
 # 允许PIL加载截断的图像文件，增强健壮性
@@ -54,6 +52,9 @@ MENU_ACTIONS = {
 
 
 def main():
+    # 初始化统一日志系统（必须在 main 内，避免 DataLoader 子进程重复触发）
+    init_logging()
+
     parser = argparse.ArgumentParser(description="mode")
     parser.add_argument("--mode", type=int, help="模式", default=None)
     parser.add_argument("--gpu", type=bool, default=False)

@@ -5,7 +5,7 @@ import logging
 import sys
 from pathlib import Path
 
-from config.base import LOGS_PATH
+from config.base import LOGS_PATH, TSAC_DEBUG
 
 # 日志格式模板
 LOG_FORMAT = "%(asctime)s - %(levelname)-4s - %(name)-4s - %(message)s"
@@ -16,6 +16,9 @@ CLI_LOG_FILE = LOGS_PATH / "cli.log"
 
 # 存储已配置的 logger 缓存
 _loggers_configured = set()
+
+# 防止 Windows 多进程下重复初始化的守卫
+_init_done = False
 
 
 def get_log_level():
@@ -77,6 +80,11 @@ def get_logger(name: str) -> logging.Logger:
 
 def init_logging():
     """初始化全局日志系统（在应用启动时调用一次）"""
+    global _init_done
+    if _init_done:
+        return
+    _init_done = True
+
     # 确保日志目录存在
     LOGS_PATH.mkdir(parents=True, exist_ok=True)
 
@@ -108,5 +116,5 @@ def init_logging():
     logger.info("=" * 80)
     logger.info("  CLI 日志系统初始化完成")
     logger.info(f"  日志文件: {CLI_LOG_FILE}")
-    logger.info(f"  日志级别: DEBUG")
+    logger.info(f"  日志级别: {'DEBUG' if TSAC_DEBUG else 'INFO'}")
     logger.info("=" * 80)

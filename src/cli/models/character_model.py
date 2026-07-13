@@ -65,15 +65,17 @@ class CBAM(nn.Module):
 
 
 class CharacterRecognitionModel:
-    """基于 ResNet18 + CBAM 注意力的角色识别模型。"""
+    """基于 ResNet18(ImageNet预训练) + CBAM 注意力的角色识别模型。"""
 
-    def __init__(self, num_classes: int):
-        self.model = self._build_model(num_classes)
+    def __init__(self, num_classes: int, pretrained: bool = True):
+        self.pretrained = pretrained
+        self.model = self._build_model(num_classes, pretrained)
 
     @staticmethod
-    def _build_model(num_classes: int) -> nn.Module:
+    def _build_model(num_classes: int, pretrained: bool = True) -> nn.Module:
         """构建 ResNet18 模型，每层后插入 CBAM 注意力，再替换全连接层。"""
-        model = resnet18(weights=None)
+        weights = "IMAGENET1K_V1" if pretrained else None
+        model = resnet18(weights=weights)
 
         # 在每个残差阶段后插入 CBAM 注意力
         model.layer1 = nn.Sequential(model.layer1, CBAM(64))    # 64 → 64
@@ -84,6 +86,21 @@ class CharacterRecognitionModel:
         model.fc = nn.Linear(model.fc.in_features, num_classes)
         return model.to(get_device())
 
+    def freeze_backbone(self):
+        """冻结 ResNet backbone，仅训练 FC + CBAM（阶段1）。"""
+        for name, param in self.model.named_parameters():
+            # 冻结 ResNet backbone
+            if name.startswith(("conv1", "bn1", "layer1", "layer2", "layer3", "layer4")):
+                param.requires_grad = False
+            # CBAM 和 fc 保持可训练
+            else:
+                param.requires_grad = True
+
+    def unfreeze_all(self):
+        """解冻所有参数（阶段2）。"""
+        for param in self.model.parameters():
+            param.requires_grad = True
+
     def get_model(self) -> nn.Module:
         return self.model
 
@@ -92,6 +109,6 @@ class CharacterRecognitionModel:
 
     def load_model(self, load_path: str, num_classes: int) -> nn.Module:
         state_dict = torch.load(load_path, map_location=get_device())
-        self.model = self._build_model(num_classes)
+        self.model = self._build_model(num_classes, self.pretrained)
         self.model.load_state_dict(state_dict)
         return self.model

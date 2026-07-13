@@ -31,9 +31,13 @@ NUM_EPOCHS = int(os.getenv("NUM_EPOCHS", "50") or "50")
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", "16") or "16")
 IMAGE_SIZE = int(os.getenv("IMAGE_SIZE", "224") or "224")
 LEARNING_RATE = float(os.getenv("LEARNING_RATE", "1e-4") or "1e-4")
-# 微调学习率（第 FINE_TUNE_EPOCH 轮后切换）
-FINE_TUNE_LR = float(os.getenv("FINE_TUNE_LR", "1e-5") or "1e-5")
-FINE_TUNE_EPOCH = int(os.getenv("FINE_TUNE_EPOCH", "40") or "40")
+# === 分阶段微调（基于 ImageNet 预训练权重） ===
+# 阶段1: 冻结 backbone，仅训练 FC + CBAM，高学习率快速拟合头部
+PHASE1_EPOCHS = int(os.getenv("PHASE1_EPOCHS", "10") or "10")
+PHASE1_LR = float(os.getenv("PHASE1_LR", "1e-3") or "1e-3")
+# 阶段2: 解冻全部，低学习率全局精调
+PHASE2_LR = float(os.getenv("PHASE2_LR", "1e-4") or "1e-4")
+PHASE2_MIN_LR = float(os.getenv("PHASE2_MIN_LR", "1e-6") or "1e-6")
 # 单个角色最大训练样本数（YOLO 裁剪保存时生效）
 MAX_IMAGES_PER_ROLE = int(os.getenv("MAX_IMAGES_PER_ROLE", "100") or "100")
 # 验证集比例（0 表示不使用验证集）

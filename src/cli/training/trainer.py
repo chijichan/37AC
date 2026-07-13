@@ -1,6 +1,5 @@
 # training/trainer.py
 import os
-import math
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -149,156 +148,197 @@ def train_model(dataset_dir=None, use_yolo_crop=False):
             val_loader = None
             logger.info("使用全部 %d 张图片训练（无验证集）", len(full_dataset))
 
-        # 模型定义
-        model_handler = CharacterRecognitionModel(NUM_CLASSES)
+        # ======================
+        # === 模型定义（ImageNet 预训练） ===
+        # ======================
+        model_handler = CharacterRecognitionModel(NUM_CLASSES, pretrained=True)
         model = model_handler.get_model()
 
         criterion = LabelSmoothingCrossEntropy(smoothing=LABEL_SMOOTHING)
-        optimizer = optim.Adam(
-            model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY
-        )
-
-        # 学习率调度：预热 + 余弦退火至 FINE_TUNE_LR，之后固定微调
-        warmup_epochs = min(5, NUM_EPOCHS)
-        # 余弦阶段总轮数 = 从预热结束到 FINE_TUNE_EPOCH
-        cos_epochs = max(1, FINE_TUNE_EPOCH - warmup_epochs)
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-            optimizer, T_max=cos_epochs, eta_min=FINE_TUNE_LR
-        )
-        warmup_done = False
-
-        logger.info("开始训练咯...")
-        logger.info("配置: lr=%.0e → cosine %.0e → fine-tune %.0e | "
-                     "weight_decay=%.0e | smooth=%.1f | batch=%d",
-                     LEARNING_RATE, FINE_TUNE_LR, FINE_TUNE_LR,
-                     WEIGHT_DECAY, LABEL_SMOOTHING, BATCH_SIZE)
+        logger.info("使用 torchvision.models.resnet18(weights=IMAGENET1K_V1)")
+        logger.info("配置: smooth=%.1f | batch=%d | weight_decay=%.0e",
+                     LABEL_SMOOTHING, BATCH_SIZE, WEIGHT_DECAY)
         if EARLY_STOP_PATIENCE > 0:
             logger.info("早停: %d 轮无提升即停止", EARLY_STOP_PATIENCE)
 
         best_val_acc = 0.0
         epochs_no_improve = 0
+        total_epoch = 0
 
-        for epoch in range(NUM_EPOCHS):
-            # ===== 学习率调度 =====
-            if epoch < warmup_epochs:
-                factor = (epoch + 1) / warmup_epochs
-                for pg in optimizer.param_groups:
-                    pg["lr"] = LEARNING_RATE * factor
-            elif epoch < FINE_TUNE_EPOCH:
-                if not warmup_done:
-                    for pg in optimizer.param_groups:
-                        pg["lr"] = LEARNING_RATE
-                    warmup_done = True
-                scheduler.step()
-            else:
-                # 第 FINE_TUNE_EPOCH 轮后固定 FINE_TUNE_LR
-                for pg in optimizer.param_groups:
-                    pg["lr"] = FINE_TUNE_LR
+        # ======================
+        # === 阶段1: 冻结 backbone，仅训练 FC + CBAM ===
+        # ======================
+        if PHASE1_EPOCHS > 0:
+            model_handler.freeze_backbone()
+            # 阶段1 优化器 — 只更新 requires_grad=True 的参数
+            phase1_optimizer = optim.Adam(
+                filter(lambda p: p.requires_grad, model.parameters()),
+                lr=PHASE1_LR, weight_decay=WEIGHT_DECAY
+            )
+            logger.info("=" * 50)
+            logger.info("阶段1: 冻结 backbone，仅训练 FC + CBAM (%d 轮, lr=%.0e)",
+                         PHASE1_EPOCHS, PHASE1_LR)
 
-            current_lr = optimizer.param_groups[0]["lr"]
+            for epoch in range(PHASE1_EPOCHS):
+                total_epoch += 1
+                model.train()
+                running_loss = 0.0
+                correct = 0
+                total = 0
 
-            # ===== 训练 =====
+                from tqdm import tqdm
+                loop = tqdm(train_loader, desc=f"P1 训练 {epoch+1}/{PHASE1_EPOCHS}",
+                            bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, "
+                                        "{rate_fmt}{postfix}]")
+                for inputs, labels in loop:
+                    try:
+                        inputs, labels = inputs.to(device), labels.to(device)
+                        phase1_optimizer.zero_grad()
+                        outputs = model(inputs)
+                        loss = criterion(outputs, labels)
+                        loss.backward()
+                        if GRAD_CLIP_NORM > 0:
+                            nn.utils.clip_grad_norm_(model.parameters(), GRAD_CLIP_NORM)
+                        phase1_optimizer.step()
+                        running_loss += loss.item()
+                        _, preds = torch.max(outputs, 1)
+                        correct += (preds == labels).sum().item()
+                        total += labels.size(0)
+                        loop.set_postfix(
+                            loss=f"{running_loss/(loop.n+1):.4f}",
+                            acc=f"{100.*correct/total:.2f}%" if total > 0 else "N/A",
+                            lr=f"{PHASE1_LR:.0e}",
+                        )
+                    except Exception as e:
+                        logger.error(f"阶段1训练错误: {str(e)}")
+                        continue
+
+                loop.close()
+                epoch_train_acc = 100.0 * correct / total if total > 0 else 0.0
+                epoch_loss = running_loss / len(train_loader) if len(train_loader) > 0 else 0.0
+
+                if val_loader is not None:
+                    model.eval()
+                    val_correct = 0; val_total = 0
+                    val_loop = tqdm(val_loader, desc=f"P1 验证 {epoch+1}/{PHASE1_EPOCHS}",
+                                    bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]")
+                    with torch.no_grad():
+                        for inputs, labels in val_loop:
+                            inputs, labels = inputs.to(device), labels.to(device)
+                            outputs = model(inputs)
+                            _, preds = torch.max(outputs, 1)
+                            val_correct += (preds == labels).sum().item()
+                            val_total += labels.size(0)
+                    val_loop.close()
+                    val_acc = 100.0 * val_correct / val_total if val_total > 0 else 0.0
+                else:
+                    val_acc = epoch_train_acc
+
+                logger.info("P1 第 %d/%d 轮 | loss=%.4f | train=%.2f%% | val=%.2f%%",
+                             epoch + 1, PHASE1_EPOCHS, epoch_loss, epoch_train_acc, val_acc)
+
+                if val_acc > best_val_acc:
+                    best_val_acc = val_acc
+                    model_handler.save_model(MODEL_PATH)
+                    epochs_no_improve = 0
+                    logger.info("保存最佳模型 (正确率: %.2f%%) → %s", best_val_acc, str(MODEL_PATH))
+                    save_classes_to_file(CLASSES_TXT_PATH, class_names)
+                elif EARLY_STOP_PATIENCE > 0:
+                    epochs_no_improve += 1
+
+        # ======================
+        # === 阶段2: 解冻全部，余弦退火全局精调 ===
+        # ======================
+        model_handler.unfreeze_all()
+        phase2_epochs = NUM_EPOCHS - PHASE1_EPOCHS
+        if phase2_epochs <= 0:
+            phase2_epochs = NUM_EPOCHS
+        phase2_optimizer = optim.Adam(
+            model.parameters(), lr=PHASE2_LR, weight_decay=WEIGHT_DECAY
+        )
+        phase2_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            phase2_optimizer, T_max=phase2_epochs, eta_min=PHASE2_MIN_LR
+        )
+
+        logger.info("=" * 50)
+        logger.info("阶段2: 解冻全部，全局精调 (%d 轮, lr=%.0e → %.0e)",
+                     phase2_epochs, PHASE2_LR, PHASE2_MIN_LR)
+
+        for epoch in range(phase2_epochs):
+            total_epoch += 1
             model.train()
             running_loss = 0.0
             correct = 0
             total = 0
+            current_lr = phase2_optimizer.param_groups[0]["lr"]
 
             from tqdm import tqdm
-
-            loop = tqdm(train_loader, desc=f"第 {epoch+1}/{NUM_EPOCHS} 轮训练",
+            loop = tqdm(train_loader, desc=f"P2 训练 {epoch+1}/{phase2_epochs}",
                         bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, "
                                     "{rate_fmt}{postfix}]")
             for inputs, labels in loop:
                 try:
                     inputs, labels = inputs.to(device), labels.to(device)
-
-                    optimizer.zero_grad()
+                    phase2_optimizer.zero_grad()
                     outputs = model(inputs)
                     loss = criterion(outputs, labels)
                     loss.backward()
-
                     if GRAD_CLIP_NORM > 0:
                         nn.utils.clip_grad_norm_(model.parameters(), GRAD_CLIP_NORM)
-
-                    optimizer.step()
-
+                    phase2_optimizer.step()
                     running_loss += loss.item()
                     _, preds = torch.max(outputs, 1)
                     correct += (preds == labels).sum().item()
                     total += labels.size(0)
-
-                    current_acc = correct / total if total > 0 else 0.0
                     loop.set_postfix(
                         loss=f"{running_loss/(loop.n+1):.4f}",
-                        acc=f"{100.*current_acc:.2f}%",
+                        acc=f"{100.*correct/total:.2f}%" if total > 0 else "N/A",
                         lr=f"{current_lr:.0e}",
                     )
                 except Exception as e:
-                    logger.error(f"训练过程中出现错误: {str(e)}")
+                    logger.error(f"阶段2训练错误: {str(e)}")
                     continue
 
             loop.close()
+            phase2_scheduler.step()
+            current_lr = phase2_optimizer.param_groups[0]["lr"]
             epoch_train_acc = 100.0 * correct / total if total > 0 else 0.0
             epoch_loss = running_loss / len(train_loader) if len(train_loader) > 0 else 0.0
 
-            # ===== 验证 =====
             if val_loader is not None:
                 model.eval()
-                val_loss = 0.0
-                val_correct = 0
-                val_total = 0
-                val_loop = tqdm(val_loader, desc=f"第 {epoch+1}/{NUM_EPOCHS} 轮验证",
+                val_correct = 0; val_total = 0
+                val_loop = tqdm(val_loader, desc=f"P2 验证 {epoch+1}/{phase2_epochs}",
                                 bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]")
                 with torch.no_grad():
                     for inputs, labels in val_loop:
                         inputs, labels = inputs.to(device), labels.to(device)
                         outputs = model(inputs)
-                        loss = criterion(outputs, labels)
-                        val_loss += loss.item()
                         _, preds = torch.max(outputs, 1)
                         val_correct += (preds == labels).sum().item()
                         val_total += labels.size(0)
-                        val_loop.set_postfix(
-                            loss=f"{val_loss/(val_loop.n+1):.4f}",
-                            acc=f"{100.*val_correct/val_total:.2f}%" if val_total > 0 else "N/A",
-                        )
                 val_loop.close()
                 val_acc = 100.0 * val_correct / val_total if val_total > 0 else 0.0
-                val_loss = val_loss / len(val_loader) if len(val_loader) > 0 else 0.0
-                metric = val_acc
-                logger.info(
-                    f"第 {epoch+1}/{NUM_EPOCHS} 轮 | loss={epoch_loss:.4f} | "
-                    f"训练正确率: {epoch_train_acc:.2f}% | "
-                    f"验证正确率: {val_acc:.2f}% | "
-                    f"lr: {current_lr:.0e}"
-                )
             else:
-                metric = epoch_train_acc
-                logger.info(
-                    f"第 {epoch+1}/{NUM_EPOCHS} 轮 | loss={epoch_loss:.4f} | "
-                    f"正确率: {epoch_train_acc:.2f}% | "
-                    f"lr: {current_lr:.0e}"
-                )
+                val_acc = epoch_train_acc
 
-            # ===== 保存最佳模型 =====
-            if metric > best_val_acc:
-                best_val_acc = metric
+            logger.info("P2 第 %d/%d 轮 | loss=%.4f | train=%.2f%% | val=%.2f%% | lr=%.0e",
+                         epoch + 1, phase2_epochs, epoch_loss, epoch_train_acc, val_acc, current_lr)
+
+            if val_acc > best_val_acc:
+                best_val_acc = val_acc
                 model_handler.save_model(MODEL_PATH)
                 epochs_no_improve = 0
-                logger.info(f"保存最佳模型 (验证正确率: {best_val_acc:.2f}%) → {str(MODEL_PATH)}")
+                logger.info("保存最佳模型 (正确率: %.2f%%) → %s", best_val_acc, str(MODEL_PATH))
                 save_classes_to_file(CLASSES_TXT_PATH, class_names)
-            else:
+            elif EARLY_STOP_PATIENCE > 0:
                 epochs_no_improve += 1
-
-            # ===== 早停 =====
-            if EARLY_STOP_PATIENCE > 0 and epochs_no_improve >= EARLY_STOP_PATIENCE:
-                logger.info(
-                    "早停触发: %d 轮无提升，停止训练 (最佳验证正确率: %.2f%%)",
-                    EARLY_STOP_PATIENCE, best_val_acc
-                )
-                break
+                if epochs_no_improve >= EARLY_STOP_PATIENCE:
+                    logger.info("早停触发: %d 轮无提升 (最佳: %.2f%%)", EARLY_STOP_PATIENCE, best_val_acc)
+                    break
 
         # 训练完成
+        logger.info("=" * 50)
         logger.info(f"训练完成！最佳验证正确率: {best_val_acc:.2f}%")
         logger.info(f"模型保存到: {str(MODEL_PATH)}")
         logger.info(f"类别名称已保存到: {str(CLASSES_TXT_PATH)}")

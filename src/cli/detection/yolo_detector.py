@@ -133,8 +133,12 @@ class YoloDetector:
         # 按目标类别过滤
         if target_classes:
             filtered = [d for d in detections if d["class_name"] in target_classes]
-            if filtered:
-                detections = filtered
+            if not filtered:
+                logger.debug(
+                    "目标类别 %s 未检测到，跳过 %s", target_classes, image_path
+                )
+                return None, None
+            detections = filtered
 
         if not detections:
             return None, None
@@ -174,19 +178,18 @@ def get_detector():
     return _detector_instance
 
 
-def crop_dataset(source_dir: str, output_dir: str, target_classes=None):
+def crop_dataset(source_dir: str, output_dir: str, target_classes=None, max_images_per_role: int = 100):
     """遍历数据集目录，对每张图片执行 YOLO 检测并裁剪人物区域。
 
-    裁剪后的图片**保存到 output_dir**（不覆盖原图），
-    文件名添加 `_yolo` 后缀。若 YOLO 未检测到目标，
-    则将原图直接复制到 output_dir（保证数据集结构完整）。
-
-    已存在 `_yolo` 版本的图片自动跳过，避免重复裁剪。
+    裁剪后的图片保存到 output_dir（不覆盖原图），
+    文件名为 `_yolo` 后缀。若 YOLO 未检测到目标，则在数量未超限时直接复制原图。
+    每个角色最多保留 max_images_per_role 张图片，优先选择大图和 person 检测结果。
 
     Args:
         source_dir: 原始数据集根目录（IP/角色/图片.jpg）
         output_dir: 输出目录（saves/dataset），目录结构自动镜像 source_dir
         target_classes: 只关注的目标类别，默认 ["person"]
+        max_images_per_role: 单个角色最大保存图片数量
 
     Returns:
         dict: { "processed": int, "skipped": int, "failed": int }
@@ -219,48 +222,89 @@ def crop_dataset(source_dir: str, output_dir: str, target_classes=None):
             if not os.path.isdir(role_path) or role_name.startswith("."):
                 continue
 
+            out_role_dir = os.path.join(output_dir, ip_name, role_name)
+            existing_files = []
+            if os.path.exists(out_role_dir):
+                existing_files = [
+                    f for f in os.listdir(out_role_dir)
+                    if f.lower().endswith(image_extensions)
+                ]
+
+            if len(existing_files) >= max_images_per_role:
+                _logger.info(
+                    "角色 %s/%s 已有 %d 张图片（>= %d），跳过裁剪。",
+                    ip_name, role_name, len(existing_files), max_images_per_role
+                )
+                skipped += len(existing_files)
+                continue
+
+            role_images = []
             for fname in os.listdir(role_path):
                 if not fname.lower().endswith(image_extensions):
                     continue
 
-                src_img = os.path.join(role_path, fname)
-
-                # 跳过已经是 _yolo 的图片
                 base_name, ext = os.path.splitext(fname)
                 if base_name.endswith("_yolo"):
-                    skipped += 1
                     continue
 
-                # 输出路径
-                out_role_dir = os.path.join(output_dir, ip_name, role_name)
-                os.makedirs(out_role_dir, exist_ok=True)
+                src_img = os.path.join(role_path, fname)
+                try:
+                    file_size = os.path.getsize(src_img)
+                except OSError:
+                    file_size = 0
+                role_images.append((src_img, fname, file_size))
 
-                # 检查是否已存在 _yolo 版本（避免重复裁剪）
+            # 先按文件大小降序处理，优先保留高质量大图
+            role_images.sort(key=lambda item: item[2], reverse=True)
+
+            saved_count = len(existing_files)
+            created_role_dir = False
+            for src_img, fname, file_size in role_images:
+                if saved_count >= max_images_per_role:
+                    break
+
+                base_name, ext = os.path.splitext(fname)
                 yolo_fname = f"{base_name}_yolo{ext}"
                 yolo_out = os.path.join(out_role_dir, yolo_fname)
-                if os.path.exists(yolo_out):
+                original_out = os.path.join(out_role_dir, fname)
+
+                if os.path.exists(yolo_out) or os.path.exists(original_out):
                     skipped += 1
                     continue
+
+                if not created_role_dir:
+                    os.makedirs(out_role_dir, exist_ok=True)
+                    created_role_dir = True
 
                 try:
                     crop_path, info = detector.detect_and_crop(
                         src_img, target_classes=target_classes, suffix="_yolo"
                     )
                     if crop_path and os.path.exists(crop_path):
-                        # 裁剪成功：将 _yolo 图片移到 output_dir
-                        dst = os.path.join(out_role_dir, yolo_fname)
+                        dst = yolo_out
                         shutil.move(crop_path, dst)
                         processed += 1
+                        saved_count += 1
                         _logger.debug("YOLO 裁剪: %s → %s", src_img, dst)
                     else:
-                        # 未检测到目标：直接复制原图到 output_dir
-                        dst = os.path.join(out_role_dir, fname)
-                        if not os.path.exists(dst):
+                        if target_classes is None and saved_count < max_images_per_role:
+                            dst = original_out
                             shutil.copy2(src_img, dst)
-                        skipped += 1
+                            processed += 1
+                            saved_count += 1
+                            _logger.debug("直接复制原图: %s → %s", src_img, dst)
+                        else:
+                            skipped += 1
                 except Exception as e:
                     _logger.error("处理失败 %s: %s", src_img, e)
                     failed += 1
+
+            if os.path.isdir(out_role_dir) and not os.listdir(out_role_dir):
+                # 当前角色没有写入任何新文件，删除可能产生的空目录
+                try:
+                    os.rmdir(out_role_dir)
+                except OSError:
+                    pass
 
     _logger.info(
         "数据集裁剪完成: 已处理=%d, 跳过=%d, 失败=%d",

@@ -48,7 +48,7 @@ def train_model(dataset_dir=None, use_yolo_crop=False):
         try:
             from detection.yolo_detector import crop_dataset
             output_dir = str(CROPPED_DATASET_DIR)
-            result = crop_dataset(train_dir, output_dir)
+            result = crop_dataset(train_dir, output_dir, max_images_per_role=MAX_IMAGES_PER_ROLE)
             if result["processed"] > 0:
                 logger.info(
                     "YOLO 裁剪完成: 处理 %d 张, 跳过 %d 张, 失败 %d 张",

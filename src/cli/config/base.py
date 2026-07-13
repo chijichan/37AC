@@ -26,10 +26,12 @@ MODEL_DIR = ROOT_PATH / "saves" / "models"
 MODEL_PATH = MODEL_DIR / os.getenv("MODEL_FILENAME", "37ac-v0.0.1.pth")
 CLASSES_TXT_PATH = MODEL_DIR / "classes.txt"
 
-NUM_EPOCHS = int(os.getenv("NUM_EPOCHS", "50"))
-BATCH_SIZE = int(os.getenv("BATCH_SIZE", "16"))
-IMAGE_SIZE = int(os.getenv("IMAGE_SIZE", "224"))
-LEARNING_RATE = float(os.getenv("LEARNING_RATE", "1e-4"))
+NUM_EPOCHS = int(os.getenv("NUM_EPOCHS", "50") or "50")
+BATCH_SIZE = int(os.getenv("BATCH_SIZE", "16") or "16")
+IMAGE_SIZE = int(os.getenv("IMAGE_SIZE", "224") or "224")
+LEARNING_RATE = float(os.getenv("LEARNING_RATE", "1e-4") or "1e-4")
+# 单个角色最大训练样本数（YOLO 裁剪保存时生效）
+MAX_IMAGES_PER_ROLE = int(os.getenv("MAX_IMAGES_PER_ROLE", "100") or "100")
 
 # ==================== 预测相关配置 ====================
 MODEL_LOAD_PATH = MODEL_PATH

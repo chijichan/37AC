@@ -112,13 +112,14 @@ class YoloDetector:
             logger.error("YOLO 检测失败: %s", e)
             return []
 
-    def detect_and_crop(self, image_path: str, target_classes=None, suffix="_yolo"):
+    def detect_and_crop(self, image_path: str, target_classes=None, suffix="_yolo", output_dir=None):
         """检测并裁剪出最佳目标区域。
 
         Args:
             image_path: 图片路径
             target_classes: 只关注的目标类别列表（如 ["person"]），None 表示全部
             suffix: 裁剪后文件名后缀，默认 "_yolo"
+            output_dir: 裁剪结果保存目录（None 表示与原图同目录）
 
         Returns:
             tuple: (cropped_image_path_or_none, detection_info_or_none)
@@ -152,12 +153,19 @@ class YoloDetector:
             img = Image.open(image_path).convert("RGB")
             cropped = img.crop(bbox)
 
-            # 保存裁剪结果（_yolo 后缀）
-            base, ext = os.path.splitext(image_path)
-            crop_path = f"{base}{suffix}{ext}"
+            # 确定输出路径：优先 output_dir，否则与原图同目录
+            base_name = os.path.basename(image_path)
+            name, ext = os.path.splitext(base_name)
+            if output_dir:
+                os.makedirs(output_dir, exist_ok=True)
+                crop_path = os.path.join(output_dir, f"{name}{suffix}{ext}")
+            else:
+                base, ext = os.path.splitext(image_path)
+                crop_path = f"{base}{suffix}{ext}"
+
             cropped.save(crop_path)
-            logger.info("YOLO 裁剪区域: %s, 类别=%s, 置信度=%.2f",
-                        bbox, best["class_name"], best["confidence"])
+            logger.info("YOLO 裁剪区域: %s, 类别=%s, 置信度=%.2f → %s",
+                        bbox, best["class_name"], best["confidence"], crop_path)
             return crop_path, best
 
         except Exception as e:
@@ -322,11 +330,14 @@ def detect_characters(image_path: str) -> list:
 
 
 def crop_best_character(image_path: str) -> tuple:
-    """检测并裁剪最佳人物区域（快捷入口）"""
-    # 优先检测 person 类，如果没找到则用任意检测结果
+    """检测并裁剪最佳人物区域（快捷入口），结果保存到系统临时目录。"""
+    import tempfile
+    tmp_dir = tempfile.mkdtemp(prefix="37ac_yolo_")
     detector = get_detector()
-    crop_path, info = detector.detect_and_crop(image_path, target_classes=["person"])
+    crop_path, info = detector.detect_and_crop(
+        image_path, target_classes=["person"], output_dir=tmp_dir
+    )
     if crop_path:
         return crop_path, info
     # 降级：不限制类别
-    return detector.detect_and_crop(image_path)
+    return detector.detect_and_crop(image_path, output_dir=tmp_dir)

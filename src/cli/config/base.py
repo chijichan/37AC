@@ -31,8 +31,23 @@ NUM_EPOCHS = int(os.getenv("NUM_EPOCHS", "50") or "50")
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", "16") or "16")
 IMAGE_SIZE = int(os.getenv("IMAGE_SIZE", "224") or "224")
 LEARNING_RATE = float(os.getenv("LEARNING_RATE", "1e-4") or "1e-4")
+# 微调学习率（第 FINE_TUNE_EPOCH 轮后切换）
+FINE_TUNE_LR = float(os.getenv("FINE_TUNE_LR", "1e-5") or "1e-5")
+FINE_TUNE_EPOCH = int(os.getenv("FINE_TUNE_EPOCH", "40") or "40")
 # 单个角色最大训练样本数（YOLO 裁剪保存时生效）
 MAX_IMAGES_PER_ROLE = int(os.getenv("MAX_IMAGES_PER_ROLE", "100") or "100")
+# 验证集比例（0 表示不使用验证集）
+VAL_SPLIT_RATIO = float(os.getenv("VAL_SPLIT_RATIO", "0.2") or "0.2")
+# 权重衰减（L2 正则化）
+WEIGHT_DECAY = float(os.getenv("WEIGHT_DECAY", "1e-4") or "1e-4")
+# 标签平滑
+LABEL_SMOOTHING = float(os.getenv("LABEL_SMOOTHING", "0.1") or "0.1")
+# 梯度裁剪最大范数
+GRAD_CLIP_NORM = float(os.getenv("GRAD_CLIP_NORM", "1.0") or "1.0")
+# 早停耐心轮数（0 表示不使用早停）
+EARLY_STOP_PATIENCE = int(os.getenv("EARLY_STOP_PATIENCE", "10") or "10")
+# DataLoader 工作进程数
+NUM_WORKERS = int(os.getenv("NUM_WORKERS", "2") or "2")
 
 # ==================== 预测相关配置 ====================
 MODEL_LOAD_PATH = MODEL_PATH

@@ -1,6 +1,9 @@
 # data/dataset.py
 import os
+from PIL import ImageFile
 from torchvision import datasets
+
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 
 class IPRoleImageFolder(datasets.ImageFolder):

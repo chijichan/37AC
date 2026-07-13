@@ -32,6 +32,9 @@ Thumbs.db
 *.sqlite3
 saves/
 
+# Agent Skills
+.agents/
+
 # Environment
 .env
 .env.local

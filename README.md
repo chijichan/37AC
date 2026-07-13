@@ -4,7 +4,7 @@
 
 **37AC**（**A**nime **C**haracter recognition）—— 基于深度学习与分布式推理的二次元角色识别平台。
 
-![Python](https://img.shields.io/badge/Python-3.14-blue)
+![Python](https://img.shields.io/badge/Python-3.12-blue)
 ![PyTorch](https://img.shields.io/badge/PyTorch-2.13-orange)
 ![YOLO](https://img.shields.io/badge/YOLOv8-00CCFF)
 ![Flask](https://img.shields.io/badge/Flask-3.1-green)
@@ -221,10 +221,11 @@ dataset/
 
 | 技术 | 用途 |
 |------|------|
-| Python 3.14 | 开发语言（原生 `str \| None` 联合类型） |
+| Python 3.12 | 开发语言（原生 `str \| None` 联合类型） |
 | PyTorch 2.13 | 模型训练与推理 |
-| YOLOv8 (Ultralytics 8.4) | 人物快速定位（检测+裁剪，可选） |
+| YOLOv8 (Ultralytics 8.4) | 人物快速定位（person 类别检测+裁剪，可选） |
 | ResNet18 | 角色分类网络（37AC v0.0.1） |
+| torch-directml | AMD GPU 加速 |
 | Flask 3.1 | Web/API 框架 |
 | Pillow 12.3 | 图像处理 |
 | torchvision 0.28 | 数据加载与增强 |
@@ -270,7 +271,7 @@ git clone https://github.com/chijichan/37AC.git
 cd 37AC
 ```
 
-### 2. 创建并激活虚拟环境
+### 2. 创建并激活虚拟环境（推荐 Python 3.12）
 
 ```bash
 python -m venv .venv
@@ -283,6 +284,12 @@ python -m venv .venv
 pip install -r src/cli/requirements.txt
 pip install -r src/server/requirements.txt
 ```
+
+> **AMD GPU (RX 580) 用户**：额外安装 DirectML 加速：
+> ```bash
+> pip install torch-directml
+> # 然后在 .env 中设置 USE_DIRECTML=True
+> ```
 
 ### 4. 配置数据库
 
@@ -342,6 +349,15 @@ python src/cli/main.py --mode 1
 ```bash
 python src/cli/main.py
 ```
+
+交互菜单支持三种数据集选择：
+- **[1] 原始数据集** — 直接使用原始图片训练
+- **[2] 已裁剪数据集** — 使用之前 YOLO 裁剪结果训练
+- **[3] YOLO 裁剪后训练** — 用 YOLOv8 检测 `person` 类并裁剪角色区域，仅保留 person 检测结果，然后训练
+
+训练参数可在 `.env` 中配置：
+- `MAX_IMAGES_PER_ROLE` — 单个角色最大保留张数（YOLO 裁剪时生效），默认 `100`
+- 图片按文件大小降序处理，优先保留高质量大图
 
 训练结果：
 - `src/cli/saves/models/37ac-v0.0.1.pth`
@@ -502,6 +518,9 @@ LLM 推理在单独的后台线程中执行，不会阻塞节点的主消息循�
 - 确保 TCP 服务与节点在线
 - 生产环境请替换 `base.py` 默认密钥
 - 推荐使用 GPU 加速训练与推理
+- AMD 用户（RX 580 等）可使用 PyTorch-DirectML 加速：`pip install torch-directml` + `.env` 中设置 `USE_DIRECTML=True`
+- YOLO 裁剪模式仅保留 `person` 类别的检测结果，不会保留非 person 图片
+- `MAX_IMAGES_PER_ROLE` 控制单个角色最大样本数，超出部分不会被裁剪保存
 
 ---
 

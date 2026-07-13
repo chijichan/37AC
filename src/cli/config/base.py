@@ -17,6 +17,7 @@ TSAC_DEBUG = os.getenv("TSAC_DEBUG", "False").lower() == "true"
 
 # ==================== 设备配置 ====================
 AUTO_DEVICE = os.getenv("AUTO_DEVICE", "True").lower() == "true"
+USE_DIRECTML = os.getenv("USE_DIRECTML", "False").lower() == "true"
 DEVICE = None
 
 # ==================== 训练相关配置 ====================
@@ -106,10 +107,40 @@ IMAGE_PATH.mkdir(exist_ok=True)
 LOGS_PATH = ROOT_PATH / "saves" / "logs"
 LOGS_PATH.mkdir(exist_ok=True)
 
-# ==================== 设备自动选择 ====================
-if AUTO_DEVICE is False:
-    DEVICE = "cpu"
-else:
-    import torch
+# ==================== 设备自动选择（惰性初始化） ====================
+# 首次调用时获取，避免模块导入时加载 torch/torch-directml
+_DEVICE_INITIALIZED = False
 
-    DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+def get_device():
+    """获取计算设备（惰性初始化，首次调用时加载 torch）"""
+    global _DEVICE_INITIALIZED, DEVICE
+    if _DEVICE_INITIALIZED:
+        return DEVICE
+
+    _logger = __import__('logging').getLogger(__name__)
+
+    if AUTO_DEVICE is False:
+        DEVICE = "cpu"
+    elif USE_DIRECTML:
+        try:
+            import torch_directml
+            DEVICE = torch_directml.device()
+            _logger.info("使用 DirectML 设备 (AMD GPU): %s", DEVICE)
+        except ImportError:
+            _logger.warning("torch-directml 未安装，回退到 CPU")
+            DEVICE = "cpu"
+        except KeyboardInterrupt:
+            raise
+        except Exception as e:
+            _logger.warning("DirectML 初始化失败: %s，回退到 CPU", e)
+            DEVICE = "cpu"
+    else:
+        import torch
+        if torch.cuda.is_available():
+            DEVICE = torch.device("cuda")
+        else:
+            DEVICE = "cpu"
+
+    _DEVICE_INITIALIZED = True
+    return DEVICE

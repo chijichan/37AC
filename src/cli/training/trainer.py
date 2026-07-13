@@ -101,7 +101,7 @@ def train_model(dataset_dir=None, use_yolo_crop=False):
             loop = tqdm(train_loader, desc=f"第 {epoch+1}/{NUM_EPOCHS} 轮训练")
             for inputs, labels in loop:
                 try:
-                    inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
+                    inputs, labels = inputs.to(get_device()), labels.to(get_device())
 
                     optimizer.zero_grad()
                     outputs = model(inputs)

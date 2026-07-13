@@ -3,6 +3,11 @@ torch==2.13.0
 torchaudio==2.11.0
 torchvision==0.28.0
 
+# AMD GPU (RX 580) 加速 — PyTorch-DirectML
+# 仅在 AMD 显卡上需要，NVIDIA 用户无需安装
+# 安装: pip install torch-directml
+# .env 中设置 USE_DIRECTML=True 启用
+
 # YOLO 人物检测（快速定位 + ResNet 分类）
 ultralytics>=8.0.0
 opencv-python>=4.8.0  # ultralytics 依赖

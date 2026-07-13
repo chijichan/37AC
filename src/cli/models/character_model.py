@@ -2,7 +2,7 @@
 import torch
 import torch.nn as nn
 from torchvision.models import resnet18
-from config.base import DEVICE
+from config.base import get_device
 
 
 # ==================== CBAM 注意力模块 ====================
@@ -14,7 +14,6 @@ class ChannelAttention(nn.Module):
     def __init__(self, in_channels: int, reduction: int = 16):
         super().__init__()
         self.avg_pool = nn.AdaptiveAvgPool2d(1)
-        self.max_pool = nn.AdaptiveMaxPool2d(1)
         self.fc = nn.Sequential(
             nn.Linear(in_channels, in_channels // reduction, bias=False),
             nn.ReLU(inplace=True),
@@ -25,7 +24,9 @@ class ChannelAttention(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         b, c, _, _ = x.size()
         avg_out = self.fc(self.avg_pool(x).view(b, c))
-        max_out = self.fc(self.max_pool(x).view(b, c))
+        # 手动全局最大池化（避免 AdaptiveMaxPool2d 在 DML 上回退到 CPU）
+        max_pooled, _ = torch.max(x.view(b, c, -1), dim=2)
+        max_out = self.fc(max_pooled)
         out = self.sigmoid(avg_out + max_out).view(b, c, 1, 1)
         return x * out
 
@@ -81,7 +82,7 @@ class CharacterRecognitionModel:
         model.layer4 = nn.Sequential(model.layer4, CBAM(512))   # 256 → 512
 
         model.fc = nn.Linear(model.fc.in_features, num_classes)
-        return model.to(DEVICE)
+        return model.to(get_device())
 
     def get_model(self) -> nn.Module:
         return self.model
@@ -90,7 +91,7 @@ class CharacterRecognitionModel:
         torch.save(self.model.state_dict(), save_path)
 
     def load_model(self, load_path: str, num_classes: int) -> nn.Module:
-        state_dict = torch.load(load_path, map_location=DEVICE)
+        state_dict = torch.load(load_path, map_location=get_device())
         self.model = self._build_model(num_classes)
         self.model.load_state_dict(state_dict)
         return self.model

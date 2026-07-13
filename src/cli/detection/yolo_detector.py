@@ -170,10 +170,13 @@ def get_detector():
     """获取（缓存）YOLO 检测器实例"""
     global _detector_instance
     if _detector_instance is None:
-        from config.base import YOLO_MODEL_PATH, YOLO_CONFIDENCE
+        from config.base import YOLO_MODEL_PATH, YOLO_CONFIDENCE, USE_DIRECTML, get_device
+        dml_device = get_device()
+        yolo_device = None if USE_DIRECTML else (dml_device if str(dml_device) != "cpu" else None)
         _detector_instance = YoloDetector(
             model_path=YOLO_MODEL_PATH,
             conf_threshold=YOLO_CONFIDENCE,
+            device=yolo_device,
         )
     return _detector_instance
 

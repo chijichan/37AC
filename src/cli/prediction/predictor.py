@@ -224,7 +224,7 @@ def predict_image(image_path, model_path=None, classes_file=None, use_cache=True
         try:
             # 使用 YOLO 裁剪后的图片（如有）进行分类
             image = Image.open(effective_image).convert("RGB")
-            image_tensor = transform(image).unsqueeze(0).to(DEVICE)
+            image_tensor = transform(image).unsqueeze(0).to(get_device())
 
             with torch.no_grad():
                 outputs = model(image_tensor)

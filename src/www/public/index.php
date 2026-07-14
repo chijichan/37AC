@@ -59,20 +59,23 @@ spl_autoload_register(function ($class) {
  */
 function verify_jwt_token($token)
 {
-    $ch = curl_init(API_BASE_URL . '/auth/verify');
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT => 5,
-        CURLOPT_HTTPHEADER => [
-            'Authorization: Bearer ' . $token,
-            'Content-Type: application/json',
+    $ctx = stream_context_create([
+        'http' => [
+            'method' => 'GET',
+            'timeout' => 5,
+            'header' => "Authorization: Bearer $token\r\nContent-Type: application/json\r\n",
+            'ignore_errors' => true,
         ],
     ]);
-    $response = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
+    $response = @file_get_contents(API_BASE_URL . '/auth/verify', false, $ctx);
 
-    if ($httpCode !== 200) {
+    if ($response === false) {
+        return null;
+    }
+
+    // 从响应头提取 HTTP 状态码
+    $status_line = $http_response_header[0] ?? '';
+    if (!preg_match('#\d{3}#', $status_line, $m) || $m[0] !== '200') {
         return null;
     }
 

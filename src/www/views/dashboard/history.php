@@ -306,15 +306,15 @@ if (!$isAjax) {
             const tasks = payload.data || [];
             allTasks = tasks;
 
-            // 更新统计
-            const total = tasks.length;
-            const completedCount = tasks.filter(t => t.status === 'completed').length;
-            const pendingCount = tasks.filter(t => t.status === 'pending').length;
-            const completionRate = total > 0 ? Math.round((completedCount / total) * 1000) / 10 : 0;
+            // 更新统计（使用服务器返回的全量统计数据，而非仅当前页）
+            const statsTotal = payload.total_count ?? tasks.length;
+            const statsCompleted = payload.completed_count ?? tasks.filter(t => t.status === 'completed').length;
+            const statsPending = payload.pending_count ?? tasks.filter(t => t.status === 'pending').length;
+            const completionRate = statsTotal > 0 ? Math.round((statsCompleted / statsTotal) * 1000) / 10 : 0;
 
-            document.getElementById('history-total-requests').textContent = total;
-            document.getElementById('history-success-count').textContent = completedCount;
-            document.getElementById('history-failure-count').textContent = pendingCount;
+            document.getElementById('history-total-requests').textContent = statsTotal;
+            document.getElementById('history-success-count').textContent = statsCompleted;
+            document.getElementById('history-failure-count').textContent = statsPending;
             document.getElementById('history-success-rate').textContent = `${completionRate}%`;
 
             // 更新分页

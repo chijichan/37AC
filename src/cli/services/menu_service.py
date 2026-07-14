@@ -94,11 +94,8 @@ def ask_dataset_choice():
     print("  选择训练数据集")
     print("=" * 40)
     print(f"  [1] 原始数据集: {DATASET_DIR}")
-    print(f"  [2] 已裁剪数据集: {CROPPED_DATASET_DIR}")
-    print(f"  [3] 使用 YOLO 裁剪原始数据集后训练")
-    print("-" * 40)
-    print("  [2] 使用已存在的 _yolo 裁剪结果（如有）")
-    print("  [3] 从头裁剪原始数据集，保存到 saves/dataset/")
+    print(f"  [2] 已裁剪数据集: {CROPPED_DATASET_DIR}（使用已存在的 _yolo 裁剪结果）")
+    print(f"  [3] 使用 YOLO 裁剪原始数据集后训练（从头裁剪，保存到 saves/dataset/）")
     print("-" * 40)
 
     while True:

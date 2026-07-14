@@ -88,31 +88,8 @@ def init_logging():
     # 确保日志目录存在
     LOGS_PATH.mkdir(parents=True, exist_ok=True)
 
-    # 配置根 logger
-    root_logger = logging.getLogger()
-    root_logger.setLevel(get_log_level())
-
-    # 清除已有的处理器
-    root_logger.handlers.clear()
-
-    # 文件处理器
-    file_handler = logging.FileHandler(
-        CLI_LOG_FILE,
-        encoding="utf-8",
-        mode="a",
-    )
-    file_handler.setLevel(get_log_level())
-    file_handler.setFormatter(logging.Formatter(LOG_FORMAT, datefmt=LOG_DATE_FORMAT))
-    root_logger.addHandler(file_handler)
-
-    # 控制台处理器
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(get_log_level())
-    console_handler.setFormatter(logging.Formatter(LOG_FORMAT, datefmt=LOG_DATE_FORMAT))
-    root_logger.addHandler(console_handler)
-
-    # 记录启动日志
-    logger = logging.getLogger("init")
+    # 记录启动日志（使用 get_logger 获取的子 logger，propagate=False 不传播到 root）
+    logger = get_logger("init")
     logger.info("=" * 80)
     logger.info("  CLI 日志系统初始化完成")
     logger.info(f"  日志文件: {CLI_LOG_FILE}")

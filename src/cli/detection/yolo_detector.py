@@ -179,8 +179,17 @@ def get_detector():
     global _detector_instance
     if _detector_instance is None:
         from config.base import YOLO_MODEL_PATH, YOLO_CONFIDENCE, USE_DIRECTML, get_device
-        dml_device = get_device()
-        yolo_device = None if USE_DIRECTML else (dml_device if str(dml_device) != "cpu" else None)
+        device = get_device()
+        # YOLO 设备传递规则：
+        # - DirectML 模式：传 DirectML 设备（torch_directml device）
+        # - CUDA 可用：传 "cuda" 或 None（让 YOLO 自动选择）
+        # - 否则：传 None（YOLO 自动使用 CPU）
+        if USE_DIRECTML:
+            yolo_device = device  # DirectML device
+        elif str(device) != "cpu":
+            yolo_device = device  # CUDA device
+        else:
+            yolo_device = None    # 让 YOLO 自动选择（CPU）
         _detector_instance = YoloDetector(
             model_path=YOLO_MODEL_PATH,
             conf_threshold=YOLO_CONFIDENCE,
@@ -330,14 +339,26 @@ def detect_characters(image_path: str) -> list:
 
 
 def crop_best_character(image_path: str) -> tuple:
-    """检测并裁剪最佳人物区域（快捷入口），结果保存到系统临时目录。"""
+    """检测并裁剪最佳人物区域（快捷入口），结果保存到系统临时目录。
+    注意：调用方负责在使用完毕后清理返回的裁剪文件。
+    """
     import tempfile
+    import shutil
     tmp_dir = tempfile.mkdtemp(prefix="37ac_yolo_")
-    detector = get_detector()
-    crop_path, info = detector.detect_and_crop(
-        image_path, target_classes=["person"], output_dir=tmp_dir
-    )
-    if crop_path:
-        return crop_path, info
-    # 降级：不限制类别
-    return detector.detect_and_crop(image_path, output_dir=tmp_dir)
+    try:
+        detector = get_detector()
+        crop_path, info = detector.detect_and_crop(
+            image_path, target_classes=["person"], output_dir=tmp_dir
+        )
+        if crop_path:
+            return crop_path, info
+        # 降级：不限制类别
+        crop_path, info = detector.detect_and_crop(image_path, output_dir=tmp_dir)
+        if crop_path:
+            return crop_path, info
+        # 未检测到任何内容，清理临时目录
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        return None, None
+    except Exception:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        raise

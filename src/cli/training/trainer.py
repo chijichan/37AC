@@ -55,7 +55,7 @@ def _split_dataset(dataset, val_ratio: float, seed: int = 42):
     """按比例随机拆分训练/验证集索引，避免类别顺序偏差。"""
     n = len(dataset)
     indices = torch.randperm(n, generator=torch.Generator().manual_seed(seed)).tolist()
-    n_val = max(1, int(n * val_ratio))
+    n_val = max(1, min(int(n * val_ratio), n - 1))  # 至少留 1 个训练样本
     n_train = n - n_val
     return indices[:n_train], indices[n_train:]
 

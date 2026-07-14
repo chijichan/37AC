@@ -55,45 +55,92 @@ spl_autoload_register(function ($class) {
 });
 
 /**
+ * 通过后端 API 验证 JWT 令牌
+ */
+function verify_jwt_token($token)
+{
+    $ch = curl_init(API_BASE_URL . '/auth/verify');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 5,
+        CURLOPT_HTTPHEADER => [
+            'Authorization: Bearer ' . $token,
+            'Content-Type: application/json',
+        ],
+    ]);
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($httpCode !== 200) {
+        return null;
+    }
+
+    $data = json_decode($response, true);
+    return $data['success'] ? $data['data'] : null;
+}
+
+/**
+ * 获取当前请求中的 access_token
+ */
+function get_access_token()
+{
+    // 优先从 Authorization header 获取
+    $auth_header = '';
+    if (!empty($_SERVER['HTTP_AUTHORIZATION'])) {
+        $auth_header = $_SERVER['HTTP_AUTHORIZATION'];
+    } elseif (!empty($_SERVER['REDIRECT_HTTP_AUTHORIZATION'])) {
+        $auth_header = $_SERVER['REDIRECT_HTTP_AUTHORIZATION'];
+    }
+
+    if (!empty($auth_header) && preg_match('/Bearer\s+(.+)/', $auth_header, $matches)) {
+        return $matches[1];
+    }
+
+    // 从 Cookie 获取
+    if (!empty($_COOKIE['access_token'])) {
+        return $_COOKIE['access_token'];
+    }
+
+    return null;
+}
+
+/**
  * 认证检查中间件
- * 检查用户是否已登录，未登录则重定向到登录页
+ * 检查 JWT 令牌是否有效，未登录则重定向到登录页
  */
 function require_auth()
 {
-    // 从 Cookie 或 Session 中检查登录状态
     session_start();
-    $is_logged_in = isset($_SESSION['user_id']) ||
-        (isset($_COOKIE['access_token']) && !empty($_COOKIE['access_token']));
 
-    if (!$is_logged_in) {
-        // 检查 Authorization header（用于 AJAX 请求）
-        $auth_header = isset($_SERVER['HTTP_AUTHORIZATION']) ? $_SERVER['HTTP_AUTHORIZATION'] : '';
-        if (empty($auth_header)) {
-            // 也检查 REDIRECT_HTTP_AUTHORIZATION
-            $auth_header = isset($_SERVER['REDIRECT_HTTP_AUTHORIZATION']) ? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] : '';
-        }
+    // Session 优先
+    if (!empty($_SESSION['user_id'])) {
+        return;
+    }
 
-        if (!empty($auth_header) && preg_match('/Bearer\s+(.+)/', $auth_header, $matches)) {
-            $is_logged_in = !empty($matches[1]);
+    $token = get_access_token();
+    if ($token) {
+        $userData = verify_jwt_token($token);
+        if ($userData && !empty($userData['user_id'])) {
+            $_SESSION['user_id'] = $userData['user_id'];
+            $_SESSION['role'] = $userData['role'] ?? 'user';
+            return;
         }
     }
 
-    if (!$is_logged_in) {
-        // AJAX 请求返回 401
-        if (
-            !empty($_SERVER['HTTP_X_REQUESTED_WITH']) &&
-            strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest'
-        ) {
-            http_response_code(401);
-            header('Content-Type: application/json');
-            echo json_encode(['success' => false, 'message' => '未登录，请先登录']);
-            exit;
-        }
-
-        // 普通请求重定向到登录页
-        header('Location: /auth/login');
+    // 未登录处理
+    if (
+        !empty($_SERVER['HTTP_X_REQUESTED_WITH']) &&
+        strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest'
+    ) {
+        http_response_code(401);
+        header('Content-Type: application/json');
+        echo json_encode(['success' => false, 'message' => '未登录，请先登录']);
         exit;
     }
+
+    header('Location: /auth/login');
+    exit;
 }
 
 // 路由

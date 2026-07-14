@@ -9,7 +9,19 @@ import re
 from utils.image_utils import validate_image_file
 from utils.file_utils import load_classes_from_file, check_model_file
 from models.character_model import CharacterRecognitionModel
-from config.base import *
+from config.base import (
+    IMAGE_SIZE,
+    CLASSES_TXT_PATH,
+    MODEL_LOAD_PATH,
+    YOLO_ENABLED,
+    LLM_RECOGNITION_ENABLED,
+    LLM_API_KEY,
+    LLM_API_URL,
+    LLM_MODEL_NAME,
+    LLM_PROMPT_TEMPLATE,
+    LLM_TIMEOUT_SEC,
+    get_device,
+)
 from config.log_config import get_logger
 
 logger = get_logger(__name__)
@@ -32,6 +44,7 @@ PREDICT_TRANSFORMS = transforms.Compose(
 )
 
 # 全局模型缓存，避免重复加载
+# 缓存结构：{ "model": nn.Module, "num_classes": int, "classes": list }
 _model_cache = None
 _classes_cache = None
 
@@ -43,18 +56,8 @@ def predict_character():
     if not CLASS_NAMES:
         return
 
-    # --- 2. 加载模型 ---
+    # --- 2. 验证模型文件存在 ---
     if not check_model_file(MODEL_LOAD_PATH):
-        return
-
-    try:
-        model_handler = CharacterRecognitionModel(len(CLASS_NAMES))
-        model = model_handler.load_model(MODEL_LOAD_PATH, len(CLASS_NAMES))
-        model.eval()
-        logger.info("模型加载成功")
-
-    except Exception as e:
-        logger.error(f"模型加载失败: {str(e)}", exc_info=True)
         return
 
     # --- 3. 用户输入图片路径 ---
@@ -87,8 +90,8 @@ def predict_character():
 
 def _display_prediction_result(result, image_path):
     """显示预测结果（内部辅助函数）"""
-    if "success" == False:
-        logger.error(f"预测失败: {result['error']}")
+    if not result.get("success"):
+        logger.error(f"预测失败: {result.get('error', '未知错误')}")
         return
 
     print(f"\n预测结果是: {result['label']}")
@@ -198,9 +201,19 @@ def predict_image(image_path, model_path=None, classes_file=None, use_cache=True
         # === 加载模型（带缓存） ===
         # ======================
         global _model_cache
+        model = None
+
+        # 尝试从缓存获取
         if use_cache and _model_cache is not None:
-            model = _model_cache
-        else:
+            cached_model, cached_num_classes = _model_cache
+            if cached_num_classes == NUM_CLASSES:
+                model = cached_model
+            else:
+                logger.info("模型类别数变化 (%d → %d)，重新加载模型", cached_num_classes, NUM_CLASSES)
+                _model_cache = None
+
+        # 缓存未命中时加载模型
+        if model is None:
             if not check_model_file(model_path):
                 result["error"] = f"模型文件不存在或不可读: {model_path}"
                 return result
@@ -210,7 +223,7 @@ def predict_image(image_path, model_path=None, classes_file=None, use_cache=True
                 model = model_handler.load_model(model_path, NUM_CLASSES)
                 model.eval()
                 if use_cache:
-                    _model_cache = model
+                    _model_cache = (model, NUM_CLASSES)
             except Exception as e:
                 result["error"] = f"模型加载失败: {str(e)}"
                 logger.error(f"模型加载失败: {str(e)}", exc_info=True)
@@ -223,7 +236,8 @@ def predict_image(image_path, model_path=None, classes_file=None, use_cache=True
 
         try:
             # 使用 YOLO 裁剪后的图片（如有）进行分类
-            image = Image.open(effective_image).convert("RGB")
+            with Image.open(effective_image) as img:
+                image = img.convert("RGB")
             image_tensor = transform(image).unsqueeze(0).to(get_device())
 
             with torch.no_grad():
@@ -516,3 +530,5 @@ def _is_invalid_label(label: str) -> bool:
             return True
 
     return False
+
+

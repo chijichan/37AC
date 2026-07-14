@@ -45,6 +45,47 @@ def decode_token(token: str) -> dict:
         return None
 
 
+def verify_token(token: str) -> dict:
+    """验证 JWT 令牌并检查用户状态"""
+    payload = decode_token(token)
+    if not payload:
+        return {"success": False, "message": "令牌无效或已过期"}
+
+    user_id = payload.get("user_id")
+
+    conn = get_connection()
+    if not conn:
+        return {"success": False, "message": "数据库连接失败"}
+    try:
+        with conn.cursor(pymysql.cursors.DictCursor) as cursor:
+            cursor.execute(
+                "SELECT id, username, role, status FROM users WHERE id = %s",
+                (user_id,),
+            )
+            user = cursor.fetchone()
+
+        if not user:
+            return {"success": False, "message": "用户不存在"}
+
+        if user["status"] == 0:
+            return {"success": False, "message": "账号已被禁用"}
+
+        return {
+            "success": True,
+            "message": "令牌有效",
+            "data": {
+                "user_id": user["id"],
+                "username": user["username"],
+                "role": user["role"],
+            },
+        }
+    except Exception as e:
+        return {"success": False, "message": f"验证失败: {str(e)}"}
+    finally:
+        if conn:
+            conn.close()
+
+
 def register(username: str, password: str, email: str) -> dict:
     """用户注册"""
     valid, msg = validate_username(username)
@@ -158,18 +199,29 @@ def refresh_token(refresh_token_str: str) -> dict:
     user_id = payload.get("user_id")
     role = payload.get("role")
 
+    # 验证用户是否仍存在且未被禁用
+    conn = get_connection()
+    if conn:
+        try:
+            with conn.cursor(pymysql.cursors.DictCursor) as cursor:
+                cursor.execute(
+                    "SELECT id, status FROM users WHERE id = %s",
+                    (user_id,),
+                )
+                user = cursor.fetchone()
+            if not user:
+                return {"success": False, "message": "用户不存在"}
+            if user["status"] == 0:
+                return {"success": False, "message": "账号已被禁用"}
+        except Exception as e:
+            return {"success": False, "message": f"验证失败: {str(e)}"}
+        finally:
+            conn.close()
+    else:
+        return {"success": False, "message": "数据库连接失败"}
+
     # 生成新的访问令牌
     new_access_token = _generate_token(user_id, role, JWT_ACCESS_TOKEN_EXPIRES)
-
-    return {
-        "success": True,
-        "message": "令牌刷新成功",
-        "data": {
-            "access_token": new_access_token,
-            "expires_in": JWT_ACCESS_TOKEN_EXPIRES,
-        },
-    }
-
 
     return {
         "success": True,

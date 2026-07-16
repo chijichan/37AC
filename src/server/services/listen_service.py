@@ -78,8 +78,8 @@ def handle_client(conn, addr):
 
         try:
             conn.close()
-        except:
-            pass
+        except Exception as e:
+            logger.warning("关闭连接异常 %s:%s: %s", addr[0], addr[1], e)
         logger.info("连接关闭: %s:%s", addr[0], addr[1])
 
 

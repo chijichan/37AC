@@ -108,7 +108,48 @@ class CharacterRecognitionModel:
         torch.save(self.model.state_dict(), save_path)
 
     def load_model(self, load_path: str, num_classes: int) -> nn.Module:
+        """加载模型权重，支持类别数变化的兼容性加载。
+
+        1. 如果新旧类别数一致 → 直接全部加载（最快）
+        2. 如果类别数变化 → 跳过 fc 层权重，只加载 backbone + CBAM，
+           并重新初始化 fc 层（随机初始化新分类头）
+
+        注意：如果 self.model 的 fc 层输出维度与 num_classes 一致，
+        则复用已有模型结构避免重复构建；否则重建模型。
+
+        Args:
+            load_path (str): 权重文件路径
+            num_classes (int): 新的类别数
+
+        Returns:
+            nn.Module: 加载权重后的模型
+        """
         state_dict = torch.load(load_path, map_location=get_device())
-        self.model = self._build_model(num_classes, self.pretrained)
-        self.model.load_state_dict(state_dict)
+
+        # 仅当模型未构建或类别数不匹配时才重建，避免重复构建
+        if not hasattr(self, 'model') or self.model is None \
+                or self.model.fc.out_features != num_classes:
+            self.model = self._build_model(num_classes, self.pretrained)
+
+        # 检查 fc 层权重尺寸是否匹配
+        fc_key = "fc.weight"
+        if fc_key in state_dict:
+            old_num_classes = state_dict[fc_key].size(0)
+            if old_num_classes != num_classes:
+                # 类别数变化：移除 fc 相关键，随机初始化新 fc 层
+                logger = __import__('logging').getLogger(__name__)
+                logger.info("类别数变化: %d → %d，跳过 fc 层权重，保留 backbone + CBAM",
+                            old_num_classes, num_classes)
+                # 移除 fc 层的 weight 和 bias（如果有）
+                keys_to_remove = [k for k in state_dict if k.startswith("fc.")]
+                for k in keys_to_remove:
+                    del state_dict[k]
+
+                # 加载 backbone + CBAM，fc 层保持随机初始化
+                self.model.load_state_dict(state_dict, strict=False)
+            else:
+                self.model.load_state_dict(state_dict)
+        else:
+            self.model.load_state_dict(state_dict, strict=False)
+
         return self.model

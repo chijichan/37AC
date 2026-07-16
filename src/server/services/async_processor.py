@@ -33,8 +33,14 @@ class AsyncTaskProcessor:
 
     def submit_task(self, func, *args, **kwargs):
         """提交任务到异步处理器"""
-        self.task_queue.put((func, args, kwargs))
-        return True
+        try:
+            self.task_queue.put((func, args, kwargs))
+            return True
+        except Exception as e:
+            logger.error("提交异步任务失败 func=%s args=%s: %s",
+                         func.__name__ if hasattr(func, '__name__') else str(func),
+                         args, e)
+            return False
 
 
 class MessageTypeProcessor:

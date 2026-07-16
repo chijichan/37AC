@@ -26,7 +26,7 @@ def check_package(package_name, import_name=None):
 
 def check_python_version():
     """检查 Python 版本是否满足最低要求"""
-    required = (3, 14)
+    required = (3, 12)
     current = sys.version_info[:2]
     if current >= required:
         print(f"✓ Python 版本 {current[0]}.{current[1]} >= {required[0]}.{required[1]}，符合要求")

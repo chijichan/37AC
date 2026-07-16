@@ -26,6 +26,15 @@ DATASET_DIR = Path(os.getenv("DATASET_DIR", "W:/Img"))
 MODEL_DIR = ROOT_PATH / "saves" / "models"
 MODEL_PATH = MODEL_DIR / os.getenv("MODEL_FILENAME", "37ac-v0.0.1.pth")
 CLASSES_TXT_PATH = MODEL_DIR / "classes.txt"
+# 已有模型权重备份目录
+MODEL_BAK_DIR = MODEL_DIR / "_bak"
+
+# 是否从已有模型权重继续训练（而非从头 ImageNet 预训练）
+RESUME_MODEL_PATH = os.getenv("RESUME_MODEL_PATH", "")
+if RESUME_MODEL_PATH:
+    RESUME_MODEL_PATH = Path(RESUME_MODEL_PATH)
+else:
+    RESUME_MODEL_PATH = None  # 默认使用 ImageNet 预训练
 
 NUM_EPOCHS = int(os.getenv("NUM_EPOCHS", "50") or "50")
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", "16") or "16")

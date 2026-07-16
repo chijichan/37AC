@@ -21,11 +21,51 @@ from services.node_service import start_node_service
 def _action_train(args):
     """训练模型"""
     logger.info("\n=== 1. 训练模型 ===")
+
+    # 判断训练方式优先级：命令行 --resume > 交互选择
+    from config.base import MODEL_PATH
+    resume_model = None
+
+    if args and args.resume:
+        # 命令行模式：--resume 已指定
+        if args.resume == "auto":
+            resume_model = str(MODEL_PATH)
+            logger.info("继续训练模式（命令行），使用当前模型: %s", resume_model)
+        else:
+            resume_model = args.resume
+            logger.info("继续训练模式（命令行），使用指定权重: %s", resume_model)
+    elif args and args.mode:
+        # 命令行模式：--mode 1 不带 --resume，从头训练
+        logger.info("从头训练模式（命令行），使用 ImageNet 预训练")
+    else:
+        # 交互模式：弹出子菜单让用户选择
+        print()
+        print("=" * 40)
+        print("  选择训练方式")
+        print("=" * 40)
+        print("  [1] 从头训练（ImageNet 预训练）")
+        print(f"  [2] 继续训练（基于已有权重: {MODEL_PATH.name}）")
+        print("-" * 40)
+
+        while True:
+            mode_choice = input("请选择 (1/2): ").strip()
+            if mode_choice == "1":
+                resume_model = None
+                break
+            elif mode_choice == "2":
+                resume_model = str(MODEL_PATH)
+                logger.info("继续训练模式，使用当前模型: %s", resume_model)
+                break
+            else:
+                print("无效选择，请输入 1 或 2")
+
     if args and args.dataset:
-        train_model(dataset_dir=args.dataset, use_yolo_crop=args.yolo_crop)
+        train_model(dataset_dir=args.dataset, use_yolo_crop=args.yolo_crop,
+                    resume_model=resume_model)
     else:
         dataset_dir, use_yolo = ask_dataset_choice()
-        train_model(dataset_dir=dataset_dir, use_yolo_crop=use_yolo)
+        train_model(dataset_dir=dataset_dir, use_yolo_crop=use_yolo,
+                    resume_model=resume_model)
 
 
 def _action_predict(_args=None):
@@ -60,9 +100,12 @@ def main():
     parser.add_argument("--gpu", type=bool, default=False)
     parser.add_argument("--yolo-crop", action="store_true", help="使用 YOLO 裁剪原始数据集并训练")
     parser.add_argument("--dataset", type=str, default=None, help="训练数据集路径（默认使用 .env 配置或交互选择）")
+    parser.add_argument("--resume", type=str, default=None, nargs="?",
+                        const="auto", metavar="MODEL_PATH",
+                        help="从已有模型权重继续训练（指定 .pth 路径，或留空自动使用当前模型）")
     args = parser.parse_args()
-    logger.debug("命令行参数: mode=%s, gpu=%s, yolo_crop=%s, dataset=%s",
-                 args.mode, args.gpu, args.yolo_crop, args.dataset)
+    logger.debug("命令行参数: mode=%s, gpu=%s, yolo_crop=%s, dataset=%s, resume=%s",
+                 args.mode, args.gpu, args.yolo_crop, args.dataset, args.resume)
 
     # 命令行模式
     if args.mode and str(args.mode) in MENU_ACTIONS:

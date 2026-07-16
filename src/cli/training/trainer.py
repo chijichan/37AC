@@ -12,6 +12,37 @@ from utils.file_utils import save_classes_to_file
 from config.base import *
 from config.log_config import get_logger
 
+# ==================== 继续训练辅助函数 ====================
+
+def _backup_old_model(model_path, bak_dir):
+    """将旧模型权重备份到备份目录，避免覆盖后无法回退。
+
+    Args:
+        model_path (Path): 当前模型权重路径
+        bak_dir (Path): 备份目录路径
+    """
+    import shutil
+    from datetime import datetime
+
+    if not model_path.exists():
+        logger.info("没有旧模型需要备份（%s 不存在）", model_path)
+        return
+
+    bak_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    bak_name = f"{model_path.stem}_bak_{timestamp}{model_path.suffix}"
+    bak_path = bak_dir / bak_name
+
+    shutil.copy2(str(model_path), str(bak_path))
+    logger.info("旧模型已备份 → %s", bak_path)
+
+    # 同时备份 classes.txt
+    classes_txt = model_path.parent / "classes.txt"
+    if classes_txt.exists():
+        bak_classes = bak_dir / f"classes_bak_{timestamp}.txt"
+        shutil.copy2(str(classes_txt), str(bak_classes))
+        logger.info("旧 classes.txt 已备份 → %s", bak_classes)
+
 logger = get_logger(__name__)
 
 # ==================== 训练集 / 验证集数据增强 ====================
@@ -71,8 +102,19 @@ class _ValSubset(Subset):
             img = VAL_TRANSFORMS(img)
         return img, label
 
+    def __getitems__(self, indices):
+        """PyTorch 新版要求 Subset 子类重写 __getitem__ 时必须同时重写 __getitems__。"""
+        return [self.__getitem__(idx) for idx in indices]
 
-def train_model(dataset_dir=None, use_yolo_crop=False):
+
+def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None):
+    """训练模型
+
+    Args:
+        dataset_dir (str, optional): 数据集目录路径
+        use_yolo_crop (bool): 是否使用 YOLO 裁剪
+        resume_model (str or Path, optional): 已有模型权重路径，用于继续训练而非从头开始
+    """
     # 确定训练用数据集目录
     train_dir = dataset_dir or str(DATASET_DIR)
 
@@ -149,13 +191,35 @@ def train_model(dataset_dir=None, use_yolo_crop=False):
             logger.info("使用全部 %d 张图片训练（无验证集）", len(full_dataset))
 
         # ======================
-        # === 模型定义（ImageNet 预训练） ===
+        # === 模型定义 ===
         # ======================
-        model_handler = CharacterRecognitionModel(NUM_CLASSES, pretrained=True)
-        model = model_handler.get_model()
+        # 判断是否从已有模型权重继续训练
+        resume_path = resume_model or RESUME_MODEL_PATH
+        if resume_path is not None and os.path.exists(str(resume_path)):
+            logger.info("=" * 50)
+            logger.info("检测到已有模型权重: %s", resume_path)
+            logger.info("将从已有权重继续训练（跳过阶段1冻结，直接全局精调）")
+
+            # 备份旧模型（训练开始前备份，防止训练中途失败导致丢失）
+            _backup_old_model(MODEL_PATH, MODEL_BAK_DIR)
+
+            # 加载已有模型权重
+            model_handler = CharacterRecognitionModel(NUM_CLASSES, pretrained=False)
+            model = model_handler.load_model(str(resume_path), NUM_CLASSES)
+
+            # 继续训练模式：跳过阶段1，直接进入阶段2全局精调
+            skip_phase1 = True
+            logger.info("继续训练模式: 跳过阶段1（冻结backbone），直接全局精调")
+        else:
+            if resume_path is not None:
+                logger.warning("指定的继续训练权重不存在: %s，将使用 ImageNet 预训练", resume_path)
+            # 从头训练：使用 ImageNet 预训练权重
+            model_handler = CharacterRecognitionModel(NUM_CLASSES, pretrained=True)
+            model = model_handler.get_model()
+            skip_phase1 = False
+            logger.info("使用 torchvision.models.resnet18(weights=IMAGENET1K_V1)")
 
         criterion = LabelSmoothingCrossEntropy(smoothing=LABEL_SMOOTHING)
-        logger.info("使用 torchvision.models.resnet18(weights=IMAGENET1K_V1)")
         logger.info("配置: smooth=%.1f | batch=%d | weight_decay=%.0e",
                      LABEL_SMOOTHING, BATCH_SIZE, WEIGHT_DECAY)
         if EARLY_STOP_PATIENCE > 0:
@@ -168,7 +232,8 @@ def train_model(dataset_dir=None, use_yolo_crop=False):
         # ======================
         # === 阶段1: 冻结 backbone，仅训练 FC + CBAM ===
         # ======================
-        if PHASE1_EPOCHS > 0:
+        # 继续训练模式跳过阶段1，因为模型已经训练过
+        if not skip_phase1 and PHASE1_EPOCHS > 0:
             model_handler.freeze_backbone()
             # 阶段1 优化器 — 只更新 requires_grad=True 的参数
             phase1_optimizer = optim.Adam(
@@ -245,12 +310,14 @@ def train_model(dataset_dir=None, use_yolo_crop=False):
                     save_classes_to_file(CLASSES_TXT_PATH, class_names)
                 elif EARLY_STOP_PATIENCE > 0:
                     epochs_no_improve += 1
+        else:
+            logger.info("跳过阶段1（冻结backbone训练）")
 
         # ======================
         # === 阶段2: 解冻全部，余弦退火全局精调 ===
         # ======================
         model_handler.unfreeze_all()
-        phase2_epochs = NUM_EPOCHS - PHASE1_EPOCHS
+        phase2_epochs = NUM_EPOCHS - (PHASE1_EPOCHS if not skip_phase1 else 0)
         if phase2_epochs <= 0:
             phase2_epochs = NUM_EPOCHS
         phase2_optimizer = optim.Adam(

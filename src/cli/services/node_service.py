@@ -200,12 +200,14 @@ def start_node_service():
     # === 全局变量（在函数内使用）===
     s = None
     heartbeat_missed_count = 0
-    last_heartbeat_send_time = 0  # 重命名为发送时间
-    last_heartbeat_response_time = 0  # 响应时间
+    last_heartbeat_send_time = 0  # 上次心跳发送时间
+    last_heartbeat_response_time = 0  # 上次心跳响应时间
     connection_alive = True  # 连接状态标志
     reconnect_attempts = 0
     tasks = []
+    tasks_lock = threading.Lock()  # 保护 tasks 列表的线程安全
     pending_llm_tasks = {}  # task_id -> {store, local_image_path, effective_type, start_time}
+    pending_llm_tasks_lock = threading.Lock()  # 保护 pending_llm_tasks 的线程安全
     consecutive_none_count = 0  # recv_json 连续返回 None 的计数，超过阈值触发重连
 
     def _safe_close(sock):
@@ -225,6 +227,16 @@ def start_node_service():
             sock.close()
         except Exception:
             pass
+
+    def _cleanup_image(image_path):
+        """安全删除推理临时图片文件"""
+        if not image_path or not os.path.exists(image_path):
+            return
+        try:
+            os.remove(image_path)
+            logger.debug("[节点] 已清理临时图片: %s", image_path)
+        except Exception as e:
+            logger.warning("[节点] 清理临时图片失败 %s: %s", image_path, e)
 
     # === 连接并注册函数（辅助函数）===
     def connect_and_register():
@@ -293,6 +305,8 @@ def start_node_service():
             consecutive_none_count = 0
 
             # 注册节点
+            with tasks_lock:
+                current_tasks = list(tasks)
             register_msg = {
                 "type": "register",
                 "timestamp": int(time.time()),
@@ -300,7 +314,7 @@ def start_node_service():
                 "data": {
                     "node_id": NODE_ID,
                     "token": TOKEN,
-                    "tasks": tasks,
+                    "tasks": current_tasks,
                     "max_tasks": MAX_TASKS,
                     "local_port": assigned_port,
                     "capabilities": CAPABILITIES,
@@ -333,16 +347,19 @@ def start_node_service():
             while connection_alive and s:
                 time.sleep(HEARTBEAT_INTERVAL_SEC)
                 try:
+                    with tasks_lock:
+                        current_tasks = list(tasks)
                     hb_msg = {
                         "type": "heartbeat",
                         "timestamp": int(time.time()),
                         "data": {
                             "node_id": NODE_ID,
-                            "tasks": tasks,
+                            "tasks": current_tasks,
                         },
                     }
                     json_protocol.send_json(s, hb_msg)
                     last_heartbeat_send_time = time.time()
+                    last_heartbeat_response_time = 0  # 重置，标记等待响应
                     logger.debug("[节点] 发送心跳")
                 except Exception as e:
                     logger.error(f"[心跳线程] 发送心跳异常: {e}")
@@ -355,8 +372,9 @@ def start_node_service():
         # === 主接收循环 ====
         while connection_alive and s:
             # === 检查已完成的 LLM 任务（非阻塞） ===
-            for tid in list(pending_llm_tasks.keys()):
-                info = pending_llm_tasks[tid]
+            with pending_llm_tasks_lock:
+                pending_snapshot = list(pending_llm_tasks.items())
+            for tid, info in pending_snapshot:
                 elapsed = time.time() - info["start_time"]
                 if "value" in info["store"] or elapsed >= LLM_TIMEOUT_SEC:
                     if "value" in info["store"]:
@@ -381,8 +399,11 @@ def start_node_service():
                         logger.info("[节点] 已返回 LLM 任务 %s 的推理结果", tid)
                     except Exception as send_err:
                         logger.error("[节点] 发送 LLM 任务结果失败: %s", send_err)
-                    tasks.remove(tid)
-                    del pending_llm_tasks[tid]
+                    with tasks_lock:
+                        if tid in tasks:
+                            tasks.remove(tid)
+                    with pending_llm_tasks_lock:
+                        pending_llm_tasks.pop(tid, None)
 
             # === 心跳超时检测 ===
             current_time = time.time()
@@ -472,7 +493,8 @@ def start_node_service():
                         )
 
                         # 更新当前任务列表和计数
-                        tasks.append(task_id)
+                        with tasks_lock:
+                            tasks.append(task_id)
 
                         # 解码 base64 图片数据
                         try:
@@ -514,12 +536,13 @@ def start_node_service():
                                         store["value"] = {"success": False, "label": "", "confidence": 0.0, "class_probs": [], "error": f"LLM inference failed: {exc}"}
 
                                 threading.Thread(target=_run_llm, daemon=True).start()
-                                pending_llm_tasks[task_id] = {
-                                    "store": store,
-                                    "local_image_path": local_image_path,
-                                    "effective_type": effective_type,
-                                    "start_time": time.time(),
-                                }
+                                with pending_llm_tasks_lock:
+                                    pending_llm_tasks[task_id] = {
+                                        "store": store,
+                                        "local_image_path": local_image_path,
+                                        "effective_type": effective_type,
+                                        "start_time": time.time(),
+                                    }
                                 logger.info("[节点] LLM 任务 %s 已提交到后台，主循环继续监听", task_id)
                                 # 不阻塞主循环，由 pending_llm_tasks 检查处理结果
                                 continue
@@ -542,7 +565,11 @@ def start_node_service():
                             }
                             json_protocol.send_json(s, response_msg)
                             logger.info(f"[节点] 已返回任务 {task_id} 的推理结果")
-                            tasks.remove(task_id)
+                            with tasks_lock:
+                                if task_id in tasks:
+                                    tasks.remove(task_id)
+                            # 清理临时图片文件
+                            _cleanup_image(local_image_path)
 
                         except Exception as decode_error:
                             logger.error(f"[节点] 图片数据解码失败: {decode_error}")
@@ -557,8 +584,10 @@ def start_node_service():
                                 },
                             }
                             json_protocol.send_json(s, error_msg)
-                            # json_protocol.send_json(s, status_update_decrement)
-                            tasks.remove(task_id)
+                            with tasks_lock:
+                                if task_id in tasks:
+                                    tasks.remove(task_id)
+                            _cleanup_image(local_image_path)
 
                     except Exception as e:
                         logger.error(f"[节点] 处理带图片任务出错: {e}")
@@ -586,8 +615,12 @@ def start_node_service():
             except socket.timeout:
                 # 接收超时是正常的，继续循环检查其他条件
                 continue
+            except (ConnectionError, OSError, struct.error) as e:
+                logger.error("[节点] 主循环连接异常: %s", e)
+                connection_alive = False
+                break
             except Exception as e:
-                logger.error(f"[节点] 主循环异常: {e}")
+                logger.error("[节点] 主循环未预期异常: %s", e, exc_info=True)
                 connection_alive = False
                 break
 
@@ -612,7 +645,16 @@ def start_node_service():
         last_heartbeat_send_time = 0
         last_heartbeat_response_time = 0
         consecutive_none_count = 0
-        pending_llm_tasks.clear()  # 清空未完成的 LLM 任务
+
+        # 清理未完成的 LLM 任务及其临时图片文件
+        with pending_llm_tasks_lock:
+            for info in pending_llm_tasks.values():
+                _cleanup_image(info.get("local_image_path"))
+            pending_llm_tasks.clear()
+
+        # 清空任务列表（旧任务 ID 在重连后已失效）
+        with tasks_lock:
+            tasks.clear()
 
         # 外层 while True 会自动调用 connect_and_register() 重新连接
         # 无需在此处再次调用，避免重复连接

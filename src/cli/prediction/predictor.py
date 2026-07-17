@@ -6,6 +6,7 @@ from PIL import Image
 import os
 import json
 import re
+import threading
 from utils.image_utils import validate_image_file
 from utils.file_utils import load_classes_from_file, check_model_file
 from models.character_model import CharacterRecognitionModel
@@ -47,6 +48,7 @@ PREDICT_TRANSFORMS = transforms.Compose(
 # 缓存结构：{ "model": nn.Module, "num_classes": int, "classes": list }
 _model_cache = None
 _classes_cache = None
+_cache_lock = threading.Lock()
 
 
 def predict_character():
@@ -185,15 +187,16 @@ def predict_image(image_path, model_path=None, classes_file=None, use_cache=True
         # === 加载类别（带缓存） ===
         # ======================
         global _classes_cache
-        if use_cache and _classes_cache is not None:
-            CLASS_NAMES = _classes_cache
-        else:
-            CLASS_NAMES = load_classes_from_file(classes_file)
-            if not CLASS_NAMES:
-                result["error"] = "无法加载类别文件或类别文件为空"
-                return result
-            if use_cache:
-                _classes_cache = CLASS_NAMES
+        with _cache_lock:
+            if use_cache and _classes_cache is not None:
+                CLASS_NAMES = _classes_cache
+            else:
+                CLASS_NAMES = load_classes_from_file(classes_file)
+                if not CLASS_NAMES:
+                    result["error"] = "无法加载类别文件或类别文件为空"
+                    return result
+                if use_cache:
+                    _classes_cache = CLASS_NAMES
 
         NUM_CLASSES = len(CLASS_NAMES)
 
@@ -203,14 +206,15 @@ def predict_image(image_path, model_path=None, classes_file=None, use_cache=True
         global _model_cache
         model = None
 
-        # 尝试从缓存获取
-        if use_cache and _model_cache is not None:
-            cached_model, cached_num_classes = _model_cache
-            if cached_num_classes == NUM_CLASSES:
-                model = cached_model
-            else:
-                logger.info("模型类别数变化 (%d → %d)，重新加载模型", cached_num_classes, NUM_CLASSES)
-                _model_cache = None
+        with _cache_lock:
+            # 尝试从缓存获取
+            if use_cache and _model_cache is not None:
+                cached_model, cached_num_classes = _model_cache
+                if cached_num_classes == NUM_CLASSES:
+                    model = cached_model
+                else:
+                    logger.info("模型类别数变化 (%d → %d)，重新加载模型", cached_num_classes, NUM_CLASSES)
+                    _model_cache = None
 
         # 缓存未命中时加载模型
         if model is None:
@@ -223,7 +227,8 @@ def predict_image(image_path, model_path=None, classes_file=None, use_cache=True
                 model = model_handler.load_model(model_path, NUM_CLASSES)
                 model.eval()
                 if use_cache:
-                    _model_cache = (model, NUM_CLASSES)
+                    with _cache_lock:
+                        _model_cache = (model, NUM_CLASSES)
             except Exception as e:
                 result["error"] = f"模型加载失败: {str(e)}"
                 logger.error(f"模型加载失败: {str(e)}", exc_info=True)

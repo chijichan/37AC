@@ -106,7 +106,10 @@ def async_handle_register(conn, addr, msg):
         json_protocol.send_json(conn, register_ack)
     finally:
         if "cursor" in locals():
-            cursor.close()
+            try:
+                cursor.close()
+            except Exception:
+                pass
         if conn_db:
             conn_db.close()
 
@@ -132,6 +135,9 @@ def async_handle_task_result(conn, addr, msg):
     def process_task_result():
         try:
             conn = get_db_connection()
+            if not conn:
+                logger.error("任务结果保存失败: 数据库连接失败 task_id=%s", task_id)
+                return
             with conn.cursor() as cursor:
                 sql = """
                     INSERT INTO task_results (task_id, result, status)
@@ -144,6 +150,10 @@ def async_handle_task_result(conn, addr, msg):
                 cursor.execute(sql, (task_id, json.dumps(result), "completed"))
             conn.commit()
             logger.info("任务结果已保存: task_id=%s", task_id)
+
+            # DB 写入成功后才从 pending_tasks 移除，避免竞态导致任务丢失
+            from services.task_manager import task_manager
+            task_manager.mark_task_completed(task_id)
 
             # 推送到 SSE 事件总线（实时通知前端）
             sse_bus.publish(task_id, {
@@ -163,8 +173,6 @@ def async_handle_task_result(conn, addr, msg):
                 conn.close()
 
     async_processor.submit_task(process_task_result)
-    from services.task_manager import task_manager
-    task_manager.mark_task_completed(task_id)
 
 
 def async_handle_unknown_message(conn, addr, msg):

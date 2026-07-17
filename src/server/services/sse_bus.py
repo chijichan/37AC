@@ -60,9 +60,10 @@ class SSEBus:
         for q in subs:
             try:
                 q.put_nowait(payload)
+            except queue.Full:
+                logger.warning("[SSE] 队列已满，丢弃事件: task_id=%s", task_id)
             except Exception:
-                # 队列可能已满或已关闭，跳过
-                pass
+                logger.warning("[SSE] 推送异常: task_id=%s", task_id, exc_info=True)
         logger.info("[SSE] 推送: task_id=%s, 订阅数=%d", task_id, len(subs))
 
     def iter_events(self, task_id: str, q: queue.Queue, timeout: float = 60.0):
@@ -75,7 +76,11 @@ class SSEBus:
         while time.time() < deadline:
             try:
                 data = q.get(timeout=5.0)  # 每 5 秒检查一次超时
-                parsed = json.loads(data)
+                try:
+                    parsed = json.loads(data)
+                except json.JSONDecodeError:
+                    logger.warning("[SSE] 收到非 JSON 数据: task_id=%s", task_id)
+                    continue
                 # waiting 状态不结束流，继续等待最终结果
                 if parsed.get("status") == "waiting":
                     yield f"data: {data}\n\n"
@@ -85,7 +90,8 @@ class SSEBus:
             except queue.Empty:
                 # 发送 SSE heartbeat 注释，保持连接活跃
                 yield ": heartbeat\n\n"
-        # 超时
+        # 超时：自动取消订阅防止死订阅泄漏
+        self.unsubscribe(task_id, q)
         yield f"data: {json.dumps({'status': 'timeout', 'message': '等待超时', 'task_id': task_id}, ensure_ascii=False)}\n\n"
 
 

@@ -21,6 +21,10 @@ def login_required(f):
         if not payload:
             return jsonify({"success": False, "message": "令牌无效或已过期"}), 401
 
+        # 拒绝 refresh token 当作 access token 使用
+        if payload.get("type") == "refresh":
+            return jsonify({"success": False, "message": "请使用访问令牌而非刷新令牌"}), 401
+
         # 将用户信息存入 Flask 全局上下文
         g.user_id = payload.get("user_id")
         g.user_role = payload.get("role")
@@ -42,6 +46,10 @@ def admin_required(f):
         payload = decode_token(token)
         if not payload:
             return jsonify({"success": False, "message": "令牌无效或已过期"}), 401
+
+        # 拒绝 refresh token 当作 access token 使用
+        if payload.get("type") == "refresh":
+            return jsonify({"success": False, "message": "请使用访问令牌而非刷新令牌"}), 401
 
         if payload.get("role") != "admin":
             return jsonify({"success": False, "message": "需要管理员权限"}), 403

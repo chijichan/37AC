@@ -80,7 +80,10 @@ def dispatch_task(image_path: str | None, image_data, task_id: str,
         elif isinstance(image_data, bytes):
             image_bytes = image_data
         else:
-            image_bytes = str(image_data).encode("utf-8")
+            logger.error("dispatch_task: 不支持的 image_data 类型 %s", type(image_data))
+            response["message"] = "图片数据格式错误"
+            response["status"] = "failed"
+            return response
 
         # 检查图片大小限制
         if len(image_bytes) > MAX_IMAGE_SIZE:

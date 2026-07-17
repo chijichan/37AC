@@ -21,12 +21,13 @@ from services.db import get_connection
 logger = get_logger("auth_service")
 
 
-def _generate_token(user_id: int, role: str, expires_in: int) -> str:
+def _generate_token(user_id: int, role: str, expires_in: int, token_type: str = "access") -> str:
     """生成 JWT 令牌"""
     now = datetime.now(timezone.utc)
     payload = {
         "user_id": user_id,
         "role": role,
+        "type": token_type,
         "iat": now,
         "exp": now + timedelta(seconds=expires_in),
         "jti": secrets.token_hex(16),
@@ -165,10 +166,10 @@ def login(username: str, password: str, ip: str = None) -> dict:
             conn.commit()
 
         access_token = _generate_token(
-            user["id"], user["role"], JWT_ACCESS_TOKEN_EXPIRES
+            user["id"], user["role"], JWT_ACCESS_TOKEN_EXPIRES, "access"
         )
         refresh_token_value = _generate_token(
-            user["id"], user["role"], JWT_REFRESH_TOKEN_EXPIRES
+            user["id"], user["role"], JWT_REFRESH_TOKEN_EXPIRES, "refresh"
         )
 
         return {
@@ -196,6 +197,10 @@ def refresh_token(refresh_token_str: str) -> dict:
     if not payload:
         return {"success": False, "message": "刷新令牌无效或已过期"}
 
+    # 只允许 refresh token 用于刷新，拒绝 access token
+    if payload.get("type") != "refresh":
+        return {"success": False, "message": "请使用刷新令牌而非访问令牌"}
+
     user_id = payload.get("user_id")
     role = payload.get("role")
 
@@ -221,7 +226,7 @@ def refresh_token(refresh_token_str: str) -> dict:
         return {"success": False, "message": "数据库连接失败"}
 
     # 生成新的访问令牌
-    new_access_token = _generate_token(user_id, role, JWT_ACCESS_TOKEN_EXPIRES)
+    new_access_token = _generate_token(user_id, role, JWT_ACCESS_TOKEN_EXPIRES, "access")
 
     return {
         "success": True,

@@ -97,9 +97,10 @@ class _ValSubset(Subset):
     def __getitem__(self, idx):
         real_idx = self.indices[idx]
         path, label = self.dataset.samples[real_idx]
-        img = Image.open(path).convert("RGB")
-        if VAL_TRANSFORMS is not None:
-            img = VAL_TRANSFORMS(img)
+        with Image.open(path) as img:
+            img = img.convert("RGB")
+            if VAL_TRANSFORMS is not None:
+                img = VAL_TRANSFORMS(img)
         return img, label
 
     def __getitems__(self, indices):

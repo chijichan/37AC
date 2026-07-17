@@ -1,7 +1,7 @@
 """异步处理器 - 提供通用异步任务处理和按消息类型分类的异步处理器"""
 
 from concurrent.futures import ThreadPoolExecutor
-from queue import Queue
+from queue import Queue, Empty
 import threading
 from config.log_config import get_logger
 
@@ -14,7 +14,6 @@ class AsyncTaskProcessor:
     def __init__(self, max_workers=5):
         self.executor = ThreadPoolExecutor(max_workers=max_workers)
         self.task_queue = Queue()
-        self.result_queue = Queue()
         self.start_background_processor()
 
     def start_background_processor(self):
@@ -23,13 +22,33 @@ class AsyncTaskProcessor:
             while True:
                 try:
                     task_func, args, kwargs = self.task_queue.get(timeout=1)
-                    future = self.executor.submit(task_func, *args, **kwargs)
-                    self.result_queue.put(future)
+                    try:
+                        future = self.executor.submit(task_func, *args, **kwargs)
+                        # 添加回调以捕获任务异常
+                        future.add_done_callback(self._log_task_exception)
+                    except Exception:
+                        logger.error(
+                            "提交异步任务到线程池失败: func=%s",
+                            task_func.__name__ if hasattr(task_func, '__name__') else str(task_func),
+                            exc_info=True,
+                        )
+                except Empty:
+                    continue
                 except Exception:
+                    logger.error("后台任务处理器异常", exc_info=True)
                     continue
 
         processor_thread = threading.Thread(target=process_tasks, daemon=True)
         processor_thread.start()
+
+    def _log_task_exception(self, future):
+        """记录异步任务中的异常"""
+        try:
+            exc = future.exception()
+            if exc is not None:
+                logger.error("异步任务执行异常: %s", exc, exc_info=exc)
+        except Exception:
+            pass
 
     def submit_task(self, func, *args, **kwargs):
         """提交任务到异步处理器"""
@@ -77,8 +96,19 @@ class MessageTypeProcessor:
             while True:
                 try:
                     task_func, args, kwargs = queue.get(timeout=1)
-                    processor.submit(task_func, *args, **kwargs)
+                    try:
+                        processor.submit(task_func, *args, **kwargs)
+                    except Exception:
+                        logger.error(
+                            "消息处理器提交任务失败 type=%s func=%s",
+                            msg_type,
+                            task_func.__name__ if hasattr(task_func, '__name__') else str(task_func),
+                            exc_info=True,
+                        )
+                except Empty:
+                    continue
                 except Exception:
+                    logger.error("消息处理器 %s 异常", msg_type, exc_info=True)
                     continue
 
         thread = threading.Thread(target=message_processor, daemon=True)

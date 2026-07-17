@@ -70,11 +70,16 @@ def handle_client(conn, addr):
                     "default", async_handle_unknown_message, conn, addr, msg
                 )
 
-    except ConnectionResetError:
+    except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError, ConnectionError, OSError):
         logger.info("连接断开: %s:%s", addr[0], addr[1])
+    except Exception as e:
+        logger.error("handle_client 未预期异常 %s:%s: %s", addr[0], addr[1], e, exc_info=True)
     finally:
         if node_id:
-            node_manager.remove_node(node_id)
+            try:
+                node_manager.remove_node(node_id)
+            except Exception as e:
+                logger.warning("remove_node 异常 %s: %s", node_id, e)
 
         try:
             conn.close()

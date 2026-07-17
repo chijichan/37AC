@@ -249,7 +249,6 @@ class NodeManager:
             for node_id, info in self.nodes.items():
                 if current_time - info["last_heartbeat"] > timeout:
                     self._logger.info("节点 %s 超时未心跳，将被移除", node_id)
-                    self.update_db_node_status(node_id, "offline")
                     to_remove.append((node_id, info))
             for node_id, info in to_remove:
                 # 关闭 socket 连接，触发 handle_client 线程退出
@@ -265,6 +264,13 @@ class NodeManager:
                     except Exception:
                         pass
                 del self.nodes[node_id]
+
+        # 在锁外执行数据库更新，避免阻塞其他节点操作
+        for node_id, _info in to_remove:
+            try:
+                self.update_db_node_status(node_id, "offline")
+            except Exception as e:
+                self._logger.warning("节点 %s DB 更新离线状态失败: %s", node_id, e)
 
     def show_all_nodes(self):
         """打印所有节点信息"""
@@ -350,11 +356,28 @@ class NodeManager:
             if node_id not in self.nodes:
                 return False
             info = self.nodes[node_id]
-            self.update_db_node_status(node_id, "offline")
-            self._logger.info("节点 %s 已标记为离线", node_id)
             del self.nodes[node_id]
             self._logger.info("节点 %s 已从内存中移除", node_id)
-            return True
+
+        # 在锁外更新数据库状态，避免阻塞其他节点操作
+        try:
+            self.update_db_node_status(node_id, "offline")
+        except Exception as e:
+            self._logger.warning("节点 %s DB 更新离线状态失败: %s", node_id, e)
+
+        # 关闭 socket
+        sock = info.get("socket")
+        if sock:
+            try:
+                sock.settimeout(0.1)
+                sock.shutdown(socket.SHUT_RDWR)
+            except Exception:
+                pass
+            try:
+                sock.close()
+            except Exception:
+                pass
+        return True
 
 # 模块级全局实例
 node_manager = NodeManager()

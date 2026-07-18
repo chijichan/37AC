@@ -64,8 +64,13 @@ def predict_character():
 
     # --- 3. 用户输入图片路径 ---
     while True:
-        user_input = input("请输入你要预测的图片路径（或输入 0 返回主菜单）: ").strip().strip("\"'")
-        if user_input == "0":
+        try:
+            user_input = input("请输入你要预测的图片路径（或输入 0 返回主菜单）: ").strip().strip("\"'").strip("\x1a")
+        except (KeyboardInterrupt, EOFError):
+            print()
+            logger.info("好的，返回主菜单~")
+            return
+        if user_input == "0" or user_input == "":
             logger.info("好的，返回主菜单~")
             return
         if not user_input:

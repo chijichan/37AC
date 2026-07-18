@@ -116,6 +116,9 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None):
         use_yolo_crop (bool): 是否使用 YOLO 裁剪
         resume_model (str or Path, optional): 已有模型权重路径，用于继续训练而非从头开始
     """
+    # 中断标记：首次 Ctrl+C 安全保存，再次强制退出
+    training_interrupted = False
+
     # 确定训练用数据集目录
     train_dir = dataset_dir or str(DATASET_DIR)
 
@@ -246,6 +249,8 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None):
                          PHASE1_EPOCHS, PHASE1_LR)
 
             for epoch in range(PHASE1_EPOCHS):
+                if training_interrupted:
+                    break
                 total_epoch += 1
                 model.train()
                 running_loss = 0.0
@@ -333,6 +338,8 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None):
                      phase2_epochs, PHASE2_LR, PHASE2_MIN_LR)
 
         for epoch in range(phase2_epochs):
+            if training_interrupted:
+                break
             total_epoch += 1
             model.train()
             running_loss = 0.0
@@ -411,5 +418,18 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None):
         logger.info(f"模型保存到: {str(MODEL_PATH)}")
         logger.info(f"类别名称已保存到: {str(CLASSES_TXT_PATH)}")
 
+    except KeyboardInterrupt:
+        logger.warning("\n" + "=" * 50)
+        logger.warning("训练被用户中断，正在保存当前模型...")
+        try:
+            if 'model_handler' in dir() and 'class_names' in dir() and class_names:
+                model_handler.save_model(MODEL_PATH)
+                save_classes_to_file(CLASSES_TXT_PATH, class_names)
+                logger.warning("已保存当前模型至: %s (正确率: %.2f%%)", str(MODEL_PATH), best_val_acc)
+            else:
+                logger.warning("模型尚未初始化，无需保存")
+        except Exception as save_err:
+            logger.error("保存模型失败: %s", save_err)
+        logger.warning("训练中断，当前模型已保存，下次可使用继续训练功能")
     except Exception as e:
         logger.error(f"训练过程中出现严重错误: {str(e)}", exc_info=True)

@@ -45,11 +45,19 @@ def _action_train(args):
         print("=" * 40)
         print("  [1] 从头训练（ImageNet 预训练）")
         print(f"  [2] 继续训练（基于已有权重: {MODEL_PATH.name}）")
+        print("  [0] 返回主菜单")
         print("-" * 40)
 
         while True:
-            mode_choice = input("请选择 (1/2): ").strip()
-            if mode_choice == "1":
+            try:
+                mode_choice = input("请选择 (1/2/0): ").strip().strip("\x1a")
+            except (KeyboardInterrupt, EOFError):
+                print()
+                return
+            if mode_choice == "0" or mode_choice == "":
+                logger.info("返回主菜单~")
+                return
+            elif mode_choice == "1":
                 resume_model = None
                 break
             elif mode_choice == "2":
@@ -57,13 +65,15 @@ def _action_train(args):
                 logger.info("继续训练模式，使用当前模型: %s", resume_model)
                 break
             else:
-                print("无效选择，请输入 1 或 2")
+                print("无效选择，请输入 1、2 或 0")
 
     if args and args.dataset:
         train_model(dataset_dir=args.dataset, use_yolo_crop=args.yolo_crop,
                     resume_model=resume_model)
     else:
         dataset_dir, use_yolo = ask_dataset_choice()
+        if dataset_dir is None:
+            return  # 用户选择返回主菜单
         train_model(dataset_dir=dataset_dir, use_yolo_crop=use_yolo,
                     resume_model=resume_model)
 
@@ -117,9 +127,9 @@ def main():
     while True:
         try:
             show_menu()
-            choice = input("请输入你的选择 (1/2/3/4/0): ").strip()
+            choice = input("请输入你的选择 (1/2/3/4/0): ").strip().strip("\x1a")
 
-            if choice == "0":
+            if choice == "0" or choice == "":
                 logger.info("再见啦！期待下次见面~")
                 break
 
@@ -129,7 +139,12 @@ def main():
             else:
                 logger.info("请输入 1、2、3、4 或 0 哦")
         except KeyboardInterrupt:
-            logger.info("\n程序被用户中断，再见！")
+            print()  # 换行，避免 ^C 糊在输入行
+            logger.info("\n按 Ctrl+C 退出程序，再见~")
+            break
+        except EOFError:
+            print()
+            logger.info("收到 EOF，退出程序")
             break
         except Exception as e:
             logger.error(f"主程序出现错误: {str(e)}", exc_info=True)

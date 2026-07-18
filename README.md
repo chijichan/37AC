@@ -149,42 +149,45 @@ flowchart TB
 │     ├─ runserver.py
 │     ├─ .env.example
 │     ├─ requirements.txt
-│     └─ AC_web/
-│        ├─ __init__.py
-│        ├─ config/
-│        │  ├─ base.py
-│        │  ├─ email_config.py
-│        │  └─ log_config.py
-│        ├─ middleware/auth_middleware.py
-│        ├─ routes/*.py                   # 7 个蓝图
-│        ├─ services/
-│        │  ├─ listen_service.py          # TCP 监听
-│        │  ├─ node_manager.py            # 节点管理
-│        │  ├─ task_manager.py            # 任务重试（LLM感知）
-│        │  ├─ task_dispatcher.py         # 任务分发
-│        │  ├─ message_handlers.py        # 消息处理 + SSE 推送
-│        │  ├─ sse_bus.py                 # SSE 事件总线
-│        │  ├─ async_processor.py         # 异步线程池
-│        │  ├─ protocol/json_protocol.py  # JSON 协议
-│        │  ├─ auth/                      # 认证工具
-│        │  └─ dashboard/                 # 仪表盘服务
-│        └─ saves/
+│     ├─ config/
+│     │  ├─ base.py
+│     │  ├─ email_config.py
+│     │  └─ log_config.py
+│     ├─ middleware/
+│     │  ├─ auth_middleware.py
+│     │  └─ rate_limiter.py
+│     ├─ routes/                          # 7 个蓝图
+│     ├─ services/
+│     │  ├─ listen_service.py             # TCP 监听
+│     │  ├─ node_manager.py               # 节点管理
+│     │  ├─ task_manager.py               # 任务重试（LLM感知）
+│     │  ├─ task_dispatcher.py            # 任务分发
+│     │  ├─ message_handlers.py           # 消息处理 + SSE 推送
+│     │  ├─ sse_bus.py                    # SSE 事件总线
+│     │  ├─ async_processor.py            # 异步线程池
+│     │  ├─ protocol/json_protocol.py     # JSON 协议
+│     │  ├─ auth/                         # 认证工具
+│     │  └─ dashboard/                    # 仪表盘服务
+│     ├─ AC_web/__init__.py               # Flask 应用初始化
+│     └─ saves/
 ├─ www/
 │  ├─ public/index.php
 │  ├─ router.php
+│  ├─ .env.example
+│  ├─ start-server.bat
 │  ├─ controllers/
-│  ├─ models/
 │  ├─ views/
 │  │  ├─ home/upload.php                 # 快速/高级模式 + SSE
+│  │  ├─ home/about.php
+│  │  ├─ home/contact.php
 │  │  ├─ dashboard/
-│  │  └─ ...
+│  │  └─ auth/
 │  ├─ DASHBOARD.md
 │  └─ SECURITY.md
 ├─ docs/项目结构总结.md
+├─ docs/前端规范.md
 ├─ scripts/alter_tables.sql
-├─ .env.example
-├─ verify_env.py
-└─ README.md
+└─ verify_env.py
 ```
 
 > `src/cli/`：训练、预测与节点客户端。  
@@ -296,44 +299,30 @@ pip install -r src/server/requirements.txt
 mysql -u root -p < scripts/alter_tables.sql
 ```
 
-编辑 `src/server/AC_web/config/base.py`，配置数据库连接、JWT 密钥等。
+编辑 `src/server/config/base.py`，配置数据库连接、JWT 密钥等。
 
-也可通过根目录 `.env` 文件配置（推荐）：
+也可通过 `src/server/.env` 文件配置（推荐）：
 
 ```env
 # 服务端配置
-DB_HOST=localhost
-DB_USER=root
-DB_PASSWORD=your_password
-DB_NAME=37ac
-JWT_SECRET=your_jwt_secret
+DB_HOST=your_db_host
+DB_USER=your_db_user
+DB_PASSWORD=your_db_password
+DB_NAME=your_db_name
+JWT_SECRET=your-jwt-secret-key-change-this-in-production
 
-# 节点配置
+# 节点配置（src/cli/.env）
 NODE_ID=1
 TOKEN=your_node_token
 LLM_RECOGNITION_ENABLED=false
 LLM_API_KEY=your_api_key
-
-# 模型配置
-MODEL_FILENAME=37ac-v0.0.1.pth
-YOLO_ENABLED=True
-YOLO_CONFIDENCE=0.25
-
-# DEBUG
-TSAC_DEBUG=False
 ```
 
-### 5. 配置数据库表结构
+### 5. 启动 Flask 服务端
 
 ```bash
-mysql -u root -p < scripts/alter_tables.sql
+python src/server/runserver.py
 ```
-
-### 6. 可选：PHP 仪表盘环境
-
-如果需要仪表盘，安装 PHP 7+，并将 `www/public/` 作为 Web 根目录。
-
----
 
 ## 使用方法
 
@@ -366,8 +355,9 @@ python src/cli/main.py
   选择训练方式
   [1] 从头训练（ImageNet 预训练）
   [2] 继续训练（基于已有权重: 37ac-v0.0.1.pth）
+  [0] 返回主菜单
 ----------------------------------------
-请选择 (1/2):
+请选择 (1/2/0):
 ```
 
 - **[1] 从头训练** — 从 ImageNet 预训练权重开始，分两阶段微调
@@ -380,8 +370,9 @@ python src/cli/main.py
   [1] 原始数据集: W:\Img
   [2] 已裁剪数据集: .../saves/dataset（使用已存在的 YOLO 裁剪结果）
   [3] 使用 YOLO 裁剪原始数据集后训练（从头裁剪，保存到 saves/dataset/）
+  [0] 返回主菜单
 ----------------------------------------
-请选择 (1/2/3):
+请选择 (1/2/3/0):
 ```
 
 #### 类别数变化支持
@@ -397,7 +388,7 @@ python src/cli/main.py
 
 #### 训练参数
 
-可在 `.env` 中配置：
+可在 `src/cli/.env` 中配置：
 - `MAX_IMAGES_PER_ROLE` — 单个角色最大保留张数（YOLO 裁剪时生效），默认 `100`
 - 图片按文件大小降序处理，优先保留高质量大图
 
@@ -516,17 +507,9 @@ python src/cli/main.py --mode 4
   - `llm` — 使用第三方多模态大模型 API
   - `auto` — 由节点根据自身配置决定
 
-### 错误码示例
+### 错误码
 
-```json
-{
-  "1000": "认证失败",
-  "1001": "协议版本不兼容",
-  "2000": "任务处理失败",
-  "2001": "图片格式错误",
-  "3000": "系统内部错误"
-}
-```
+任务结果中的 `result` 字段在出错时包含 `error` 描述。
 
 ---
 
@@ -555,7 +538,7 @@ python src/cli/main.py --mode 4
 LLM_RECOGNITION_ENABLED=true
 LLM_API_KEY=your_api_key
 LLM_API_URL=https://api.deepseek.com/v1/chat/completions
-LLM_MODEL_NAME=deepseek-vl2
+LLM_MODEL_NAME=deepseek-v4.1-pro
 LLM_TIMEOUT_SEC=30
 ```
 

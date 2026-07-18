@@ -10,14 +10,19 @@ logger = get_logger(__name__)
 
 
 def verify_images_function():
-    """单独的图像文件验证功能"""
+    """验证数据集中的图像文件（适配 IP/角色 两级目录结构）"""
     from config.base import DATASET_DIR
+
+    print()
+    print("=" * 50)
+    print("  验证图像文件")
+    print("=" * 50)
 
     # 检查数据集目录
     if not os.path.exists(DATASET_DIR):
         logger.error(f"数据集目录不存在: {DATASET_DIR}")
         logger.error(
-            "请先创建数据集目录，并为每个角色创建一个子文件夹，子文件夹内放入对应角色的图片。"
+            "请先创建数据集目录，结构为: 作品文件夹/角色文件夹/图片"
         )
         return
 
@@ -25,10 +30,15 @@ def verify_images_function():
         logger.error(f"数据集目录不可读: {DATASET_DIR}")
         return
 
-    # 验证数据集中的图像文件
+    logger.info("数据集目录: %s", DATASET_DIR)
+    print("-" * 50)
+
+    # 遍历 IP/角色 结构
     valid_samples, total_samples, class_names, invalid_image_paths = (
         validate_dataset_images(DATASET_DIR)
     )
+
+    print("-" * 50)
 
     if total_samples == 0:
         logger.error("数据集中没有找到任何图片文件 (jpg, jpeg, png)")
@@ -44,10 +54,11 @@ def verify_images_function():
 
     valid_ratio = (valid_samples / total_samples) * 100
     logger.info(f"有效图像比例: {valid_ratio:.2f}%")
+    print("=" * 50)
 
     if invalid_image_paths:
         logger.info(
-            "\n建议: 请检查并修复或删除上述无效图像文件，然后重新尝试训练或预测。"
+            "建议: 请检查并修复或删除上述无效图像文件，然后重新尝试训练或预测"
         )
 
 

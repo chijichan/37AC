@@ -129,11 +129,11 @@ YOLO_CONFIDENCE = float(os.getenv("YOLO_CONFIDENCE", "0.25"))
 # ==================== 路径配置 ====================
 # 暂存
 IMAGE_PATH = ROOT_PATH / "saves" / "uploads"
-IMAGE_PATH.mkdir(exist_ok=True)
+IMAGE_PATH.mkdir(parents=True, exist_ok=True)
 
 # 日志
 LOGS_PATH = ROOT_PATH / "saves" / "logs"
-LOGS_PATH.mkdir(exist_ok=True)
+LOGS_PATH.mkdir(parents=True, exist_ok=True)
 
 # ==================== 设备自动选择（惰性初始化） ====================
 # 首次调用时获取，避免模块导入时加载 torch/torch-directml

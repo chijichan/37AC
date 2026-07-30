@@ -1,0 +1,126 @@
+"""测试文件工具模块"""
+
+import os
+from pathlib import Path
+
+import pytest
+
+from utils.file_utils import (
+    calculate_file_hash,
+    ensure_directory_exists,
+    load_classes_from_file,
+    save_classes_to_file,
+    check_model_file,
+)
+
+
+class TestCalculateFileHash:
+    """测试文件哈希计算"""
+
+    def test_md5_hash(self, tmp_path: Path):
+        """测试 MD5 哈希计算"""
+        file = tmp_path / "test.txt"
+        file.write_text("hello world", encoding="utf-8")
+        hash_val = calculate_file_hash(str(file), "md5")
+        assert hash_val == "5eb63bbbe01eeed093cb22bb8f5acdc3"
+
+    def test_sha256_hash(self, tmp_path: Path):
+        """测试 SHA-256 哈希计算"""
+        file = tmp_path / "test.txt"
+        file.write_text("hello world", encoding="utf-8")
+        hash_val = calculate_file_hash(str(file), "sha256")
+        expected = "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9"
+        assert hash_val == expected
+
+    def test_empty_file(self, tmp_path: Path):
+        """测试空文件哈希"""
+        file = tmp_path / "empty.txt"
+        file.write_text("", encoding="utf-8")
+        hash_val = calculate_file_hash(str(file), "md5")
+        assert hash_val == "d41d8cd98f00b204e9800998ecf8427e"
+
+    def test_nonexistent_file(self):
+        """测试不存在的文件"""
+        hash_val = calculate_file_hash(r"C:\nonexistent\file.txt")
+        assert hash_val == ""
+
+
+class TestEnsureDirectoryExists:
+    """测试目录创建"""
+
+    def test_create_new_dir(self, tmp_path: Path):
+        """测试创建新目录"""
+        new_dir = tmp_path / "new_dir" / "sub_dir"
+        assert ensure_directory_exists(str(new_dir)) is True
+        assert new_dir.exists()
+
+    def test_existing_dir(self, tmp_path: Path):
+        """测试已存在的目录"""
+        assert ensure_directory_exists(str(tmp_path)) is True
+
+    def test_invalid_path(self):
+        """测试无效路径"""
+        # 使用非法字符
+        assert ensure_directory_exists("") is False
+
+
+class TestLoadClassesFromFile:
+    """测试从文件加载类别"""
+
+    def test_load_valid(self, classes_file: Path):
+        """测试正常加载"""
+        classes = load_classes_from_file(str(classes_file))
+        assert len(classes) == 3
+        assert classes == ["原神/荧", "原神/空", "蔚蓝档案/白子"]
+
+    def test_load_empty(self, empty_classes_file: Path):
+        """测试空文件"""
+        classes = load_classes_from_file(str(empty_classes_file))
+        assert classes == []
+
+    def test_nonexistent_file(self):
+        """测试文件不存在"""
+        classes = load_classes_from_file(r"C:\nonexistent\classes.txt")
+        assert classes == []
+
+    def test_skips_blank_lines(self, tmp_path: Path):
+        """测试跳过空行"""
+        file = tmp_path / "classes.txt"
+        file.write_text("角色A\n\n\n角色B\n", encoding="utf-8")
+        classes = load_classes_from_file(str(file))
+        assert classes == ["角色A", "角色B"]
+
+
+class TestSaveClassesToFile:
+    """测试保存类别到文件"""
+
+    def test_save_and_load(self, tmp_path: Path):
+        """测试保存后读取"""
+        file = tmp_path / "classes.txt"
+        classes = ["原神/荧", "原神/空"]
+        assert save_classes_to_file(str(file), classes) is True
+        assert load_classes_from_file(str(file)) == classes
+
+    def test_save_empty(self, tmp_path: Path):
+        """测试保存空列表"""
+        file = tmp_path / "classes.txt"
+        assert save_classes_to_file(str(file), []) is True
+        assert file.exists()
+
+
+class TestCheckModelFile:
+    """测试模型文件检查"""
+
+    def test_file_exists(self, tmp_path: Path):
+        """测试存在的文件"""
+        file = tmp_path / "model.pth"
+        file.write_text("dummy", encoding="utf-8")
+        assert check_model_file(str(file)) is True
+
+    def test_file_not_exists(self):
+        """测试不存在的文件"""
+        assert check_model_file(r"C:\nonexistent\model.pth") is False
+
+    def test_directory_not_file(self, tmp_path: Path):
+        """测试传入目录路径"""
+        assert check_model_file(str(tmp_path)) is False

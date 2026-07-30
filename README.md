@@ -186,8 +186,33 @@ flowchart TB
 │  └─ SECURITY.md
 ├─ docs/项目结构总结.md
 ├─ docs/前端规范.md
+├─ docs/测试文档.md
 ├─ scripts/alter_tables.sql
-└─ verify_env.py
+├─ verify_env.py
+└─ tests/
+   ├─ pytest.ini
+   ├─ conftest.py
+   ├─ requirements-test.txt
+   ├─ cli/
+   │  ├─ test_config.py
+   │  ├─ test_file_utils.py
+   │  ├─ test_image_utils.py
+   │  ├─ test_validation_utils.py
+   │  ├─ test_character_model.py
+   │  ├─ test_dataset.py
+   │  ├─ test_trainer.py
+   │  ├─ test_predictor.py
+   │  └─ test_log_config.py
+   └─ server/
+      ├─ test_validators.py
+      ├─ test_jwt_utils.py
+      ├─ test_password_service.py
+      ├─ test_auth_service.py
+      ├─ test_user_service.py
+      ├─ test_api_key_service.py
+      ├─ test_rate_limiter.py
+      ├─ test_sse_bus.py
+      └─ test_auth_middleware.py
 ```
 
 > `src/cli/`：训练、预测与节点客户端。  
@@ -529,6 +554,59 @@ python src/cli/main.py --mode 4
 - CLI 图片校验：`python src/cli/main.py --mode 3`
 - 单张命令行预测：`python src/cli/main.py --mode 2`
 - 环境检查：`python verify_env.py`
+
+### 运行测试
+
+确保已安装测试依赖：
+
+```bash
+pip install -r tests/requirements-test.txt
+```
+
+运行全部测试：
+
+```bash
+pytest
+```
+
+运行特定模块测试：
+
+```bash
+# CLI 模块测试
+pytest tests/cli/
+
+# 服务端模块测试
+pytest tests/server/
+
+# 指定测试文件
+pytest tests/cli/test_file_utils.py
+
+# 带覆盖率报告
+pytest --cov=src --cov-report=html
+```
+
+测试覆盖范围：
+
+| 模块 | 覆盖内容 |
+|------|---------|
+| CLI 配置 | 环境变量读取、默认值、特性开关、节点配置、能力列表 |
+| 文件工具 | 哈希计算、目录创建、类别文件读写、模型文件检查 |
+| 图片工具 | 有效/损坏/非图片文件验证、尺寸检查、色彩模式转换 |
+| 数据集验证 | IP/角色两级目录结构、隐藏目录跳过、无效图片检测 |
+| 角色模型 | 模型构建、前向传播、冻结/解冻、保存/加载、类别数变化兼容 |
+| 数据集加载 | IPRoleImageFolder 的类别映射、样本索引、隐藏目录过滤 |
+| 训练器 | 标签平滑损失、数据集拆分、模型备份、函数签名 |
+| 预测器 | 参数校验、图片预处理、结果展示、模型缓存逻辑 |
+| 日志系统 | 日志级别、处理器配置、传播控制 |
+| 验证器 | 邮箱/用户名/密码格式验证 |
+| JWT 工具 | 令牌生成、解码、过期检测、篡改检测 |
+| 密码服务 | 哈希、验证、密码修改、弱密码拒绝 |
+| 认证服务 | 注册/登录/令牌刷新、重复用户/禁用账号/令牌类型检查 |
+| 用户服务 | 用户查询、资料更新、列表分页 |
+| API 密钥 | 创建/查询/哈希、权限校验、密钥格式 |
+| 限流中间件 | 滑动窗口结构、禁用开关、装饰器封装 |
+| SSE 事件总线 | 订阅/发布/取消、多订阅者、超时处理、JSON 序列化 |
+| 认证中间件 | 令牌提取、登录/管理员装饰器、refresh token 拒绝 |
 
 ### 第三方大模型（LLM）识别
 

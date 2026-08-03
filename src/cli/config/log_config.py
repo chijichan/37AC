@@ -90,8 +90,6 @@ def init_logging():
 
     # 记录启动日志（使用 get_logger 获取的子 logger，propagate=False 不传播到 root）
     logger = get_logger("init")
-    logger.info("=" * 80)
     logger.info("  CLI 日志系统初始化完成")
     logger.info(f"  日志文件: {CLI_LOG_FILE}")
     logger.info(f"  日志级别: {'DEBUG' if TSAC_DEBUG else 'INFO'}")
-    logger.info("=" * 80)

@@ -105,11 +105,25 @@ def main():
     # 初始化统一日志系统（必须在 main 内，避免 DataLoader 子进程重复触发）
     init_logging()
 
-    parser = argparse.ArgumentParser(description="mode")
-    parser.add_argument("--mode", type=int, help="模式", default=None)
-    parser.add_argument("--gpu", type=bool, default=False)
-    parser.add_argument("--yolo-crop", action="store_true", help="使用 YOLO 裁剪原始数据集并训练")
-    parser.add_argument("--dataset", type=str, default=None, help="训练数据集路径（默认使用 .env 配置或交互选择）")
+    parser = argparse.ArgumentParser(
+        description="Anime Character Auto Classifier (AC) - 命令行工具",
+        epilog="示例:\n"
+               "  python main.py --mode 1                          # 训练模型\n"
+               "  python main.py --mode 1 --dataset ./data         # 指定数据集训练\n"
+               "  python main.py --mode 1 --resume                 # 继续训练\n"
+               "  python main.py --mode 1 --yolo-crop              # 使用 YOLO 裁剪后训练\n"
+               "  python main.py --mode 2                          # 预测角色\n"
+               "  python main.py --mode 3                          # 验证图像\n"
+               "  python main.py --mode 4                          # 启动节点服务\n"
+               "  python main.py (无参数)                          # 进入交互菜单",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument("--mode", type=int, choices=[1, 2, 3, 4],
+                        help="运行模式: 1-训练模型, 2-预测角色, 3-验证图像, 4-启动节点服务", default=None)
+    parser.add_argument("--gpu", type=bool, default=False, help="是否启用 GPU 加速 (默认: False)")
+    parser.add_argument("--yolo-crop", action="store_true", help="训练前使用 YOLO 对原始数据集进行裁剪预处理")
+    parser.add_argument("--dataset", type=str, default=None,
+                        help="训练数据集路径（默认使用 .env 配置或交互选择）")
     parser.add_argument("--resume", type=str, default=None, nargs="?",
                         const="auto", metavar="MODEL_PATH",
                         help="从已有模型权重继续训练（指定 .pth 路径，或留空自动使用当前模型）")
@@ -130,7 +144,7 @@ def main():
             choice = input("请输入你的选择 (1/2/3/4/0): ").strip().strip("\x1a")
 
             if choice == "0" or choice == "":
-                logger.info("再见啦！期待下次见面~")
+                logger.info("退出程序，再见~")
                 break
 
             handler = MENU_ACTIONS.get(choice)
@@ -148,7 +162,7 @@ def main():
             break
         except Exception as e:
             logger.error(f"主程序出现错误: {str(e)}", exc_info=True)
-            logger.info("(⊙ˍ⊙) 程序出现未知错误，请重启程序")
+            logger.info("程序出现未知错误，请重启程序")
 
 
 if __name__ == "__main__":

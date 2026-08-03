@@ -64,7 +64,6 @@ def verify_images_function():
 
 def show_menu():
     """显示主菜单"""
-    print("\n" + "=" * 80)
     print(
         """                                                                            
                                                                             
@@ -87,13 +86,11 @@ def show_menu():
                                                                             
                                                                              """
     )
-    print("=" * 80)
-    print("1. 训练模型")
-    print("2. 预测角色")
-    print("3. 验证图像")
-    print("4. 启动节点")
-    print("0. 退出程序")
-    print("-" * 40)
+    print("[1] 训练模型")
+    print("[2] 预测角色")
+    print("[3] 验证图像")
+    print("[4] 启动节点")
+    print("[0] 退出程序")
 
 
 def ask_dataset_choice():

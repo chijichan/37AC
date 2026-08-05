@@ -22,6 +22,9 @@ def async_handle_register(conn, addr, msg):
     token = msg["data"].get("token")
     max_tasks = msg["data"].get("max_tasks", 5)
     capabilities = msg["data"].get("capabilities", '["local"]')
+    # 节点上报的 LLM 配置（用于任务重试间隔决策）
+    llm_enabled = msg["data"].get("llm_enabled", False)
+    llm_timeout_sec = msg["data"].get("llm_timeout_sec", 0)
 
     if not node_id or not token or not isinstance(max_tasks, (int, float)):
         register_ack = {
@@ -56,8 +59,10 @@ def async_handle_register(conn, addr, msg):
 
         if result:
             if node_id in node_manager.nodes:
-                # 节点已注册，更新能力信息
+                # 节点已注册，更新能力信息和 LLM 配置
                 node_manager.nodes[node_id]["capabilities"] = capabilities
+                node_manager.nodes[node_id]["llm_enabled"] = bool(llm_enabled)
+                node_manager.nodes[node_id]["llm_timeout_sec"] = int(llm_timeout_sec or 0)
                 node_manager.update_db_node_capabilities(node_id, capabilities)
                 register_ack = {
                     "type": "register_ack",
@@ -72,7 +77,10 @@ def async_handle_register(conn, addr, msg):
             if max_tasks <= 0 or max_tasks > 100:
                 max_tasks = 5
 
-            node_manager.register_node(node_id, addr, conn, max_tasks, capabilities)
+            node_manager.register_node(
+                node_id, addr, conn, max_tasks, capabilities,
+                llm_enabled=llm_enabled, llm_timeout_sec=llm_timeout_sec,
+            )
             node_manager.update_db_node_status(node_id, "online", addr=addr)
             node_manager.update_db_node_capabilities(node_id, capabilities)
             node_manager.set_node_idle(node_id)
@@ -85,8 +93,8 @@ def async_handle_register(conn, addr, msg):
                 "data": {"max_tasks": max_tasks, "capabilities": capabilities},
             }
             json_protocol.send_json(conn, register_ack)
-            logger.info("注册成功: node_id=%s, addr=%s, max_tasks=%s, capabilities=%s",
-                        node_id, addr, max_tasks, capabilities)
+            logger.info("注册成功: node_id=%s, addr=%s, max_tasks=%s, capabilities=%s, llm_enabled=%s, llm_timeout=%s",
+                        node_id, addr, max_tasks, capabilities, llm_enabled, llm_timeout_sec)
         else:
             register_ack = {
                 "type": "register_ack",

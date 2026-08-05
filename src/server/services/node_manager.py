@@ -32,7 +32,8 @@ class NodeManager:
         self.lock = threading.Lock()
         self._logger = get_logger("NodeManager")
 
-    def register_node(self, node_id, addr, socket_obj=None, max_tasks=None, capabilities=None):
+    def register_node(self, node_id, addr, socket_obj=None, max_tasks=None,
+                      capabilities=None, llm_enabled=False, llm_timeout_sec=0):
         """注册节点"""
         with self.lock:
             if max_tasks is None:
@@ -48,13 +49,29 @@ class NodeManager:
                 "max_tasks": max_tasks,
                 "current_tasks": 0,
                 "capabilities": capabilities,
+                "llm_enabled": bool(llm_enabled),
+                "llm_timeout_sec": int(llm_timeout_sec or 0),
             }
             self._logger.info(
-                "节点 %s (%s) 已注册，状态：空闲，最大任务数：%s，能力：%s",
+                "节点 %s (%s) 已注册，状态：空闲，最大任务数：%s，能力：%s，LLM: %s",
                 node_id, f"{addr[0]}:{addr[1]}" if isinstance(addr, tuple) else str(addr),
-                max_tasks, capabilities
+                max_tasks, capabilities,
+                "启用(超时%s秒)" % llm_timeout_sec if llm_enabled else "未启用"
             )
             return True
+
+    def get_llm_timeout_sec(self):
+        """返回已注册节点上报的最大 LLM 推理超时（秒）。
+
+        用于服务端任务重试间隔决策：LLM 任务至少等待节点一次完整推理。
+        """
+        with self.lock:
+            timeouts = [
+                int(info.get("llm_timeout_sec") or 0)
+                for info in self.nodes.values()
+                if info.get("llm_enabled")
+            ]
+            return max(timeouts) if timeouts else 0
 
     def update_heartbeat(self, node_id):
         """更新节点心跳时间"""

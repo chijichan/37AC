@@ -91,21 +91,38 @@ MAX_TASKS = int(os.getenv("MAX_TASKS", "5"))
 LLM_RECOGNITION_ENABLED = os.getenv("LLM_RECOGNITION_ENABLED", "False").lower() == "true"
 LLM_API_KEY = os.getenv("LLM_API_KEY", "")
 LLM_API_URL = os.getenv("LLM_API_URL", "https://api.deepseek.com/v1/chat/completions")
-LLM_MODEL_NAME = os.getenv("LLM_MODEL_NAME", "deepseek-vl2")
+# API 类型："chat-completions"（OpenAI 兼容格式，默认）/ "ollama"（Ollama 原生格式）
+# 注意：os.getenv 在变量存在但为空时返回空串而非默认值，因此用 or 兜底
+_LLM_API_TYPE_RAW = (os.getenv("LLM_API_TYPE", "") or "chat-completions").strip().lower()
+if _LLM_API_TYPE_RAW in ("openai", "chat", "chat-completions"):
+    LLM_API_TYPE = "chat-completions"
+else:
+    LLM_API_TYPE = _LLM_API_TYPE_RAW
+LLM_MODEL_NAME = os.getenv("LLM_MODEL_NAME", "deepseek-v4.1")
 LLM_TIMEOUT_SEC = int(os.getenv("LLM_TIMEOUT_SEC", "30"))
-# 识别提示词模板
-LLM_PROMPT_TEMPLATE = os.getenv(
-    "LLM_PROMPT_TEMPLATE",
-    '你只能输出一行 JSON，禁止输出任何其他文字。\n'
-    '任务：识别图片中的 ACG 角色。\n'
-    '输出格式（严格遵循）：{"label": "作品/角色名", "confidence": 95}\n'
+# 识别提示词模板（默认提示词；.env 中留空时自动使用默认值）
+_DEFAULT_LLM_PROMPT = (
+    '你是一个 ACG 角色识别专家。\n'
+    '输入：一张图片（可能包含 cosplay、手办、插画、截图等）。\n'
+    '目标：尽可能准确地识别其中最主要的 ACG 角色。\n'
+    '\n'
+    '请按以下步骤思考（不要输出思考过程）：\n'
+    '1. 提取视觉线索：发色、发型、服装、配饰、武器、特有标志、姿势、场景。\n'
+    '2. 与已知角色库进行匹配（覆盖日漫、国漫、游戏、Vtuber等）。\n'
+    '3. 给出最佳匹配，并评估可信度（0-100，依据：特征匹配数、特征独特性、遮挡情况）。\n'
+    '\n'
+    '输出格式（严格 JSON，无 markdown，无注释）：\n'
+    '{"label": "作品名/角色名", "confidence": 95, "features_used": ["发色", "服装"], "class_probs": [{"label": "其他可能作品名/角色名", "confidence": 3},{"label": "其他可能作品名/角色名", "confidence": 2}...]}\n'
+    '\n'
     '规则：\n'
-    '- label 写作品和角色名，中日文均可\n'
-    '- 完全无法识别时填 "unknown"\n'
-    '- confidence 填 0-100 的整数\n'
-    '警告：禁止输出描述、分析、评论或任何非 JSON 内容。\n'
-    '示例：{"label": "原神/神里绫华", "confidence": 98}'
+    '- 若图片包含多个角色，只识别最突出（占画面面积最大或居中的）的那一个。\n'
+    '- 若图片模糊、遮挡严重或缺乏足够特征，允许返回 {"label": null, "confidence": 0, "reason": "特征不足"}。\n'
+    '- 绝对不要编造特征，置信度必须基于可见证据。\n'
+    '- 对于 cosplay 照片，优先识别原作角色，而非现实人物。\n'
+    '- 若识别结果为现实人物（非 ACG），需特别标注。\n'
 )
+# 注意：os.getenv 在变量存在但值为空字符串时返回空串而非默认值，因此用 or 兜底
+LLM_PROMPT_TEMPLATE = os.getenv("LLM_PROMPT_TEMPLATE", "") or _DEFAULT_LLM_PROMPT
 
 # ==================== 节点能力配置 ====================
 # 节点支持的识别能力列表，自动根据配置推导

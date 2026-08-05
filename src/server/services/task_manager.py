@@ -4,7 +4,7 @@ import time
 import threading
 from config.log_config import get_logger
 from config.base import TASK_RETRY_INTERVAL_LOCAL, TASK_RETRY_INTERVAL_LLM, TASK_MAX_RETRIES
-from services.node_manager import get_db_connection
+from services.node_manager import get_db_connection, node_manager
 
 logger = get_logger("TaskManager")
 
@@ -21,8 +21,19 @@ class TaskManager:
         threading.Thread(target=self._monitor_loop, daemon=True).start()
 
     def _get_retry_interval(self, recognition_type):
-        """根据识别类型返回重试间隔（秒）"""
-        return TASK_RETRY_INTERVAL_LLM if recognition_type == "llm" else TASK_RETRY_INTERVAL_LOCAL
+        """根据识别类型返回重试间隔（秒）。
+
+        - "local" → 本地推理较快，使用短间隔
+        - "llm" / "auto" → 节点可能走大模型推理（思考+生成耗时数秒~数十秒），
+          重试间隔必须 >= 节点上报的 LLM_TIMEOUT_SEC + 缓冲，
+          否则会在节点推理完成前重复分发同一任务。
+        """
+        if recognition_type in ("llm", "auto"):
+            node_timeout = node_manager.get_llm_timeout_sec()
+            if node_timeout > 0:
+                return max(TASK_RETRY_INTERVAL_LLM, node_timeout + 15)
+            return TASK_RETRY_INTERVAL_LLM
+        return TASK_RETRY_INTERVAL_LOCAL
 
     def register_task(self, task_id, image_path=None, image_data=None, max_retries=None, recognition_type="local"):
         """注册一个待处理任务"""

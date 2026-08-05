@@ -6,6 +6,7 @@ from PIL import Image
 import os
 import json
 import re
+import time
 import threading
 from utils.image_utils import validate_image_file
 from utils.file_utils import load_classes_from_file, check_model_file
@@ -18,6 +19,7 @@ from config.base import (
     LLM_RECOGNITION_ENABLED,
     LLM_API_KEY,
     LLM_API_URL,
+    LLM_API_TYPE,
     LLM_MODEL_NAME,
     LLM_PROMPT_TEMPLATE,
     LLM_TIMEOUT_SEC,
@@ -276,6 +278,7 @@ def predict_image(image_path, model_path=None, classes_file=None, use_cache=True
                         "label": label,
                         "confidence": round(confidence_value, 2),
                         "class_probs": class_probs,
+                        "features_used": [],  # 本地模型无可解释文本特征，留空
                         "yolo_detected": yolo_info is not None,
                     }
                 )
@@ -366,61 +369,115 @@ def predict_image_llm(image_path: str) -> dict:
         logger.warning("[LLM] %s", result["error"])
         return result
 
-    if not LLM_API_KEY:
-        result["error"] = "LLM_API_KEY 未配置"
-        logger.error("[LLM] %s", result["error"])
-        return result
-
     try:
         import base64
+        import io
         import requests
 
-        # 读取图片并转为 Base64
-        with open(image_path, "rb") as f:
-            image_bytes = f.read()
+        # 读取图片，缩放压缩后转 Base64（减小 payload，避免网关断开连接）
+        # 视觉模型通常不需要大图，限制最长边 1024px、JPEG 质量 85
+        with Image.open(image_path) as img:
+            img = img.convert("RGB")
+            max_side = 1024
+            w, h = img.size
+            if max(w, h) > max_side:
+                ratio = max_side / max(w, h)
+                img = img.resize((int(w * ratio), int(h * ratio)), Image.LANCZOS)
+            buf = io.BytesIO()
+            img.save(buf, format="JPEG", quality=85)
+            image_bytes = buf.getvalue()
+        image_mime = "image/jpeg"
         image_b64 = base64.b64encode(image_bytes).decode("utf-8")
 
         logger.info(
-            "[LLM] 请求 API: %s, 模型: %s, 图片: %s",
-            LLM_API_URL, LLM_MODEL_NAME, image_path
+            "[LLM] 请求 API: %s, 模型: %s, 图片: %s (压缩后 %d 字节)",
+            LLM_API_URL, LLM_MODEL_NAME, image_path, len(image_bytes)
         )
 
-        resp = requests.post(
-            LLM_API_URL,
-            headers={
-                "Authorization": f"Bearer {LLM_API_KEY}",
-                "Content-Type": "application/json",
-            },
-            json={
+        # LLM_API_KEY 允许为空：为空时不携带 Authorization 头
+        headers = {"Content-Type": "application/json"}
+        if LLM_API_KEY:
+            headers["Authorization"] = f"Bearer {LLM_API_KEY}"
+
+        # 根据 LLM_API_TYPE 选择请求格式：
+        # - "ollama"           → Ollama 原生格式 (images / options)
+        # - "chat-completions" → OpenAI 兼容格式 (image_url / max_tokens)
+        def _build_payload(prompt: str) -> dict:
+            if LLM_API_TYPE == "ollama":
+                return {
+                    "model": LLM_MODEL_NAME,
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": prompt,
+                            "images": [image_b64],
+                        }
+                    ],
+                    "stream": False,
+                    "options": {
+                        "num_predict": 1024,   # 推理模型思考+结论，需要更多 token
+                        "temperature": 0.1,
+                    },
+                }
+            # OpenAI 兼容格式（chat-completions，兜底默认）
+            return {
                 "model": LLM_MODEL_NAME,
                 "messages": [
                     {
                         "role": "user",
                         "content": [
-                            {"type": "text", "text": LLM_PROMPT_TEMPLATE},
+                            {"type": "text", "text": prompt},
                             {
                                 "type": "image_url",
                                 "image_url": {
-                                    "url": f"data:image/jpeg;base64,{image_b64}"
+                                    "url": f"data:{image_mime};base64,{image_b64}"
                                 },
                             },
                         ],
                     }
                 ],
-                "max_tokens": 256,
+                "max_tokens": 1024,          # 推理模型思考+结论，需要更多 token
                 "temperature": 0.1,
-            },
-            timeout=LLM_TIMEOUT_SEC,
-        )
+            }
 
-        if resp.status_code != 200:
-            result["error"] = f"API 返回错误 ({resp.status_code}): {resp.text[:200]}"
-            logger.error("[LLM] %s", result["error"])
-            return result
+        def _request(prompt: str, _retries: int = 2):
+            """向 LLM API 发送一次识别请求，返回解析后的
+            (label, confidence, features_used, class_probs)。
 
-        resp_data = resp.json()
-        # 解析响应并提取角色标签
-        label, confidence = _parse_llm_response(resp_data)
+            ConnectionError（网关断开）时自动重试，最多 _retries 次。
+            """
+            for attempt in range(1, _retries + 1):
+                try:
+                    resp = requests.post(
+                        LLM_API_URL,
+                        headers=headers,
+                        json=_build_payload(prompt),
+                        timeout=LLM_TIMEOUT_SEC,
+                    )
+                except requests.ConnectionError as e:
+                    logger.warning(
+                        "[LLM] 连接被断开 (第 %d/%d 次): %s", attempt, _retries, e
+                    )
+                    if attempt < _retries:
+                        time.sleep(2 * attempt)  # 2s, 4s 递增等待
+                        continue
+                    result["error"] = f"LLM 连接失败: {e}"
+                    logger.error("[LLM] %s", result["error"])
+                    return None, None, [], []
+                except requests.Timeout:
+                    result["error"] = f"API 请求超时 ({LLM_TIMEOUT_SEC}秒)"
+                    logger.error("[LLM] %s", result["error"])
+                    return None, None, [], []
+                break
+            if resp.status_code != 200:
+                result["error"] = f"API 返回错误 ({resp.status_code}): {resp.text[:200]}"
+                logger.error("[LLM] %s", result["error"])
+                return None, None, [], []
+            resp_data = resp.json()
+            return _parse_llm_response(resp_data)
+
+        label, confidence, features_used, class_probs = _request(LLM_PROMPT_TEMPLATE)
+
         if not label or label.lower() == "unknown":
             result["error"] = f"LLM 无法识别该角色: {label}"
             logger.warning("[LLM] %s", result["error"])
@@ -431,7 +488,8 @@ def predict_image_llm(image_path: str) -> dict:
                 "success": True,
                 "label": label,
                 "confidence": confidence,
-                "class_probs": [],
+                "class_probs": class_probs,
+                "features_used": features_used,
             }
         )
         logger.info("[LLM] 识别成功: %s -> %s", image_path, label)
@@ -451,34 +509,105 @@ def predict_image_llm(image_path: str) -> dict:
         return result
 
 
-def _parse_llm_response(resp_data: dict) -> tuple:
-    """从 LLM API 响应中提取 (label, confidence)。
+def _extract_json(text: str):
+    """从文本中提取第一个完整的 JSON 对象（支持嵌套结构）。
 
-    兼容普通模型（content）和推理模型（reasoning_content）。
+    Args:
+        text: 可能包含 JSON 的文本
+
+    Returns:
+        dict | None: 解析成功的字典；未找到返回 None
+    """
+    if not text:
+        return None
+    decoder = json.JSONDecoder()
+    # 遍历每个 '{' 位置，尝试从该处解析完整 JSON
+    for m in re.finditer(r'\{', text):
+        try:
+            obj, _ = decoder.raw_decode(text[m.start():])
+            if isinstance(obj, dict):
+                return obj
+        except (json.JSONDecodeError, ValueError):
+            continue
+    return None
+
+
+def _parse_llm_response(resp_data: dict) -> tuple:
+    """从 LLM API 响应中提取 (label, confidence, features_used, class_probs)。
+
+    兼容两种格式：
+    - Ollama /api/chat: {"message": {"content": "..."}}
+    - OpenAI 兼容:      {"choices": [{"message": {"content": "..."}}]}
+    - 推理模型:          {"choices": [{"message": {"reasoning_content": "...", "content": null}}]}
+
+    LLM 输出结构：
+    {"label": "作品/角色名", "confidence": 95, "features_used": ["发色", "服装"],
+     "alternative_guesses": [{"label": "...", "confidence": 55}]}
+    其中 alternative_guesses 统一转换为 class_probs（与本地模型一致的 [{"name", "prob"}] 格式）。
     """
     try:
-        message = (resp_data.get("choices") or [{}])[0].get("message", {})
-        content = message.get("content")
-        reasoning = message.get("reasoning_content")
+        content = None
+        reasoning = None
 
-        # 推理模型：content 可能为 None，从 reasoning_content 尾部截取结论
-        if content is None and reasoning:
+        # 先尝试 Ollama 格式 /api/chat
+        message = resp_data.get("message")
+        if message:
+            content = message.get("content")
+            reasoning = message.get("reasoning_content")
+        else:
+            # 再尝试 OpenAI 兼容格式 /v1/chat/completions
+            choices = resp_data.get("choices") or [{}]
+            message = choices[0].get("message", {}) if len(choices) > 0 else {}
+            content = message.get("content")
+            reasoning = message.get("reasoning_content")
+
+        # 推理模型：content 可能为 None/空，结论在 reasoning_content 中
+        if not content and reasoning:
             text = str(reasoning).strip()
-            content = text[-200:] if len(text) > 200 else text
-            logger.info("[LLM] 使用 reasoning_content 作为识别内容")
+            # 1) 优先从全文搜索 JSON 结构化结果（推理过程末尾通常输出结论）
+            parsed = _extract_json(text)
+            if parsed and parsed.get("label"):
+                content = json.dumps(parsed, ensure_ascii=False)
+                logger.info("[LLM] 从 reasoning_content 提取到 JSON 结论")
+            else:
+                # 2) 无 JSON 时，取尾部内容（结论通常在末尾）
+                content = text[-300:] if len(text) > 300 else text
+                logger.info("[LLM] 使用 reasoning_content 作为识别内容")
 
         if not content:
             logger.error("[LLM] API 返回空内容: %s", resp_data)
-            return ("", 0.0)
+            return ("", 0.0, [], [])
 
         content = str(content).strip()
 
-        # 优先从 JSON 中提取结构化结果
-        json_match = re.search(r'\{[^{}]*\}', content)
-        if json_match:
-            parsed = json.loads(json_match.group())
-            label = parsed.get("label", "").strip()
+        # 默认值
+        features_used = []
+        class_probs = []
+
+        # 优先从 JSON 中提取结构化结果（支持嵌套结构）
+        parsed = _extract_json(content)
+        if parsed:
+            raw_label = parsed.get("label")
+            label = str(raw_label).strip() if raw_label else ""
             confidence = float(parsed.get("confidence", 95.0))
+
+            # 关键特征（如 ["蓝发", "和服"]）
+            raw_features = parsed.get("features_used")
+            if isinstance(raw_features, list):
+                features_used = [str(f).strip() for f in raw_features if str(f).strip()]
+
+            # alternative_guesses -> class_probs（与本地模型统一格式）
+            raw_alt = parsed.get("alternative_guesses") or []
+            if isinstance(raw_alt, list):
+                class_probs = [
+                    {"name": str(g.get("label", "")).strip(), "prob": float(g.get("confidence", 0))}
+                    for g in raw_alt
+                    if isinstance(g, dict) and g.get("label")
+                ]
+
+            if not label:
+                reason = parsed.get("reason")
+                logger.info("[LLM] 模型判定特征不足: %s", reason or "无原因说明")
         else:
             # 降级：纯文本作为标签
             label = content
@@ -487,13 +616,13 @@ def _parse_llm_response(resp_data: dict) -> tuple:
         # 过滤非角色标签（安全审查、拒绝回答等）
         if _is_invalid_label(label):
             logger.warning("[LLM] 过滤无效标签: %s", label)
-            return ("", 0.0)
+            return ("", 0.0, [], [])
 
-        return label, confidence
+        return label, confidence, features_used, class_probs
 
     except (KeyError, IndexError, ValueError, json.JSONDecodeError) as e:
         logger.error("[LLM] 无法解析 API 响应: %s, 错误: %s", resp_data, e)
-        return ("", 0.0)
+        return ("", 0.0, [], [])
 
 
 def _is_invalid_label(label: str) -> bool:

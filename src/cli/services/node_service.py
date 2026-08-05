@@ -318,6 +318,9 @@ def start_node_service():
                     "max_tasks": MAX_TASKS,
                     "local_port": assigned_port,
                     "capabilities": CAPABILITIES,
+                    # 附带 LLM 配置信息，供服务端决策任务重试间隔
+                    "llm_enabled": LLM_RECOGNITION_ENABLED,
+                    "llm_timeout_sec": LLM_TIMEOUT_SEC,
                 },
             }
             json_protocol.send_json(s, register_msg)
@@ -449,11 +452,11 @@ def start_node_service():
 
                 msg_type = msg.get("type")
                 msg_data = msg.get("data", {})
-                logger.info(f"[节点] 收到消息类型: {msg_type}")
+                logger.debug(f"[节点] 收到消息类型: {msg_type}")
 
                 # === 心跳响应处理 ====
                 if msg_type == "heartbeat_ack":
-                    logger.info(f"[节点] 收到心跳响应: {msg.get('message', '')}")
+                    logger.debug(f"[节点] 收到心跳响应: {msg.get('message', '')}")
                     heartbeat_missed_count = 0  # 重置丢失计数
                     last_heartbeat_response_time = time.time()  # 记录响应时间
                     last_heartbeat_send_time = 0  # 重置发送时间，准备下一次发送
@@ -478,7 +481,7 @@ def start_node_service():
                         image_filename = msg_data.get("image_filename")
                         image_size = msg_data.get("image_size")
                         image_data_b64 = msg_data.get("image_data")
-                        timestamp = msg_data.get("timestamp")
+                        timestamp = msg.get("timestamp")
                         # 识别方式类型：local / llm / auto，默认 local
                         recognition_type = msg_data.get("recognition_type", "local")
 

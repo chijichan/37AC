@@ -11,8 +11,9 @@ from config.base import DB_CONFIG
 
 
 def _get_connection():
-    """获取数据库连接"""
-    return pymysql.connect(**DB_CONFIG)
+    """获取数据库连接（线程本地连接池，复用连接避免对远程 MySQL 反复握手）"""
+    from services.db import get_connection
+    return get_connection()
 
 
 def _generate_key_string(prefix="37ac"):

@@ -15,13 +15,9 @@ logger = get_logger("NodeManager")
 
 
 def get_db_connection():
-    """获取数据库连接"""
-    try:
-        conn = pymysql.connect(**DB_CONFIG)
-        return conn
-    except Exception as e:
-        logger.error("数据库连接失败: %s", e)
-        return None
+    """获取数据库连接（线程本地连接池，复用连接避免对远程 MySQL 反复握手）"""
+    from services.db import get_connection as _get_pooled_connection
+    return _get_pooled_connection()
 
 
 class NodeManager:

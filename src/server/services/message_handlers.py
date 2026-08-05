@@ -59,7 +59,12 @@ def async_handle_register(conn, addr, msg):
 
         if result:
             if node_id in node_manager.nodes:
-                # 节点已注册，更新能力信息和 LLM 配置
+                # 节点已注册（重复注册/重连场景）：
+                # 1) 重置任务计数与状态，防止上次会话残留计数导致节点被误判繁忙
+                # 2) 更新 socket 指向当前连接，避免任务发送到已失效的旧连接
+                node_manager.nodes[node_id]["current_tasks"] = 0
+                node_manager.nodes[node_id]["status"] = "idle"
+                node_manager.nodes[node_id]["socket"] = conn
                 node_manager.nodes[node_id]["capabilities"] = capabilities
                 node_manager.nodes[node_id]["llm_enabled"] = bool(llm_enabled)
                 node_manager.nodes[node_id]["llm_timeout_sec"] = int(llm_timeout_sec or 0)
@@ -170,15 +175,17 @@ def async_handle_task_result(conn, addr, msg):
                 "task_id": task_id,
                 "result": result,
             })
-
-            if node_id:
-                node_manager.decrement_task_count(node_id)
-                logger.info("节点 %s 任务计数已减少，task_id=%s", node_id, task_id)
         except Exception as e:
             logger.error("异步保存失败: %s", e)
         finally:
             if "conn" in locals() and conn:
                 conn.close()
+            # 无论 DB 保存是否成功，节点任务计数都必须减少：
+            # 节点已完成该任务（结果已回传），否则计数泄漏会导致
+            # current_tasks 虚高、节点被误判为繁忙而不再接收新任务
+            if node_id:
+                node_manager.decrement_task_count(node_id)
+                logger.info("节点 %s 任务计数已减少，task_id=%s", node_id, task_id)
 
     async_processor.submit_task(process_task_result)
 

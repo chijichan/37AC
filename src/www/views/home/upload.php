@@ -754,7 +754,7 @@ require_once ROOT_PATH . '/views/layout.php';
             cropperWrap.classList.add('active');
 
             this.state.cropInstance = new Cropper(cropperImage, {
-                aspectRatio: 4 / 3,
+                // 不锁定宽高比，允许自由调整选框形状
                 preview: '#preview',
                 viewMode: 1,
                 guides: true,
@@ -785,13 +785,11 @@ require_once ROOT_PATH . '/views/layout.php';
         handleCropImage() {
             if (!this.state.cropInstance) return;
 
+            // 仅指定宽度，高度按选框实际宽高比计算，避免自由形状裁剪时变形
             const canvas = this.state.cropInstance.getCroppedCanvas({
                 width: 800,
-                height: 600,
                 minWidth: 256,
-                minHeight: 256,
                 maxWidth: 2048,
-                maxHeight: 2048,
                 fillColor: '#fff',
                 imageSmoothingEnabled: true,
                 imageSmoothingQuality: 'high',
@@ -934,7 +932,8 @@ require_once ROOT_PATH . '/views/layout.php';
 
                 this.updateProgressStatus('正在上传图片');
 
-                // 发送流式请求（经 PHP 代理，API Key 由服务端注入）
+                // 发送流式请求（经 Nginx + PHP 代理，API Key 由服务端注入）
+                // Nginx 多 worker + php-cgi 多进程下长连接不再阻塞其他请求
                 const response = await fetch('/api/upload', {
                     method: 'POST',
                     headers: {
@@ -1094,7 +1093,10 @@ require_once ROOT_PATH . '/views/layout.php';
                 name: p.name,
                 probability: toPercent(Number(p.prob) || 0),
             }));
-            const characterName = data.character_name || data.label || '未知角色';
+            // label 格式为「作品名/角色名」（角色IP/角色名），拆分为 IP 与角色名分别展示
+            const labelParts = (data.label || '').split('/').map(s => s.trim()).filter(Boolean);
+            const characterIP = labelParts[0] || '未知作品';
+            const characterName = labelParts[1] || labelParts[0] || '未知角色';
             const from_source = (data.from_source !== undefined) ?
                 data.from_source :
                 (data.recognition_type === 'llm' ? 1 : 0);
@@ -1103,6 +1105,9 @@ require_once ROOT_PATH . '/views/layout.php';
             let html = '<div class="card result-card">';
             html += '<div class="result-top">';
             html += `<span class="result-name">${escapeHtml(characterName)}</span>`;
+            if (characterIP && characterIP !== characterName) {
+                html += `<span class="badge badge-neutral">${escapeHtml(characterIP)}</span>`;
+            }
             if (characterName !== '未知角色') {
                 html += `<a class="result-link" href="https://zh.moegirl.org.cn/${encodeURIComponent(characterName)}" target="_blank" rel="nofollow">萌娘百科</a>`;
             }

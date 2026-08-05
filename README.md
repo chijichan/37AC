@@ -61,7 +61,7 @@ flowchart TB
     subgraph Server["服务端"]
         direction TB
         Flask["Flask 服务端<br/>端口 13138<br/>API + SSE"]
-        PHP["PHP Web 仪表盘<br/>端口 8000<br/>MVC 架构"]
+        PHP["Nginx + PHP-CGI<br/>端口 8000<br/>MVC 架构"]
         TCP["TCP 服务<br/>端口 13137<br/>节点管理 · 任务分发"]
     end
 
@@ -184,7 +184,8 @@ flowchart TB
 │  │     └─ fonts/                       # 自托管可变字体（Nunito、JetBrains Mono）
 │  ├─ router.php
 │  ├─ .env.example
-│  ├─ start-server.bat
+│  ├─ start-nginx.bat / stop-nginx.bat  # Nginx + PHP-CGI 启动/停止（推荐）
+│  ├─ start-server.bat                   # php -S 单线程内置服务器（仅快速调试）
 │  ├─ controllers/
 │  │  └─ api_controller.php              # API 代理（X-API-Key 服务端注入）
 │  ├─ views/
@@ -469,18 +470,19 @@ python src/server/runserver.py
 
 ### 3. 启动 PHP 仪表盘
 
-```bash
-cd src/www
-php -S 127.0.0.1:8000 -t public/
-```
-
-或在 Windows 下运行：
+前端使用 **Nginx + PHP-CGI 进程池**（Windows 下 PHP-FPM 的等价方案），
+支持 SSE 长连接并发，不会阻塞其他请求。详细部署见 [`docs/部署指南.md`](docs/部署指南.md)。
 
 ```bash
-src\www\start-server.bat
+# 一键启动（4 个 php-cgi 实例 + Nginx）
+src\www\start-nginx.bat
+
+# 停止
+src\www\stop-nginx.bat
 ```
 
-> 生产环境请使用 Apache / Nginx + PHP-FPM。`php -S` 为单线程，SSE 流式代理期间会阻塞其他请求。
+> 旧方案 `php -S` 为单线程，SSE 流式代理期间会阻塞其他请求，仅保留用于快速调试：
+> `php -S 127.0.0.1:8000 -t public/` 或 `src\www\start-server.bat`
 
 访问：`http://127.0.0.1:8000`
 

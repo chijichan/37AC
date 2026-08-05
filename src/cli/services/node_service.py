@@ -24,6 +24,7 @@ from config.base import (
     IMAGE_PATH,
     LLM_RECOGNITION_ENABLED,
     LLM_TIMEOUT_SEC,
+    LOCAL_TASK_TIMEOUT_SEC,
     CAPABILITIES,
 )
 
@@ -206,8 +207,8 @@ def start_node_service():
     reconnect_attempts = 0
     tasks = []
     tasks_lock = threading.Lock()  # 保护 tasks 列表的线程安全
-    pending_llm_tasks = {}  # task_id -> {store, local_image_path, effective_type, start_time}
-    pending_llm_tasks_lock = threading.Lock()  # 保护 pending_llm_tasks 的线程安全
+    pending_tasks = {}  # task_id -> {store, local_image_path, effective_type, start_time, timeout_sec}
+    pending_tasks_lock = threading.Lock()  # 保护 pending_tasks 的线程安全
     consecutive_none_count = 0  # recv_json 连续返回 None 的计数，超过阈值触发重连
 
     def _safe_close(sock):
@@ -374,17 +375,18 @@ def start_node_service():
 
         # === 主接收循环 ====
         while connection_alive and s:
-            # === 检查已完成的 LLM 任务（非阻塞） ===
-            with pending_llm_tasks_lock:
-                pending_snapshot = list(pending_llm_tasks.items())
+            # === 检查已完成的后台推理任务（非阻塞，local/LLM 统一处理） ===
+            with pending_tasks_lock:
+                pending_snapshot = list(pending_tasks.items())
             for tid, info in pending_snapshot:
                 elapsed = time.time() - info["start_time"]
-                if "value" in info["store"] or elapsed >= LLM_TIMEOUT_SEC:
+                timeout_sec = info.get("timeout_sec", LLM_TIMEOUT_SEC)
+                if "value" in info["store"] or elapsed >= timeout_sec:
                     if "value" in info["store"]:
                         result = info["store"]["value"]
                     else:
-                        logger.warning("[节点] LLM 任务 %s 等待超时 (%ds)", tid, LLM_TIMEOUT_SEC)
-                        result = {"success": False, "label": "", "confidence": 0.0, "class_probs": [], "error": f"LLM inference timeout after {LLM_TIMEOUT_SEC} seconds"}
+                        logger.warning("[节点] 推理任务 %s 等待超时 (%ds)", tid, timeout_sec)
+                        result = {"success": False, "label": "", "confidence": 0.0, "class_probs": [], "error": f"inference timeout after {timeout_sec} seconds"}
                     result["recognition_type"] = info["effective_type"]
 
                     response_msg = {
@@ -399,14 +401,16 @@ def start_node_service():
                     }
                     try:
                         json_protocol.send_json(s, response_msg)
-                        logger.info("[节点] 已返回 LLM 任务 %s 的推理结果", tid)
+                        logger.info("[节点] 已返回推理任务 %s 的结果 (%s)", tid, info["effective_type"])
                     except Exception as send_err:
-                        logger.error("[节点] 发送 LLM 任务结果失败: %s", send_err)
+                        logger.error("[节点] 发送推理任务结果失败: %s", send_err)
                     with tasks_lock:
                         if tid in tasks:
                             tasks.remove(tid)
-                    with pending_llm_tasks_lock:
-                        pending_llm_tasks.pop(tid, None)
+                    with pending_tasks_lock:
+                        pending_tasks.pop(tid, None)
+                    # 清理临时图片文件
+                    _cleanup_image(info["local_image_path"])
 
             # === 心跳超时检测 ===
             current_time = time.time()
@@ -529,50 +533,40 @@ def start_node_service():
                                 effective_type = "local"
 
                             logger.info(f"[节点] 推理方式: {effective_type}")
-                            if effective_type == "llm":
-                                store = {}
-                                def _run_llm():
-                                    try:
+
+                            # 统一将推理提交到后台线程执行（local / LLM 均异步），
+                            # 主循环不阻塞，可继续接收新任务；完成结果由上方 pending_tasks 检查回传
+                            store = {}
+                            timeout_sec = LLM_TIMEOUT_SEC if effective_type == "llm" else LOCAL_TASK_TIMEOUT_SEC
+
+                            def _run_inference():
+                                try:
+                                    if effective_type == "llm":
                                         store["value"] = predict_image_llm(local_image_path)
-                                    except Exception as exc:
-                                        logger.error("[节点] LLM inference failed: %s", exc, exc_info=True)
-                                        store["value"] = {"success": False, "label": "", "confidence": 0.0, "class_probs": [], "error": f"LLM inference failed: {exc}"}
-
-                                threading.Thread(target=_run_llm, daemon=True).start()
-                                with pending_llm_tasks_lock:
-                                    pending_llm_tasks[task_id] = {
-                                        "store": store,
-                                        "local_image_path": local_image_path,
-                                        "effective_type": effective_type,
-                                        "start_time": time.time(),
+                                    else:
+                                        store["value"] = predict_image(local_image_path)
+                                except Exception as exc:
+                                    logger.error("[节点] %s 推理失败: %s", effective_type, exc, exc_info=True)
+                                    store["value"] = {
+                                        "success": False,
+                                        "label": "",
+                                        "confidence": 0.0,
+                                        "class_probs": [],
+                                        "error": f"{effective_type} inference failed: {exc}",
                                     }
-                                logger.info("[节点] LLM 任务 %s 已提交到后台，主循环继续监听", task_id)
-                                # 不阻塞主循环，由 pending_llm_tasks 检查处理结果
-                                continue
-                            else:
-                                result = predict_image(local_image_path)
 
-                            # 在结果中标明识别方式
-                            result["recognition_type"] = effective_type
-
-                            # 返回结果
-                            response_msg = {
-                                "type": "task_result",
-                                "timestamp": int(time.time()),
-                                "data": {
-                                    "node_id": NODE_ID,
-                                    "task_id": task_id,
-                                    "result": result,
-                                    "processed_image_path": local_image_path,
-                                },
-                            }
-                            json_protocol.send_json(s, response_msg)
-                            logger.info(f"[节点] 已返回任务 {task_id} 的推理结果")
-                            with tasks_lock:
-                                if task_id in tasks:
-                                    tasks.remove(task_id)
-                            # 清理临时图片文件
-                            _cleanup_image(local_image_path)
+                            threading.Thread(target=_run_inference, daemon=True).start()
+                            with pending_tasks_lock:
+                                pending_tasks[task_id] = {
+                                    "store": store,
+                                    "local_image_path": local_image_path,
+                                    "effective_type": effective_type,
+                                    "start_time": time.time(),
+                                    "timeout_sec": timeout_sec,
+                                }
+                            logger.info("[节点] 推理任务 %s 已提交到后台 (%s)，主循环继续监听", task_id, effective_type)
+                            # 不阻塞主循环，由 pending_tasks 检查处理结果
+                            continue
 
                         except Exception as decode_error:
                             logger.error(f"[节点] 图片数据解码失败: {decode_error}")
@@ -649,11 +643,11 @@ def start_node_service():
         last_heartbeat_response_time = 0
         consecutive_none_count = 0
 
-        # 清理未完成的 LLM 任务及其临时图片文件
-        with pending_llm_tasks_lock:
-            for info in pending_llm_tasks.values():
+        # 清理未完成的后台推理任务及其临时图片文件
+        with pending_tasks_lock:
+            for info in pending_tasks.values():
                 _cleanup_image(info.get("local_image_path"))
-            pending_llm_tasks.clear()
+            pending_tasks.clear()
 
         # 清空任务列表（旧任务 ID 在重连后已失效）
         with tasks_lock:

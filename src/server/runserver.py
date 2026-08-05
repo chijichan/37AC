@@ -42,4 +42,6 @@ if __name__ == "__main__":
     logger.info("[启动] Flask Web 服务启动中...")
     if in_debugger:
         logger.info("检测到调试器，已禁用 auto-reloader")
-    app.run(WEB_HOST, WEB_PORT, TSAC_DEBUG, use_reloader=use_reloader)
+    # threaded=True：Werkzeug 开发服务器默认单线程，一个 SSE/长请求会阻塞
+    # 其他所有 HTTP 请求，导致无法同时接收多个上传任务，必须开启多线程
+    app.run(WEB_HOST, WEB_PORT, TSAC_DEBUG, threaded=True, use_reloader=use_reloader)

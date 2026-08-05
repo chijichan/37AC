@@ -170,10 +170,12 @@ class NodeManager:
         return available_nodes
 
     def get_idle_node(self):
-        """获取一个空闲节点"""
+        """获取一个空闲节点（需同时满足：状态空闲、连接有效、任务数未满）"""
         with self.lock:
             for node_id, info in self.nodes.items():
-                if info["status"] == "idle" and info.get("socket") is not None:
+                if (info["status"] == "idle"
+                        and info.get("socket") is not None
+                        and info["current_tasks"] < info["max_tasks"]):
                     return node_id, info
         self._logger.debug(
             "get_idle_node() 未找到空闲节点，当前节点数=%d", len(self.nodes)

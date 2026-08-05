@@ -100,6 +100,8 @@ else:
     LLM_API_TYPE = _LLM_API_TYPE_RAW
 LLM_MODEL_NAME = os.getenv("LLM_MODEL_NAME", "deepseek-v4.1")
 LLM_TIMEOUT_SEC = int(os.getenv("LLM_TIMEOUT_SEC", "30"))
+# 本地推理超时（秒）：首次加载模型 / YOLO 检测可能较慢，作为安全兜底（后台线程超时自动返回失败）
+LOCAL_TASK_TIMEOUT_SEC = int(os.getenv("LOCAL_TASK_TIMEOUT_SEC", "120"))
 # 识别提示词模板（默认提示词；.env 中留空时自动使用默认值）
 _DEFAULT_LLM_PROMPT = (
     '你是一个 ACG 角色识别专家。\n'

@@ -57,7 +57,8 @@ class Auth_Controller extends Controller
             'title' => '重置密码',
             'description' => '设置新的 37AC 账户密码，安全恢复登录。',
             'keywords' => '37AC重置密码,设置新密码',
-            'canonical_url' => '/auth/reset-password?token=' . urlencode($token),
+            // canonical 不带 token，避免凭证进入 SEO 元数据
+            'canonical_url' => '/auth/reset-password',
             'token' => $token,
             'api_base_url' => API_BASE_URL
         ];

@@ -9,18 +9,41 @@ if (!$isAjax) {
 ?>
 
 <style>
+    .dash-page-head {
+        margin-bottom: 1.6rem;
+    }
+
+    .dash-page-head h2 {
+        margin-bottom: .2rem;
+    }
+
+    .stat-summary {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 1.1rem;
+        margin-bottom: 1.6rem;
+    }
+
+    .action-bar {
+        display: flex;
+        gap: .7rem;
+        flex-wrap: wrap;
+        margin-bottom: 1.6rem;
+    }
+
     .node-card {
-        background: var(--pico-card-background-color);
-        padding: 1.5rem;
-        border-radius: var(--pico-border-radius);
-        box-shadow: var(--pico-box-shadow);
-        margin-bottom: 1.5rem;
-        transition: transform 0.2s ease, box-shadow 0.2s ease;
+        background: var(--ac-surface);
+        padding: 1.4rem 1.5rem;
+        border-radius: var(--ac-radius-card);
+        box-shadow: var(--ac-shadow-card);
+        margin-bottom: 1.1rem;
+        transition: transform var(--ac-dur) var(--ac-ease-spring),
+            box-shadow var(--ac-dur) var(--ac-ease-out);
     }
 
     .node-card:hover {
         transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        box-shadow: var(--ac-shadow-float);
     }
 
     .node-header {
@@ -31,57 +54,69 @@ if (!$isAjax) {
         margin-bottom: 1rem;
     }
 
-    .node-status {
-        display: inline-block;
-        padding: 0.25rem 0.75rem;
-        border-radius: 5rem;
-        font-size: 0.8rem;
-        font-weight: 600;
-        flex-shrink: 0;
-    }
-
-    .node-status.online {
-        background: var(--pico-ins-color);
-        color: #fff;
-    }
-
-    .node-status.offline {
-        background: var(--pico-del-color);
-        color: #fff;
+    .node-header h3 {
+        margin: 0 0 .15rem;
     }
 
     .node-meta {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-        gap: 0.75rem;
+        grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+        gap: .7rem;
         margin: 1rem 0;
     }
 
     .node-meta-item {
         text-align: center;
-        padding: 0.75rem;
-        background: var(--pico-card-sectioning-background-color);
-        border-radius: var(--pico-border-radius);
+        padding: .7rem .5rem;
+        background: var(--ac-bg);
+        border-radius: var(--ac-radius-input);
     }
 
     .node-meta-value {
-        font-size: 1.4rem;
-        font-weight: bold;
-        color: var(--pico-primary);
+        font-family: var(--ac-font-mono);
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: var(--ac-ink-900);
     }
 
     .node-meta-label {
-        font-size: 0.75rem;
-        color: var(--pico-muted-color);
-        margin-top: 0.25rem;
+        font-size: .75rem;
+        color: var(--ac-ink-500);
+        margin-top: .2rem;
+    }
+
+    .node-info-line {
+        font-size: .85rem;
+        color: var(--ac-ink-500);
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: .4rem .8rem;
+    }
+
+    .node-token {
+        font-family: var(--ac-font-mono);
+        font-size: .8rem;
+        background: var(--ac-pink-50);
+        color: var(--ac-pink-700);
+        padding: .15rem .55rem;
+        border-radius: var(--ac-radius-pill);
+        cursor: pointer;
+        border: none;
+        transition: background var(--ac-dur-fast) var(--ac-ease-out);
+    }
+
+    .node-token:hover {
+        background: var(--ac-pink-100);
     }
 
     .node-detail-row {
         display: flex;
         justify-content: space-between;
-        padding: 0.4rem 0;
-        font-size: 0.875rem;
-        border-bottom: 1px solid var(--pico-muted-border-color);
+        gap: 1rem;
+        padding: .45rem 0;
+        font-size: .88rem;
+        border-bottom: 1px solid var(--ac-surface-2);
     }
 
     .node-detail-row:last-child {
@@ -89,125 +124,53 @@ if (!$isAjax) {
     }
 
     .node-detail-label {
-        color: var(--pico-muted-color);
+        color: var(--ac-ink-500);
+        flex-shrink: 0;
     }
 
     .node-detail-value {
-        font-weight: 500;
-        font-family: monospace;
-        font-size: 0.8rem;
-        max-width: 200px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-
-    .stat-summary {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-        gap: 1rem;
-        margin-bottom: 2rem;
-    }
-
-    .stat-summary article {
-        text-align: center;
-        padding: 1.2rem;
-    }
-
-    .stat-summary h3 {
-        margin: 0;
-        font-size: 1.8rem;
-    }
-
-    .stat-summary small {
-        color: var(--pico-muted-color);
-    }
-
-    .empty-state {
-        text-align: center;
-        padding: 3rem 1rem;
-        color: var(--pico-muted-color);
-    }
-
-    .empty-state h3 {
-        margin-bottom: 0.5rem;
-    }
-
-    .action-bar {
-        display: flex;
-        gap: 0.75rem;
-        flex-wrap: wrap;
-        margin-bottom: 2rem;
-    }
-
-    .node-token {
-        font-family: monospace;
-        font-size: 0.8rem;
-        background: var(--pico-card-sectioning-background-color);
-        padding: 0.2rem 0.5rem;
-        border-radius: 3px;
-        cursor: pointer;
-        user-select: all;
-    }
-
-    .node-token:hover {
-        background: var(--pico-primary-background);
+        font-family: var(--ac-font-mono);
+        font-size: .82rem;
+        text-align: right;
+        word-break: break-all;
     }
 
     .card-footer {
         display: flex;
-        gap: 0.5rem;
+        gap: .5rem;
         justify-content: flex-end;
         margin-top: 1rem;
         padding-top: 1rem;
-        border-top: 1px solid var(--pico-muted-border-color);
+        border-top: 1px solid var(--ac-surface-2);
     }
 
     @media (max-width: 600px) {
         .node-header {
             flex-direction: column;
         }
-
-        .node-meta {
-            grid-template-columns: 1fr 1fr;
-        }
     }
 </style>
 
-<!-- 页面标题 -->
-<header style="margin-bottom: 2rem;">
-    <h1><?php require ROOT_PATH . '/views/components/icons/nodes.php'; ?> 节点管理</h1>
-    <p>管理和监控推理节点的运行状态</p>
+<header class="dash-page-head">
+    <h2>节点管理</h2>
+    <p>管理和监控推理节点的运行状态。</p>
 </header>
 
-<!-- 统计概览 -->
 <div class="stat-summary" id="node-stats">
-    <article>
-        <h3 id="stat-total">--</h3><small>总节点数</small>
-    </article>
-    <article>
-        <h3 id="stat-online" style="color: var(--pico-ins-color);">--</h3><small>在线</small>
-    </article>
-    <article>
-        <h3 id="stat-offline" style="color: var(--pico-del-color);">--</h3><small>离线</small>
-    </article>
-    <article>
-        <h3 id="stat-active">--</h3><small>已启用</small>
-    </article>
+    <div class="stat"><span class="stat-value" id="stat-total">--</span><span class="stat-label">总节点数</span></div>
+    <div class="stat"><span class="stat-value" id="stat-online" style="color:var(--ac-success)">--</span><span class="stat-label">在线</span></div>
+    <div class="stat"><span class="stat-value" id="stat-offline" style="color:var(--ac-danger)">--</span><span class="stat-label">离线</span></div>
+    <div class="stat"><span class="stat-value" id="stat-active">--</span><span class="stat-label">已启用</span></div>
 </div>
 
-<!-- 操作按钮 -->
 <div class="action-bar">
-    <button id="btn-add-node"><?php require ROOT_PATH . '/views/components/icons/add.php'; ?> 添加新节点</button>
-    <button class="secondary outline" id="btn-refresh-nodes"><?php require ROOT_PATH . '/views/components/icons/refresh.php'; ?> 刷新状态</button>
+    <button class="btn btn-primary" id="btn-add-node"><i class="ph-bold ph-plus"></i> 添加新节点</button>
+    <button class="btn btn-ghost" id="btn-refresh-nodes"><i class="ph ph-arrows-clockwise"></i> 刷新状态</button>
 </div>
 
-<!-- 节点列表 -->
 <section>
     <div id="nodes-list">
-        <article class="node-card">
-            <p style="text-align:center;"><span aria-busy="true"></span> 加载中…</p>
-        </article>
+        <div class="card"><div class="skeleton" style="height: 120px;"></div></div>
     </div>
 </section>
 
@@ -240,9 +203,14 @@ if (!$isAjax) {
         });
     }
 
+    function copyNodeToken(nodeId) {
+        const node = allNodes.find(n => n.id === nodeId);
+        if (node && node.token) copyText(node.token, 'Token 已复制');
+    }
+
     async function loadNodes() {
         const container = document.getElementById('nodes-list');
-        container.innerHTML = '<article class="node-card"><p style="text-align:center;"><span aria-busy="true"></span> 加载中…</p></article>';
+        container.innerHTML = '<div class="card"><div class="skeleton" style="height: 120px;"></div></div>';
 
         try {
             const response = await Auth.fetch(`${window.API_BASE_URL}/dashboard/nodes`);
@@ -252,11 +220,11 @@ if (!$isAjax) {
                 Notify.error(message);
                 allNodes = [];
                 container.innerHTML = `
-                    <article class="node-card empty-state">
-                        <h3>${WARN_ICON_SVG} 节点加载失败</h3>
-                        <p>${message}</p>
-                    </article>
-                `;
+                    <div class="card empty">
+                        <div class="empty-icon"><i class="ph ph-warning"></i></div>
+                        <h3>节点加载失败</h3>
+                        <p>${escapeHtml(message)}</p>
+                    </div>`;
                 return;
             }
 
@@ -264,44 +232,38 @@ if (!$isAjax) {
             allNodes = nodes;
 
             // 更新统计
-            const total = nodes.length;
-            const onlineCount = nodes.filter(n => n.status === 'online').length;
-            const offlineCount = nodes.filter(n => n.status === 'offline').length;
-            const activeCount = nodes.filter(n => n.is_active).length;
-            document.getElementById('stat-total').textContent = total;
-            document.getElementById('stat-online').textContent = onlineCount;
-            document.getElementById('stat-offline').textContent = offlineCount;
-            document.getElementById('stat-active').textContent = activeCount;
+            document.getElementById('stat-total').textContent = nodes.length;
+            document.getElementById('stat-online').textContent = nodes.filter(n => n.status === 'online').length;
+            document.getElementById('stat-offline').textContent = nodes.filter(n => n.status === 'offline').length;
+            document.getElementById('stat-active').textContent = nodes.filter(n => n.is_active).length;
 
             if (!nodes.length) {
                 container.innerHTML = `
-                    <article class="node-card empty-state">
-                        <h3>${NODES_ICON_SVG} 暂无节点</h3>
+                    <div class="card empty">
+                        <div class="empty-icon"><i class="ph ph-share-network"></i></div>
+                        <h3>暂无节点</h3>
                         <p>点击上方"添加新节点"创建你的第一个推理节点。</p>
-                    </article>
-                `;
+                    </div>`;
                 return;
             }
 
             container.innerHTML = nodes.map(node => {
-                const statusClass = node.status === 'online' ? 'online' : 'offline';
-                const statusText = node.status === 'online' ? '● 在线' : '● 离线';
-                const ownerInfo = node.username ? USER_ICON_SVG + ' ' + node.username : USER_ICON_SVG + ' 未分配';
-                const isActive = node.is_active;
-                const activeBadge = isActive ?
-                    '<span style="color: var(--pico-ins-color); font-size: 0.8rem;">已启用</span>' :
-                    '<span style="color: var(--pico-del-color); font-size: 0.8rem;">已禁用</span>';
+                const isOnline = node.status === 'online';
+                const statusBadge = isOnline ?
+                    '<span class="badge badge-success"><span class="status-dot online"></span>在线</span>' :
+                    '<span class="badge badge-neutral"><span class="status-dot offline"></span>离线</span>';
+                const activeBadge = node.is_active ?
+                    '<span class="badge badge-success">已启用</span>' :
+                    '<span class="badge badge-danger">已禁用</span>';
 
                 return `
-                    <article class="node-card" data-node-id="${node.id}">
+                    <div class="node-card" data-node-id="${node.id}">
                         <div class="node-header">
                             <div>
-                                <h3 style="margin: 0;">${node.name || '未命名节点'}</h3>
-                                <small style="color: var(--pico-muted-color);">
-                                    ${node.addr || '地址未知'} · ${activeBadge}
-                                </small>
+                                <h3>${escapeHtml(node.name || '未命名节点')}</h3>
+                                <small>${escapeHtml(node.addr || '地址未知')} · ${activeBadge}</small>
                             </div>
-                            <span class="node-status ${statusClass}">${statusText}</span>
+                            ${statusBadge}
                         </div>
 
                         <div class="node-meta">
@@ -318,143 +280,112 @@ if (!$isAjax) {
                                 <div class="node-meta-label">最大任务</div>
                             </div>
                             <div class="node-meta-item">
-                                <div class="node-meta-value" style="font-size: 1rem;">${node.updated_at ? new Date(node.updated_at).toLocaleTimeString() : '--'}</div>
+                                <div class="node-meta-value" style="font-size:.95rem;">${node.updated_at ? new Date(node.updated_at).toLocaleTimeString() : '--'}</div>
                                 <div class="node-meta-label">最后更新</div>
                             </div>
                         </div>
 
-                        <div style="font-size: 0.85rem; color: var(--pico-muted-color);">
-                            ${ownerInfo}
-                            · ${APIKEYS_ICON_SVG} Token: <span class="node-token" onclick="copyText('${node.token}', 'Token 已复制')" title="点击复制 Token">${node.token ? node.token.slice(0, 12) + '…' : '--'}</span>
-                            · ID: ${node.id}
-                            · 能力: ${formatCapabilities(node.capabilities)}
+                        <div class="node-info-line">
+                            <span><i class="ph ph-user"></i> ${escapeHtml(node.username || '未分配')}</span>
+                            <span><i class="ph ph-key"></i>
+                                <button type="button" class="node-token" onclick="copyNodeToken(${node.id})" title="点击复制 Token">${node.token ? escapeHtml(node.token.slice(0, 12)) + '…' : '--'}</button>
+                            </span>
+                            <span>ID: ${node.id}</span>
+                            <span>能力: ${escapeHtml(formatCapabilities(node.capabilities))}</span>
                         </div>
 
                         <div class="card-footer">
-                            <button class="secondary outline" onclick="showNodeDetail(${node.id})">${HISTORY_ICON_SVG} 详情</button>
-                            <button class="outline" onclick="showEditNodeModal(${node.id})">${SETTINGS_ICON_SVG} 修改</button>
+                            <button class="btn btn-ghost btn-sm" onclick="showNodeDetail(${node.id})">详情</button>
+                            <button class="btn btn-secondary btn-sm" onclick="showEditNodeModal(${node.id})">修改</button>
                         </div>
-                    </article>
+                    </div>
                 `;
             }).join('');
         } catch (e) {
-            container.innerHTML = '<article class="node-card"><p style="text-align:center;color:var(--pico-del-color);">加载失败，请检查网络连接。</p></article>';
+            container.innerHTML = '<div class="card empty"><div class="empty-icon"><i class="ph ph-warning"></i></div><p>加载失败，请检查网络连接。</p></div>';
         }
     }
 
-    // 显示节点详情（使用 PicoCSS 模态框）
+    // 节点详情弹窗
     function showNodeDetail(nodeId) {
         const node = allNodes.find(n => n.id === nodeId);
         if (!node) return;
 
-        const statusText = node.status === 'online' ? '在线' : '离线';
-        const activeText = node.is_active ? '已启用' : '已禁用';
+        const isOnline = node.status === 'online';
+        const rows = [
+            ['节点 ID', node.id],
+            ['名称', node.name || '--'],
+            ['状态', isOnline ? '在线' : '离线'],
+            ['启用状态', node.is_active ? '已启用' : '已禁用'],
+            ['地址', node.addr || '--'],
+            ['Token', node.token || '--'],
+            ['所属用户', node.username || '未分配'],
+            ['负载', (node.load_percentage ?? 0) + '%'],
+            ['当前任务', node.current_tasks ?? 0],
+            ['最大任务', node.max_tasks ?? 0],
+            ['识别能力', formatCapabilities(node.capabilities)],
+            ['创建时间', node.created_at || '--'],
+            ['最后更新', node.updated_at || '--'],
+        ];
 
-        const bodyHtml = `
+        const bodyHtml = rows.map(([label, value]) => `
             <div class="node-detail-row">
-                <span class="node-detail-label">节点 ID</span>
-                <span class="node-detail-value">${node.id}</span>
+                <span class="node-detail-label">${escapeHtml(label)}</span>
+                <span class="node-detail-value">${escapeHtml(String(value))}</span>
             </div>
-            <div class="node-detail-row">
-                <span class="node-detail-label">名称</span>
-                <span class="node-detail-value">${node.name || '--'}</span>
-            </div>
-            <div class="node-detail-row">
-                <span class="node-detail-label">状态</span>
-                <span style="font-weight: 600; color: ${node.status === 'online' ? 'var(--pico-ins-color)' : 'var(--pico-del-color)'};">${statusText}</span>
-            </div>
-            <div class="node-detail-row">
-                <span class="node-detail-label">启用状态</span>
-                <span>${activeText}</span>
-            </div>
-            <div class="node-detail-row">
-                <span class="node-detail-label">地址</span>
-                <span class="node-detail-value">${node.addr || '--'}</span>
-            </div>
-            <div class="node-detail-row">
-                <span class="node-detail-label">Token</span>
-                <span class="node-detail-value" style="cursor: pointer;" onclick="copyText('${node.token}', 'Token 已复制')" title="点击复制">${node.token || '--'}</span>
-            </div>
-            <div class="node-detail-row">
-                <span class="node-detail-label">所属用户</span>
-                <span>${node.username || '未分配'}</span>
-            </div>
-            <div class="node-detail-row">
-                <span class="node-detail-label">负载</span>
-                <span>${node.load_percentage ?? 0}%</span>
-            </div>
-            <div class="node-detail-row">
-                <span class="node-detail-label">当前任务</span>
-                <span>${node.current_tasks ?? 0}</span>
-            </div>
-            <div class="node-detail-row">
-                <span class="node-detail-label">最大任务</span>
-                <span>${node.max_tasks ?? 0}</span>
-            </div>
-            <div class="node-detail-row">
-                <span class="node-detail-label">识别能力</span>
-                <span>${formatCapabilities(node.capabilities)}</span>
-            </div>
-            <div class="node-detail-row">
-                <span class="node-detail-label">创建时间</span>
-                <span>${node.created_at || '--'}</span>
-            </div>
-            <div class="node-detail-row">
-                <span class="node-detail-label">最后更新</span>
-                <span>${node.updated_at || '--'}</span>
-            </div>
-        `;
+        `).join('');
 
-        Modal.show(HISTORY_ICON_SVG + ' ' + (node.name || '未命名节点'), bodyHtml, [{
+        Modal.show(node.name || '未命名节点', bodyHtml, [{
             text: '关闭',
-            class: 'secondary',
+            class: 'btn btn-ghost btn-sm',
             click: () => Modal.close()
         }]);
     }
 
-    // 添加节点弹窗（使用 PicoCSS 模态框）
+    // 添加节点弹窗
     function showAddNodeModal() {
         const bodyHtml = `
-            <p>添加一个推理节点到集群中。节点需要运行客户端程序并配置正确的 Token。</p>
+            <p style="margin-bottom:1rem;">添加一个推理节点到集群中。节点需要运行客户端程序并配置正确的 Token。</p>
             <form id="form-add-node">
-                <label>
-                    节点名称
-                    <input type="text" name="name" placeholder="例如：推理节点-01" required maxlength="50" />
-                </label>
-                <label>
-                    节点 Token
-                    <input type="text" name="token" placeholder="节点通信密钥" required />
-                    <small>节点客户端配置的通信密钥</small>
-                </label>
-                <label>
-                    节点地址
-                    <input type="text" name="addr" placeholder="例如：192.168.1.100:13137" />
-                    <small>可选，节点 IP 和端口</small>
-                </label>
-                <label>
-                    识别能力
-                    <select name="capabilities">
+                <div class="field">
+                    <label>节点名称</label>
+                    <input type="text" name="name" class="input" placeholder="例如：推理节点-01" required maxlength="50" />
+                </div>
+                <div class="field">
+                    <label>节点 Token</label>
+                    <input type="text" name="token" class="input" placeholder="节点通信密钥" required />
+                    <span class="hint">节点客户端配置的通信密钥</span>
+                </div>
+                <div class="field">
+                    <label>节点地址</label>
+                    <input type="text" name="addr" class="input" placeholder="例如：192.168.1.100:13137" />
+                    <span class="hint">可选，节点 IP 和端口</span>
+                </div>
+                <div class="field" style="margin-bottom:0;">
+                    <label>识别能力</label>
+                    <select name="capabilities" class="select">
                         <option value="local">仅本地模型 (local)</option>
                         <option value="local,llm">本地模型 + LLM (local,llm)</option>
                     </select>
-                    <small>节点支持的识别能力类型，可通过客户端 LLM_RECOGNITION_ENABLED 配置</small>
-                </label>
+                    <span class="hint">节点支持的识别能力类型，可通过客户端 LLM_RECOGNITION_ENABLED 配置</span>
+                </div>
             </form>
         `;
 
-        Modal.show(ADD_ICON_SVG + ' 添加新节点', bodyHtml, [{
+        Modal.show('添加新节点', bodyHtml, [{
                 text: '取消',
-                class: 'secondary',
+                class: 'btn btn-ghost btn-sm',
                 click: () => Modal.close()
             },
             {
                 text: '确认添加',
-                click: () => submitAddNode()
+                class: 'btn btn-primary btn-sm',
+                click: (e) => submitAddNode(e.target)
             }
         ]);
     }
 
-    async function submitAddNode() {
+    async function submitAddNode(btn) {
         const form = document.getElementById('form-add-node');
         if (!form) return;
 
@@ -474,9 +405,10 @@ if (!$isAjax) {
             return;
         }
 
-        const modalContent = Modal._dialog ? Modal._dialog.querySelector('article') : null;
-        const btn = modalContent ? modalContent.querySelector('footer button:last-child') : null;
-        if (btn) btn.setAttribute('aria-busy', 'true');
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = '添加中…';
+        }
 
         try {
             const response = await Auth.fetch(`${window.API_BASE_URL}/nodes`, {
@@ -486,7 +418,7 @@ if (!$isAjax) {
             const result = await response.json();
             if (result.success) {
                 Modal.close();
-                Notify.success('节点添加成功！');
+                Notify.success('节点添加成功');
                 loadNodes();
             } else {
                 Notify.error(result.message || '添加失败');
@@ -494,16 +426,18 @@ if (!$isAjax) {
         } catch (e) {
             Notify.error('网络错误，请检查服务器连接');
         } finally {
-            if (btn) btn.removeAttribute('aria-busy');
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = '确认添加';
+            }
         }
     }
 
-    // 修改节点弹窗（使用 PicoCSS 模态框）
+    // 修改节点弹窗
     function showEditNodeModal(nodeId) {
         const node = allNodes.find(n => n.id === nodeId);
         if (!node) return;
 
-        // 解析 capabilities 为逗号分隔字符串用于 select 匹配
         let capsStr = 'local';
         try {
             const arr = JSON.parse(node.capabilities);
@@ -513,42 +447,42 @@ if (!$isAjax) {
         }
 
         const bodyHtml = `
-            <p>修改节点 <strong>${node.name || '未命名'}</strong> 的配置。</p>
+            <p style="margin-bottom:1rem;">修改节点 <strong>${escapeHtml(node.name || '未命名')}</strong> 的配置。</p>
             <form id="form-edit-node">
-                <input type="hidden" name="node_id" value="${node.id}" />
-                <label>
-                    节点名称
-                    <input type="text" name="name" value="${node.name || ''}" placeholder="例如：推理节点-01" required maxlength="50" />
-                </label>
-                <label>
-                    节点地址
-                    <input type="text" name="addr" value="${node.addr || ''}" placeholder="例如：192.168.1.100:13137" />
-                    <small>可选，节点 IP 和端口</small>
-                </label>
-                <label>
-                    识别能力
-                    <select name="capabilities">
+                <div class="field">
+                    <label>节点名称</label>
+                    <input type="text" name="name" class="input" value="${escapeHtml(node.name || '')}" placeholder="例如：推理节点-01" required maxlength="50" />
+                </div>
+                <div class="field">
+                    <label>节点地址</label>
+                    <input type="text" name="addr" class="input" value="${escapeHtml(node.addr || '')}" placeholder="例如：192.168.1.100:13137" />
+                    <span class="hint">可选，节点 IP 和端口</span>
+                </div>
+                <div class="field" style="margin-bottom:0;">
+                    <label>识别能力</label>
+                    <select name="capabilities" class="select">
                         <option value="local" ${capsStr === 'local' ? 'selected' : ''}>仅本地模型 (local)</option>
                         <option value="local,llm" ${capsStr === 'local,llm' ? 'selected' : ''}>本地模型 + LLM (local,llm)</option>
                     </select>
-                    <small>节点支持的识别能力类型</small>
-                </label>
+                    <span class="hint">节点支持的识别能力类型</span>
+                </div>
             </form>
         `;
 
-        Modal.show(SETTINGS_ICON_SVG + ' 修改节点', bodyHtml, [{
+        Modal.show('修改节点', bodyHtml, [{
                 text: '取消',
-                class: 'secondary',
+                class: 'btn btn-ghost btn-sm',
                 click: () => Modal.close()
             },
             {
                 text: '确认修改',
-                click: () => submitEditNode(node.id)
+                class: 'btn btn-primary btn-sm',
+                click: (e) => submitEditNode(node.id, e.target)
             }
         ]);
     }
 
-    async function submitEditNode(nodeId) {
+    async function submitEditNode(nodeId, btn) {
         const form = document.getElementById('form-edit-node');
         if (!form) return;
 
@@ -563,9 +497,10 @@ if (!$isAjax) {
             return;
         }
 
-        const modalContent = Modal._dialog ? Modal._dialog.querySelector('article') : null;
-        const btn = modalContent ? modalContent.querySelector('footer button:last-child') : null;
-        if (btn) btn.setAttribute('aria-busy', 'true');
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = '修改中…';
+        }
 
         try {
             const response = await Auth.fetch(`${window.API_BASE_URL}/nodes/${nodeId}`, {
@@ -575,7 +510,7 @@ if (!$isAjax) {
             const result = await response.json();
             if (result.success) {
                 Modal.close();
-                Notify.success('节点修改成功！');
+                Notify.success('节点修改成功');
                 loadNodes();
             } else {
                 Notify.error(result.message || '修改失败');
@@ -583,18 +518,17 @@ if (!$isAjax) {
         } catch (e) {
             Notify.error('网络错误，请检查服务器连接');
         } finally {
-            if (btn) btn.removeAttribute('aria-busy');
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = '确认修改';
+            }
         }
     }
 
-    // 刷新按钮
     document.getElementById('btn-refresh-nodes').addEventListener('click', loadNodes);
-
-    // 添加节点按钮
     document.getElementById('btn-add-node').addEventListener('click', showAddNodeModal);
 
     // 页面加载时自动加载，将 Promise 存入全局变量供 layout.php 等待
-    // 与此同时，loadNodes 自身的加载指示器（"加载中…"文字）仍然保留作为回退
     window.dashboardPageInit = function() {
         window.__pageLoadPromise = loadNodes();
     };

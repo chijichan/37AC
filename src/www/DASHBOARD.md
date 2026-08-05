@@ -1,174 +1,73 @@
-# 📊 仪表盘功能说明
+# 仪表盘功能说明
 
-## ✨ 已实现的功能
+> 2026-08 随全站重构更新。视觉基于自研 AC 设计系统「樱花拿铁」（樱花粉单强调色），不再使用 Pico CSS。
 
-### 1. 🎨 响应式布局
-- 基于 Pico CSS 2 的现代化设计
-- 完全响应式,支持移动端和桌面端
-- 深色/浅色主题自适应
+## 功能概览
 
-### 2. 📈 统计卡片
-- **总访问量**: 显示网站总访问次数和增长趋势
-- **图片上传**: 统计上传的图片数量
-- **活跃用户**: 当前活跃用户数
-- **识别准确率**: AI 识别的准确率指标
-- 卡片悬停动画效果
+### 1. SPA 单页结构
 
-### 3. 🚀 快速操作面板
-- 上传图片 (链接到 `/upload`)
-- 用户管理 (链接到 `/users`)
-- 系统设置 (链接到 `/settings`)
-- 数据报表 (链接到 `/reports`)
+- 二级导航（总览 / 节点管理 / API 密钥 / 使用记录 / 设置）无刷新切换
+- 桌面端 pill 导航，移动端折叠为下拉菜单
+- 子页模板由 PHP 端预渲染为 JSON 内嵌（`pageTemplates`），切换时注入 + 脚本重放
+- URL 经 `history.pushState` 同步，支持浏览器前进后退
+- 各子页注册 `window.dashboardPageInit` 钩子，数据加载 Promise 挂 `window.__pageLoadPromise`
 
-### 4. 💻 系统状态监控
-- CPU 使用率进度条
-- 内存使用情况
-- 磁盘空间状态
-- 网络带宽监控
-- 实时更新时间戳
+### 2. 总览（overview）
 
-### 5. 📋 最近活动列表
-- 图片上传活动
-- 用户注册信息
-- 系统更新日志
-- 带图标和时间戳的活动流
-- 悬停高亮效果
+- 统计卡：总访问量 / 图片上传 / 活跃用户 / 识别准确率（数字用 JetBrains Mono）
+- 快速操作：上传图片、节点管理、系统设置、使用记录
+- 系统状态：CPU / 内存 / 磁盘进度条 + 网络上下行速率
+- 最近活动列表 + 最近上传记录表格
+- 数据源：`GET /dashboard/summary`
 
-### 6. 📊 数据表格
-- 最近上传记录表格
-- 包含文件名、识别结果、置信度
-- 进度条可视化置信度
-- 操作按钮
+### 3. 节点管理（nodes）
 
-### 7. 🔔 系统通知
-- 系统运行状态通知
-- 警告和提醒信息
-- 可操作的通知卡片
+- 统计：总节点 / 在线 / 离线 / 已启用
+- 节点卡片：名称、地址、状态徽章、负载与任务数、能力（local / local,llm）
+- Token 点击复制（缩短显示），详情 / 修改走 Modal 弹窗
+- 添加节点：名称、Token、地址、识别能力（仅本地 / 本地+LLM）
+- 数据源：`GET /dashboard/nodes`、`POST /nodes`、`PUT /nodes/{id}`
 
-## 🎨 设计特点
+### 4. API 密钥（apikeys）
 
-### 渐变配色方案
-```css
-主渐变: #667eea → #764ba2 (紫色渐变)
-辅助渐变: #f093fb → #f5576c (粉色渐变)
-系统渐变: #4facfe → #00f2fe (蓝色渐变)
+- 统计：总密钥 / 活跃 / 总调用次数
+- 生成密钥：名称 + 权限级别（只读/读写/管理员）+ 最大使用次数
+- 完整密钥仅在创建时通过 Modal 展示一次（复制按钮 + 确认关闭）
+- 密钥卡片：状态徽章、使用进度条、暂停/启用/撤销/删除（危险操作二次确认）
+- 数据源：`GET /api-keys`、`POST /api-keys`、`PUT /api-keys/{id}`、`POST /api-keys/{id}/revoke`、`DELETE /api-keys/{id}`
+
+### 5. 使用记录（history）
+
+- 统计：总请求 / 已完成 / 未完成 / 完成率（服务端全量统计，非当前页）
+- 筛选：时间范围（7/30/90/365 天）、状态、每页条数
+- 表格：任务 ID、时间、文件名、识别结果、置信度、API 密钥、状态
+- 分页：服务端真实分页（`page` / `limit` / `total_pages` / `total_count` 等字段），仅多页时显示分页栏
+- 任务详情 Modal：完整字段 + 原始返回 JSON（转义渲染）
+- 数据源：`GET /dashboard/tasks?page=&limit=&time_range=&status=`
+
+### 6. 设置（settings）
+
+- 个人信息：用户名 / 邮箱 / 简介（`GET/PUT /users/profile`）
+- 修改密码：旧密码 + 两次新密码校验（`PUT /users/change-password`）
+- 通知偏好：本地存储（后端接口预留）
+- 危险操作：退出登录、删除账户（引导联系管理员）
+
+## 设计要点
+
+- 统计卡与表格使用统一组件（`.stat` / `.table` / `.prob-bar` / `.badge`）
+- 所有 API 返回的动态文本渲染前经 `escapeHtml()` 转义，操作按钮按 ID 回查数据（不再内联拼接参数）
+- 通知用右上角 Toast（`Notify`），确认操作用居中 Modal（`Modal.show`）
+- 空状态、骨架屏加载态均有覆盖
+
+## 访问方式
+
+```
+http://127.0.0.1:8000/dashboard
 ```
 
-### 动画效果
-- 卡片悬停上升效果
-- 阴影渐变过渡
-- 进度条动画
-- 列表项悬停高亮
+未登录访问会被 PHP 端 `require_auth()` 重定向到 `/auth/login`（支持 Session 与 access_token Cookie）。
 
-### 响应式网格
-- 统计卡片: `grid-template-columns: repeat(auto-fit, minmax(250px, 1fr))`
-- 快速操作: `grid-template-columns: repeat(auto-fit, minmax(200px, 1fr))`
-- 两栏布局: Pico CSS 的 `.grid` 类
+## 浏览器兼容性
 
-## 🔧 使用的 Pico CSS 组件
-
-- ✅ Grid 系统
-- ✅ Cards (article 元素)
-- ✅ Tables
-- ✅ Progress 进度条
-- ✅ Buttons
-- ✅ Typography
-- ✅ Spacing utilities
-- ✅ Color system
-
-## 📝 访问方式
-
-启动服务器后访问:
-```
-http://localhost:8000/dashboard
-```
-
-## 🚀 后续扩展建议
-
-### 数据可视化
-可以集成图表库来增强数据展示:
-
-1. **Chart.js** - 轻量级图表库
-```html
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<canvas id="myChart"></canvas>
-```
-
-2. **Apache ECharts** - 功能强大
-```html
-<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
-```
-
-### 实时数据更新
-```javascript
-// 使用 AJAX 定期更新数据
-setInterval(function() {
-    fetch('/api/dashboard/stats')
-        .then(response => response.json())
-        .then(data => {
-            // 更新统计数据
-        });
-}, 30000); // 每30秒更新一次
-```
-
-### WebSocket 实时通知
-```javascript
-const ws = new WebSocket('ws://localhost:8080');
-ws.onmessage = function(event) {
-    // 接收实时通知
-    const notification = JSON.parse(event.data);
-    addNotification(notification);
-};
-```
-
-### 更多功能
-- [ ] 日期范围筛选器
-- [ ] 导出数据为 CSV/Excel
-- [ ] 自定义仪表盘小部件
-- [ ] 拖拽重新排列布局
-- [ ] 数据刷新按钮
-- [ ] 全屏模式
-- [ ] 深色/浅色主题切换器
-
-## 💡 自定义提示
-
-### 修改颜色
-在 `<style>` 标签中修改渐变色:
-```css
-background: linear-gradient(135deg, #your-color1 0%, #your-color2 100%);
-```
-
-### 调整布局
-修改网格列数:
-```css
-.stats-grid {
-    grid-template-columns: repeat(2, 1fr); /* 固定2列 */
-}
-```
-
-### 添加新的统计卡片
-复制 `.stat-card` 结构并修改内容:
-```html
-<article class="stat-card">
-    <h3>新指标</h3>
-    <div class="stat-value">999</div>
-    <div class="stat-change positive">↑ 10%</div>
-</article>
-```
-
-## 📚 参考文档
-
-- [Pico CSS 官方文档](https://picocss.com/)
-- [Pico CSS 组件示例](https://picocss.com/docs/components)
-- [CSS Grid 布局](https://css-tricks.com/snippets/css/complete-guide-grid/)
-
-## 🎯 浏览器兼容性
-
-- ✅ Chrome/Edge (最新版)
-- ✅ Firefox (最新版)
-- ✅ Safari (最新版)
-- ⚠️ IE 11 (不支持,建议升级)
-
----
-
-享受你的新仪表盘! 🎉
+- Chrome / Edge / Firefox / Safari 最新版
+- 不支持 IE（依赖原生 `<dialog>`、ES Module、CSS 自定义属性）

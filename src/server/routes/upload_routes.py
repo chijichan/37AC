@@ -53,10 +53,12 @@ def upload_and_predict():
         if error_response:
             return error_response, status_code
 
-        if "file" not in request.files:
+        # 兼容 file / image 两种字段名（前端上传页使用 image，API 文档约定 file）
+        uploaded_file = request.files.get("file") or request.files.get("image")
+        if uploaded_file is None:
             return jsonify({"success": False, "message": "没有选择文件"}), 400
 
-        file = request.files["file"]
+        file = uploaded_file
         if file.filename == "":
             return jsonify({"success": False, "message": "没有选择文件"}), 400
 

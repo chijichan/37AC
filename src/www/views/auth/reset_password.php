@@ -1,301 +1,96 @@
-<?php require_once ROOT_PATH . '/views/layout.php'; ?>
+<?php
+$extra_css = ['/static/css/pages/auth.css'];
+require_once ROOT_PATH . '/views/layout.php';
+?>
 
-<style>
-    .auth-container {
-        max-width: 420px;
-        margin: 3rem auto;
-        padding: 2rem;
-        background: var(--pico-card-background-color);
-        border-radius: var(--pico-border-radius);
-        box-shadow: var(--pico-box-shadow);
-    }
-
-    .auth-container h1 {
-        text-align: center;
-        margin-bottom: 0.5rem;
-    }
-
-    .auth-container .subtitle {
-        text-align: center;
-        color: var(--pico-muted-color);
-        margin-bottom: 2rem;
-        font-size: 0.9rem;
-    }
-
-    .auth-container .auth-footer {
-        text-align: center;
-        margin-top: 1.5rem;
-        font-size: 0.875rem;
-        color: var(--pico-muted-color);
-    }
-
-    .auth-container .auth-footer a {
-        color: var(--pico-primary);
-        text-decoration: none;
-    }
-
-    .auth-container .auth-footer a:hover {
-        text-decoration: underline;
-    }
-
-    .auth-container .error-message {
-        background: var(--pico-del-color);
-        color: var(--pico-primary-inverse);
-        padding: 0.75rem 1rem;
-        border-radius: var(--pico-border-radius);
-        margin-bottom: 1rem;
-        display: none;
-        font-size: 0.875rem;
-    }
-
-    .auth-container .success-message {
-        background: var(--pico-ins-color);
-        color: var(--pico-primary-inverse);
-        padding: 0.75rem 1rem;
-        border-radius: var(--pico-border-radius);
-        margin-bottom: 1rem;
-        display: none;
-        font-size: 0.875rem;
-    }
-
-    .auth-container .divider {
-        display: flex;
-        align-items: center;
-        gap: 1rem;
-        margin: 1.5rem 0;
-        color: var(--pico-muted-color);
-        font-size: 0.875rem;
-    }
-
-    .auth-container .divider::before,
-    .auth-container .divider::after {
-        content: '';
-        flex: 1;
-        border-bottom: 1px solid var(--pico-muted-border-color);
-    }
-
-    .loading-spinner {
-        text-align: center;
-        padding: 2rem;
-        color: var(--pico-muted-color);
-    }
-
-    .token-invalid-container {
-        text-align: center;
-        padding: 1rem 0;
-    }
-
-    .token-invalid-container .icon-large {
-        font-size: 3rem;
-        margin-bottom: 1rem;
-        display: block;
-    }
-
-    .form-group {
-        margin-bottom: 1.25rem;
-    }
-
-    .form-group label {
-        display: block;
-        margin-bottom: 0.375rem;
-        font-weight: 500;
-    }
-
-    .password-toggle {
-        position: relative;
-    }
-
-    .password-toggle .toggle-btn {
-        position: absolute;
-        right: 10px;
-        top: 50%;
-        transform: translateY(-50%);
-        background: none;
-        border: none;
-        cursor: pointer;
-        padding: 4px 8px;
-        color: var(--pico-muted-color);
-        font-size: 0.85rem;
-        line-height: 1;
-        z-index: 2;
-    }
-
-    .password-toggle .toggle-btn:hover {
-        color: var(--pico-primary);
-    }
-
-    .password-toggle input {
-        padding-right: 3.5rem;
-    }
-
-    .password-strength {
-        margin-top: 0.5rem;
-        height: 4px;
-        border-radius: 2px;
-        background: var(--pico-muted-border-color);
-        transition: all 0.3s ease;
-    }
-
-    .password-strength-bar {
-        height: 100%;
-        border-radius: 2px;
-        width: 0%;
-        transition: all 0.3s ease;
-    }
-
-    .password-strength-text {
-        font-size: 0.75rem;
-        margin-top: 0.25rem;
-        display: block;
-        text-align: right;
-    }
-
-    .password-requirements {
-        list-style: none;
-        padding: 0;
-        margin: 0.5rem 0 0 0;
-        font-size: 0.8rem;
-    }
-
-    .password-requirements li {
-        padding: 2px 0;
-        color: var(--pico-muted-color);
-    }
-
-    .password-requirements li.valid {
-        color: var(--pico-ins-color);
-    }
-
-    .password-requirements li.invalid {
-        color: var(--pico-del-color);
-    }
-
-    .match-indicator {
-        font-size: 0.8rem;
-        display: none;
-        margin-top: 0.25rem;
-    }
-
-    .match-indicator.match {
-        color: var(--pico-ins-color);
-    }
-
-    .match-indicator.no-match {
-        color: var(--pico-del-color);
-    }
-
-    .redirect-countdown {
-        text-align: center;
-        margin-top: 1rem;
-        font-size: 0.85rem;
-        color: var(--pico-muted-color);
-    }
-
-    .auth-container .auth-footer a[role="button"] {
-        color: #fff !important;
-    }
-</style>
-
-<div class="auth-container">
-    <div id="token-verifying">
-        <h1>验证令牌</h1>
-        <div class="loading-spinner">
-            <span aria-busy="true">正在验证重置链接...</span>
-        </div>
-    </div>
-
-    <div id="token-invalid" style="display: none;">
-        <h1>重置密码</h1>
-        <div class="token-invalid-container">
-            <span class="icon-large"><?php require ROOT_PATH . '/views/components/icons/warn.php'; ?></span>
-            <p id="token-error-message">重置链接无效或已过期</p>
-            <div class="auth-footer">
-                <a href="/auth/forgot-password">重新申请重置链接</a>
+<div class="auth-wrap">
+    <div class="auth-card">
+        <div id="token-verifying">
+            <h1>验证令牌</h1>
+            <div class="auth-status-block">
+                <span class="status-icon"><i class="ph ph-circle-notch"></i></span>
+                <p>正在验证重置链接…</p>
             </div>
-            <div class="auth-footer" style="margin-top: 0.25rem;">
+        </div>
+
+        <div id="token-invalid" style="display: none;">
+            <h1>重置密码</h1>
+            <div class="auth-status-block">
+                <span class="status-icon"><i class="ph ph-warning-circle"></i></span>
+                <p id="token-error-message">重置链接无效或已过期</p>
+                <div class="auth-footer">
+                    <a href="/auth/forgot-password">重新申请重置链接</a>
+                </div>
+                <div class="auth-footer">
+                    <a href="/auth/login">返回登录</a>
+                </div>
+            </div>
+        </div>
+
+        <div id="reset-form-container" style="display: none;">
+            <h1>重置密码</h1>
+            <p class="subtitle">请设置你的新密码</p>
+
+            <div id="error-message" class="auth-message error"></div>
+            <div id="success-message" class="auth-message success"></div>
+
+            <form id="reset-form">
+                <div class="field">
+                    <label for="password">新密码</label>
+                    <div class="password-toggle">
+                        <input type="password" id="password" name="password" class="input"
+                            placeholder="请输入新密码（至少 6 位）" autocomplete="new-password" minlength="6" required />
+                        <button type="button" class="toggle-btn" id="toggle-pw" aria-label="切换密码可见性">显示</button>
+                    </div>
+                    <div class="password-strength">
+                        <div id="strength-bar" class="password-strength-bar"></div>
+                    </div>
+                    <span id="strength-text" class="password-strength-text"></span>
+                    <ul class="password-requirements">
+                        <li id="req-length">至少 6 个字符</li>
+                    </ul>
+                </div>
+
+                <div class="field">
+                    <label for="confirm-password">确认新密码</label>
+                    <div class="password-toggle">
+                        <input type="password" id="confirm-password" name="confirm-password" class="input"
+                            placeholder="请再次输入新密码" autocomplete="new-password" minlength="6" required />
+                        <button type="button" class="toggle-btn" id="toggle-confirm-pw" aria-label="切换确认密码可见性">显示</button>
+                    </div>
+                    <span id="match-text" class="match-indicator"></span>
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-block btn-lg" id="submit-btn">重置密码</button>
+            </form>
+
+            <div class="auth-divider">或者</div>
+
+            <div class="auth-footer">
                 <a href="/auth/login">返回登录</a>
             </div>
-        </div>
-    </div>
-
-    <div id="reset-form-container" style="display: none;">
-        <h1>重置密码</h1>
-        <p class="subtitle">请设置你的新密码</p>
-
-        <div id="error-message" class="error-message"></div>
-        <div id="success-message" class="success-message"></div>
-
-        <form id="reset-form">
-            <div class="form-group">
-                <label for="password">新密码</label>
-                <div class="password-toggle">
-                    <input
-                        type="password"
-                        id="password"
-                        name="password"
-                        placeholder="请输入新密码（至少6位）"
-                        aria-label="新密码"
-                        autocomplete="new-password"
-                        minlength="6"
-                        required />
-                    <button type="button" class="toggle-btn" id="toggle-pw" aria-label="切换密码可见性">显示</button>
-                </div>
-                <div class="password-strength">
-                    <div id="strength-bar" class="password-strength-bar"></div>
-                </div>
-                <span id="strength-text" class="password-strength-text"></span>
-                <ul class="password-requirements">
-                    <li id="req-length">至少 6 个字符</li>
-                </ul>
+            <div class="auth-footer">
+                <a href="/auth/forgot-password">重新发送重置链接</a>
             </div>
+        </div>
 
-            <div class="form-group">
-                <label for="confirm-password">确认新密码</label>
-                <div class="password-toggle">
-                    <input
-                        type="password"
-                        id="confirm-password"
-                        name="confirm-password"
-                        placeholder="请再次输入新密码"
-                        aria-label="确认新密码"
-                        autocomplete="new-password"
-                        minlength="6"
-                        required />
-                    <button type="button" class="toggle-btn" id="toggle-confirm-pw" aria-label="切换确认密码可见性">显示</button>
+        <div id="success-container" style="display: none;">
+            <h1>密码重置成功</h1>
+            <div class="auth-status-block">
+                <span class="status-icon" style="color: var(--ac-success);"><i class="ph ph-check-circle"></i></span>
+                <p>你的密码已成功重置。</p>
+                <div class="redirect-countdown">
+                    <span id="redirect-countdown-text">5</span> 秒后自动跳转到登录页…
                 </div>
-                <span id="match-text" class="match-indicator"></span>
-            </div>
-
-            <button type="submit" id="submit-btn">重置密码</button>
-        </form>
-
-        <div class="divider">或者</div>
-
-        <div class="auth-footer">
-            <a href="/auth/login">返回登录</a>
-        </div>
-        <div class="auth-footer" style="margin-top: 0.25rem;">
-            <a href="/auth/forgot-password">重新发送重置链接</a>
-        </div>
-    </div>
-
-    <div id="success-container" style="display: none;">
-        <h1>密码重置成功</h1>
-        <div class="token-invalid-container">
-            <p>你的密码已成功重置</p>
-            <div class="redirect-countdown">
-                <span id="redirect-countdown-text">5</span> 秒后自动跳转到登录页...
-            </div>
-            <div class="auth-footer" style="margin-top: 1rem;">
-                <a href="/auth/login" role="button" style="text-decoration: none;">立即登录</a>
+                <div class="auth-footer" style="margin-top: 1rem;">
+                    <a href="/auth/login" class="btn btn-primary">立即登录</a>
+                </div>
             </div>
         </div>
     </div>
 </div>
 
 <script>
-    const API_BASE_URL = '<?= API_BASE_URL ?>';
-
     const urlParams = new URLSearchParams(window.location.search);
     const resetToken = urlParams.get('token') || '<?= htmlspecialchars(isset($token) ? $token : '') ?>';
 
@@ -306,16 +101,6 @@
             el.style.display = 'block';
             const successEl = document.getElementById('success-message');
             if (successEl) successEl.style.display = 'none';
-        }
-    }
-
-    function showSuccess(message) {
-        const el = document.getElementById('success-message');
-        if (el) {
-            el.textContent = message;
-            el.style.display = 'block';
-            const errorEl = document.getElementById('error-message');
-            if (errorEl) errorEl.style.display = 'none';
         }
     }
 
@@ -347,10 +132,10 @@
 
         if (password.length >= 6) {
             reqLength.className = 'valid';
-            reqLength.innerHTML = '✓ 至少 6 个字符';
+            reqLength.textContent = '已满足：至少 6 个字符';
         } else {
             reqLength.className = 'invalid';
-            reqLength.innerHTML = '✗ 至少 6 个字符（当前 ' + password.length + ' 位）';
+            reqLength.textContent = `至少 6 个字符（当前 ${password.length} 位）`;
         }
 
         let strength = 0;
@@ -362,20 +147,20 @@
         if (password.length >= 14) strength += 15;
 
         strength = Math.min(100, strength);
-
         bar.style.width = strength + '%';
+
         if (strength < 40) {
-            bar.style.background = 'var(--pico-del-color)';
+            bar.style.background = 'var(--ac-danger)';
             text.textContent = '弱';
-            text.style.color = 'var(--pico-del-color)';
+            text.style.color = 'var(--ac-danger)';
         } else if (strength < 70) {
-            bar.style.background = '#ffc107';
+            bar.style.background = 'var(--ac-warning)';
             text.textContent = '中等';
-            text.style.color = '#ffc107';
+            text.style.color = 'var(--ac-warning)';
         } else {
-            bar.style.background = 'var(--pico-ins-color)';
+            bar.style.background = 'var(--ac-success)';
             text.textContent = '强';
-            text.style.color = 'var(--pico-ins-color)';
+            text.style.color = 'var(--ac-success)';
         }
     }
 
@@ -391,10 +176,10 @@
         matchText.style.display = 'block';
         if (value === password) {
             matchText.className = 'match-indicator match';
-            matchText.textContent = '✓ 密码匹配';
+            matchText.textContent = '密码匹配';
         } else {
             matchText.className = 'match-indicator no-match';
-            matchText.textContent = '✗ 密码不匹配';
+            matchText.textContent = '密码不匹配';
         }
     }
 
@@ -437,7 +222,6 @@
     let redirectTimer = null;
 
     function startRedirectCountdown(seconds) {
-        const container = document.getElementById('success-container');
         const countdownEl = document.getElementById('redirect-countdown-text');
         let remaining = seconds;
 
@@ -462,7 +246,7 @@
         const btn = document.getElementById('submit-btn');
 
         if (!password || password.length < 6) {
-            showError('密码长度不能少于6位');
+            showError('密码长度不能少于 6 位');
             return;
         }
 
@@ -472,9 +256,8 @@
         }
 
         hideAlerts();
-        btn.setAttribute('aria-busy', 'true');
-        btn.textContent = '重置中...';
         btn.disabled = true;
+        btn.textContent = '重置中…';
 
         try {
             const response = await fetch(`${API_BASE_URL}/auth/reset-password`, {
@@ -494,26 +277,22 @@
             if (result.success) {
                 document.getElementById('reset-form-container').style.display = 'none';
                 document.getElementById('success-container').style.display = 'block';
-                // 5秒后自动跳转到登录页
                 startRedirectCountdown(5);
             } else {
                 showError(result.message || '密码重置失败，请重试');
-                btn.removeAttribute('aria-busy');
-                btn.textContent = '重置密码';
                 btn.disabled = false;
+                btn.textContent = '重置密码';
             }
         } catch (error) {
             showError('网络错误：无法连接到服务器，请检查网络或联系管理员');
-            btn.removeAttribute('aria-busy');
-            btn.textContent = '重置密码';
             btn.disabled = false;
+            btn.textContent = '重置密码';
         }
     }
 
     document.addEventListener('DOMContentLoaded', function() {
         verifyToken();
 
-        // 密码显示/隐藏切换
         document.getElementById('toggle-pw').addEventListener('click', function() {
             togglePasswordVisibility('password', 'toggle-pw');
         });
@@ -531,7 +310,6 @@
 
         document.getElementById('reset-form').addEventListener('submit', handleResetPassword);
 
-        // 页面卸载时清除定时器
         window.addEventListener('beforeunload', function() {
             if (redirectTimer) {
                 clearInterval(redirectTimer);

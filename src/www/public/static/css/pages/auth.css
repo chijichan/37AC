@@ -1,0 +1,229 @@
+/* 认证页共享样式（login / register / forgot / reset） */
+
+.auth-wrap {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2.5rem 1.25rem 3.5rem;
+}
+
+.auth-card {
+    width: 100%;
+    max-width: 420px;
+    background: var(--ac-surface);
+    border-radius: var(--ac-radius-modal);
+    box-shadow: var(--ac-shadow-float);
+    padding: 2.2rem 2rem;
+}
+
+.auth-card h1 {
+    text-align: center;
+    font-size: 1.6rem;
+    margin-bottom: .35rem;
+}
+
+.auth-card .subtitle {
+    text-align: center;
+    color: var(--ac-ink-500);
+    margin: 0 auto 1.8rem;
+    font-size: .92rem;
+}
+
+.auth-message {
+    display: none;
+    padding: .7rem 1rem;
+    border-radius: var(--ac-radius-input);
+    margin-bottom: 1rem;
+    font-size: .88rem;
+    font-weight: 600;
+}
+
+.auth-message.error {
+    background: var(--ac-danger-bg);
+    color: var(--ac-danger);
+}
+
+.auth-message.success {
+    background: var(--ac-success-bg);
+    color: var(--ac-success);
+}
+
+.auth-footer {
+    text-align: center;
+    margin-top: 1.4rem;
+    font-size: .88rem;
+    color: var(--ac-ink-500);
+}
+
+.auth-footer a {
+    font-weight: 600;
+}
+
+.auth-footer+.auth-footer {
+    margin-top: .5rem;
+}
+
+.auth-divider {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin: 1.4rem 0 0;
+    color: var(--ac-ink-300);
+    font-size: .82rem;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+    content: '';
+    flex: 1;
+    border-bottom: 1px solid var(--ac-ink-100);
+}
+
+.auth-info-box {
+    background: var(--ac-bg);
+    border-radius: var(--ac-radius-input);
+    padding: .9rem 1rem;
+    margin-bottom: 1.3rem;
+    font-size: .86rem;
+    color: var(--ac-ink-500);
+    line-height: 1.6;
+}
+
+.auth-info-box.warning {
+    background: var(--ac-warning-bg);
+    color: var(--ac-warning);
+}
+
+.auth-info-box a {
+    word-break: break-all;
+}
+
+/* 密码可见性切换 */
+.password-toggle {
+    position: relative;
+}
+
+.password-toggle .input {
+    padding-right: 4rem;
+}
+
+.password-toggle .toggle-btn {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    padding: .3rem .6rem;
+    color: var(--ac-ink-500);
+    font-size: .8rem;
+    font-weight: 600;
+    border-radius: var(--ac-radius-pill);
+    transition: color var(--ac-dur-fast) var(--ac-ease-out),
+        background var(--ac-dur-fast) var(--ac-ease-out);
+}
+
+.password-toggle .toggle-btn:hover {
+    color: var(--ac-pink-600);
+    background: var(--ac-pink-50);
+}
+
+/* 密码强度条 */
+.password-strength {
+    margin-top: .55rem;
+    height: 5px;
+    border-radius: var(--ac-radius-pill);
+    background: var(--ac-ink-100);
+    overflow: hidden;
+}
+
+.password-strength-bar {
+    height: 100%;
+    border-radius: inherit;
+    width: 0%;
+    transition: width var(--ac-dur) var(--ac-ease-out),
+        background var(--ac-dur) var(--ac-ease-out);
+}
+
+.password-strength-text {
+    font-size: .75rem;
+    margin-top: .3rem;
+    display: block;
+    text-align: right;
+}
+
+.password-requirements {
+    list-style: none;
+    padding: 0;
+    margin: .5rem 0 0;
+    font-size: .8rem;
+}
+
+.password-requirements li {
+    padding: 2px 0;
+    color: var(--ac-ink-500);
+}
+
+.password-requirements li.valid {
+    color: var(--ac-success);
+}
+
+.password-requirements li.invalid {
+    color: var(--ac-danger);
+}
+
+.match-indicator {
+    font-size: .8rem;
+    display: none;
+    margin-top: .3rem;
+}
+
+.match-indicator.match {
+    color: var(--ac-success);
+}
+
+.match-indicator.no-match {
+    color: var(--ac-danger);
+}
+
+/* 冷却倒计时面板 */
+.cooldown-timer {
+    text-align: center;
+    padding: 1.2rem;
+    background: var(--ac-bg);
+    border-radius: var(--ac-radius-input);
+    margin-top: 1rem;
+    display: none;
+}
+
+.cooldown-timer .timer-display {
+    font-family: var(--ac-font-mono);
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: var(--ac-pink-600);
+    margin: .4rem 0;
+}
+
+.cooldown-timer .timer-label {
+    font-size: .8rem;
+    color: var(--ac-ink-500);
+}
+
+/* 令牌验证/结果页 */
+.auth-status-block {
+    text-align: center;
+    padding: 1rem 0;
+}
+
+.auth-status-block .status-icon {
+    font-size: 2.6rem;
+    color: var(--ac-pink-400);
+    display: block;
+    margin-bottom: .8rem;
+}
+
+.redirect-countdown {
+    text-align: center;
+    margin-top: 1rem;
+    font-size: .85rem;
+    color: var(--ac-ink-500);
+}

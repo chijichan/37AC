@@ -1,177 +1,61 @@
-# 🔐 项目安全措施说明
+# 项目安全措施说明
+
+> 2026-08 随全站重构更新。本文档描述 `www/`（PHP Web 应用）的当前实际安全状态。
 
 ## 已实施的安全措施
 
-### 1. 目录结构保护 ✅
-- **Web 根目录**: `public/` - 只有这个目录应该对外暴露
-- **Views 目录**: `views/` - 在 public 之外,无法直接访问
-- 所有 PHP 视图文件都在 `views/` 中,通过 `index.php` 路由访问
+### 1. 目录结构保护
 
-### 2. `.htaccess` 保护 (Apache) ✅
+- Web 根目录仅 `public/`，`views/`、`controllers/` 在其外，无法直接 HTTP 访问
+- `www/.htaccess` 与 `public/.htaccess`：阻止隐藏文件、`.env`、版本控制目录等敏感路径
+- 所有页面经 `public/index.php` 单入口路由分发
 
-#### `public/.htaccess`
-- ✅ 阻止访问隐藏文件 (`.git`, `.env` 等)
-- ✅ 阻止访问敏感配置文件
-- ✅ 禁用目录浏览
-- ✅ 添加安全响应头
-- ✅ URL 重写到 index.php
+### 2. 密钥管理
 
-#### `views/.htaccess`
-- ✅ 拒绝所有直接 HTTP 访问
+- **站级 API Key 不下发前端**：上传相关请求走 `api_controller.php` 同源代理（`/api/upload`、`/api/tasks/*`），`X-API-Key` 由服务端从 `.env` 的 `UPLOAD_API_KEY` 读取注入
+- 用户级接口使用 JWT（`Auth.fetch` 自动携带与刷新）
+- `.env` 不提交仓库，模板见 `.env.example`
 
-### 3. PHP 代码层保护 ✅
+### 3. XSS 防护
 
-#### `public/index.php`
-- ✅ 设置安全 HTTP 头
-- ✅ 定义 `APP_ACCESS` 常量
-- ✅ 清理和验证 URI (防止路径遍历)
+- 全局 `escapeHtml()` 工具（`app.js`），所有 API 返回的动态文本插入 DOM 前必须转义
+- `Notify` 通知使用 `textContent` 渲染，天然免疫注入
+- `Modal.show` 的 `bodyHtml` 约定：动态数据由调用方先转义
+- 操作按钮不再内联拼接用户数据（`onclick="fn('${name}')"` 类写法已消除，改为按 ID 回查）
 
-#### `views/layout.php`
-- ✅ 检查 `APP_ACCESS` 常量
-- ✅ 拒绝直接访问
+### 4. 错误信息控制
 
-### 4. 安全 HTTP 头 ✅
-```
-X-Frame-Options: SAMEORIGIN          # 防止点击劫持
-X-Content-Type-Options: nosniff      # 防止 MIME 类型嗅探
-X-XSS-Protection: 1; mode=block      # XSS 保护
-```
+- `display_errors` 由 `.env` 的 `APP_DEBUG` 控制，默认关闭；生产环境必须为 `false`
+- 调试开启时仅用于本地开发
 
----
+### 5. 认证与会话
 
-## 建议的额外安全措施
+- `require_auth()` 支持 Session 与 `access_token` Cookie 双通道，JWT 过期自动尝试 refresh
+- 未登录访问受保护页面重定向 `/auth/login`
+- 密码重置令牌一次性、带过期时间；重置页 canonical 不含令牌参数（防止凭证进入 SEO 元数据）
 
-### 🔒 生产环境部署时
-
-1. **禁用 PHP 错误显示**
-```php
-// 在 index.php 顶部添加
-ini_set('display_errors', 0);
-error_reporting(0);
-```
-
-2. **添加 HTTPS 强制跳转** (在 `.htaccess`)
-```apache
-# 强制使用 HTTPS
-RewriteCond %{HTTPS} off
-RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
-```
-
-3. **添加 CSP (内容安全策略)**
-```php
-header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; img-src 'self' https://static.322337.xyz data:; font-src 'self' data:;");
-```
-
-4. **文件上传安全** (针对 `/upload` 页面)
-```php
-// 验证文件类型
-$allowed_types = ['image/jpeg', 'image/png', 'image/jpg'];
-if (!in_array($_FILES['file']['type'], $allowed_types)) {
-    die('Invalid file type');
-}
-
-// 验证文件大小
-if ($_FILES['file']['size'] > 10 * 1024 * 1024) { // 10MB
-    die('File too large');
-}
-
-// 重命名上传的文件
-$new_filename = bin2hex(random_bytes(16)) . '.jpg';
-```
-
-5. **添加速率限制**
-   - 防止暴力攻击
-   - 限制 API 请求频率
-
-6. **环境变量配置**
-```php
-// 创建 .env 文件存储敏感信息
-// 使用 vlucas/phpdotenv 库加载
-```
-
----
-
-## 服务器配置建议
-
-### Nginx (如果使用)
-创建 `nginx.conf`:
-```nginx
-location ~ /views/ {
-    deny all;
-    return 403;
-}
-
-location ~ /\.(?!well-known) {
-    deny all;
-}
-
-location / {
-    try_files $uri $uri/ /index.php?$query_string;
-}
-```
-
-### PHP-FPM 设置
-```ini
-expose_php = Off
-allow_url_fopen = Off
-allow_url_include = Off
-max_execution_time = 30
-memory_limit = 128M
-upload_max_filesize = 10M
-post_max_size = 10M
-```
-
----
-
-## 常见攻击防护
+## 常见攻击防护现状
 
 | 攻击类型 | 防护措施 | 状态 |
 |---------|---------|------|
-| 路径遍历 | URI 清理 + .htaccess | ✅ |
-| 直接访问 Views | APP_ACCESS 检查 | ✅ |
-| XSS 攻击 | 安全头 + 输入验证 | ⚠️ 需要在表单处理中添加 |
-| CSRF 攻击 | CSRF Token | ❌ 待实现 |
-| SQL 注入 | 使用 PDO/Prepared Statements | ❌ 当前无数据库 |
-| 文件上传漏洞 | 类型验证 + 大小限制 | ⚠️ 已在前端实现,需后端加强 |
-| 点击劫持 | X-Frame-Options | ✅ |
-| 暴力破解 | 速率限制 | ❌ 待实现 |
+| 路径遍历 / 直接访问视图 | public 外目录 + .htaccess | ✅ |
+| API Key 泄露 | 服务端代理注入，前端零密钥 | ✅ |
+| XSS | escapeHtml + textContent 渲染 | ✅（新增代码需遵守约定） |
+| 错误信息泄露 | APP_DEBUG 默认关闭 | ✅（生产需确认配置） |
+| 点击劫持 | 依赖 .htaccess 安全头 | ⚠️ 生产建议复查 |
+| CSRF | 表单未实现 Token 校验 | ❌ 待实现 |
+| 暴力破解 / 频率限制 | 依赖 Flask 端限流中间件 | ⚠️ PHP 侧未独立实现 |
+| HTTPS | 未强制 | ❌ 生产需配置 |
 
----
+## 生产部署清单
 
-## 安全检查清单
-
-开发环境:
-- [x] 目录结构合理
-- [x] .htaccess 配置
-- [x] 基本安全头
-- [x] 防止直接访问
-
-生产环境额外需要:
-- [ ] HTTPS 证书
-- [ ] 隐藏 PHP 版本信息
-- [ ] 错误日志记录
-- [ ] 定期安全更新
-- [ ] 文件权限设置 (755 目录, 644 文件)
-- [ ] 备份策略
-
----
-
-## 总结
-
-**当前安全等级**: 🟡 中等 (适合开发/测试)
-
-**达到生产级别需要**:
-1. ✅ 基础防护 (已完成)
-2. ⚠️  输入验证和清理
-3. ⚠️  CSRF 保护
-4. ⚠️  速率限制
-5. ❌ HTTPS 配置
-6. ❌ 日志监控
-
----
+1. `.env` 设置 `APP_DEBUG=false`，配置强随机 `UPLOAD_API_KEY`（与后端 `UPLOAD_API_KEYS` 一致）
+2. 使用 Apache / Nginx + PHP-FPM（**不要用 `php -S`**：单线程，SSE 流式代理会阻塞其他请求）
+3. 强制 HTTPS（`.htaccess` 或 Nginx 配置 301 跳转）
+4. PHP 配置：`expose_php=Off`、`allow_url_include=Off`、`upload_max_filesize=10M`
+5. 文件权限：目录 755、文件 644，`.env` 600
 
 ## 参考资源
 
 - [OWASP Top 10](https://owasp.org/www-project-top-ten/)
 - [PHP Security Guide](https://www.php.net/manual/en/security.php)
-- [Apache Security Tips](https://httpd.apache.org/docs/2.4/misc/security_tips.html)

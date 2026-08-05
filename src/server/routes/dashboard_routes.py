@@ -13,7 +13,7 @@ from services.dashboard.node_service import (
     get_user_nodes_from_db,
 )
 from services.dashboard.task_service import (
-    get_user_tasks_from_db,
+    get_tasks_paginated,
 )
 from middleware.auth_middleware import login_required
 
@@ -72,19 +72,23 @@ def api_dashboard_tasks():
         # 获取查询参数
         page = request.args.get("page", 1, type=int)
         limit = request.args.get("limit", 15, type=int)
+        time_range = request.args.get("time_range", 30, type=int)
+        status = request.args.get("status", "", type=str)
 
-        tasks = get_recent_tasks(limit=limit)
-
-        if not tasks:
-            tasks = []
+        result = get_tasks_paginated(
+            limit=limit, page=page, time_range=time_range, status_filter=status
+        )
 
         return jsonify(
             {
                 "type": "dashboard_tasks",
                 "timestamp": int(datetime.now().timestamp()),
-                "data": tasks,
-                "page": page,
-                "total_pages": 1,
+                "data": result["tasks"],
+                "page": result["page"],
+                "total_pages": result["total_pages"],
+                "total_count": result["total"],
+                "completed_count": result["completed"],
+                "pending_count": result["pending"],
             }
         )
     except Exception as e:

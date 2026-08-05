@@ -4,9 +4,6 @@
  * 入口文件
  */
 
-error_reporting(E_ALL);
-ini_set('display_errors', 1);
-
 define('ROOT_PATH', dirname(__DIR__));
 
 // 加载 .env 环境变量文件
@@ -46,6 +43,22 @@ if (empty($apiBaseUrl) && isset($_SERVER['API_BASE_URL'])) {
     $apiBaseUrl = $_SERVER['API_BASE_URL'];
 }
 define('API_BASE_URL', $apiBaseUrl ?: 'http://127.0.0.1:13138');
+
+// 上传接口的站级 API Key（仅存服务端，经 /api/* 代理注入，勿下发前端）
+$uploadApiKey = getenv('UPLOAD_API_KEY');
+if (empty($uploadApiKey) && isset($_ENV['UPLOAD_API_KEY'])) {
+    $uploadApiKey = $_ENV['UPLOAD_API_KEY'];
+}
+define('UPLOAD_API_KEY', $uploadApiKey ?: '');
+
+// 调试模式：仅在 .env 显式开启时显示错误（生产环境必须为 false）
+$appDebug = getenv('APP_DEBUG');
+if ($appDebug === false && isset($_ENV['APP_DEBUG'])) {
+    $appDebug = $_ENV['APP_DEBUG'];
+}
+$isDebug = filter_var($appDebug, FILTER_VALIDATE_BOOLEAN);
+error_reporting($isDebug ? E_ALL : 0);
+ini_set('display_errors', $isDebug ? '1' : '0');
 
 spl_autoload_register(function ($class) {
     $file = ROOT_PATH . '/controllers/' . $class . '.php';
@@ -188,28 +201,10 @@ $router->get('/auth/register', 'auth_controller@register');
 $router->get('/auth/forgot-password', 'auth_controller@forgot_password');
 $router->get('/auth/reset-password', 'auth_controller@reset_password');
 
+// API 代理路由（X-API-Key 由服务端注入，前端零密钥）
+$router->post('/api/upload', 'api_controller@upload');
+$router->get('/api/tasks/{task_id}/stream', 'api_controller@task_stream');
+$router->get('/api/tasks/{task_id}', 'api_controller@task_result');
+
 // 执行路由分发
 $router->dispatch();
-
-// switch ($_SERVER['REQUEST_URI']) {
-//     case '/':
-//     case '/home':
-//         $title = '首页';
-//         require '../views/index.php';
-//         break;
-//     case '/upload':
-//         $title = '上传图片';
-//         require '../views/upload.php';
-//         break;
-//     case '/contact':
-//         $title = '联系我们';
-//         require '../views/contact.php';
-//         break;
-//     case '/about':
-//         $title = '关于我们';
-//         require '../views/about.php';
-//         break;
-//     default:
-//         http_response_code(404);
-//         break;
-// }

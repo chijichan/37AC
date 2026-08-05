@@ -48,7 +48,7 @@
 
 - `src/cli/`：训练、预测与边缘节点客户端
 - `src/server/`：Flask 服务端、API、节点管理、限流中间件
-- `www/`：PHP 仪表盘与前端页面
+- `src/www/`：PHP 仪表盘与前端页面
 
 ---
 
@@ -104,10 +104,11 @@ flowchart TB
 - 结果写入 **MySQL** 数据库，支持历史查询
 
 ### 管理仪表盘
-- 基于 **Pico CSS 2** 响应式界面
+- 自研 **AC 设计系统**（樱花粉单强调色，Nunito + JetBrains Mono 自托管字体，Phosphor 图标）
 - 支持用户注册、登录、密码找回
 - API Key 管理与节点状态监控
-- 推理历史与系统设置查看
+- 推理历史查看（服务端真实分页与筛选）与系统设置
+- 上传请求经 PHP 同源代理，站级 API Key 不下发前端
 
 ### 运行安全与稳定性
 - 前端限制上传类型与大小
@@ -170,17 +171,28 @@ flowchart TB
 │     │  └─ dashboard/                    # 仪表盘服务
 │     ├─ AC_web/__init__.py               # Flask 应用初始化
 │     └─ saves/
-├─ www/
-│  ├─ public/index.php
+├─ src/www/
+│  ├─ public/
+│  │  ├─ index.php                       # 入口（路由注册、.env、JWT 验证）
+│  │  └─ static/
+│  │     ├─ css/ac-tokens.css            # AC 设计系统变量
+│  │     ├─ css/ac-components.css        # 组件库
+│  │     ├─ css/vendor/                  # 本地化第三方 CSS（cropper、phosphor）
+│  │     ├─ scripts/app.js               # 全局模块（Notify/Modal/escapeHtml）
+│  │     ├─ scripts/auth.js              # JWT 认证
+│  │     ├─ scripts/vendor/              # 本地化第三方 JS（cropper、imgly、onnxruntime）
+│  │     └─ fonts/                       # 自托管可变字体（Nunito、JetBrains Mono）
 │  ├─ router.php
 │  ├─ .env.example
 │  ├─ start-server.bat
 │  ├─ controllers/
+│  │  └─ api_controller.php              # API 代理（X-API-Key 服务端注入）
 │  ├─ views/
-│  │  ├─ home/upload.php                 # 快速/高级模式 + SSE
+│  │  ├─ layout.php / footer.php / error.php
+│  │  ├─ home/upload.php                 # 上传识别（裁剪/去背景/链接上传 + SSE）
 │  │  ├─ home/about.php
 │  │  ├─ home/contact.php
-│  │  ├─ dashboard/
+│  │  ├─ dashboard/                      # SPA 壳 + 5 个子页
 │  │  └─ auth/
 │  ├─ DASHBOARD.md
 │  └─ SECURITY.md
@@ -273,11 +285,15 @@ dataset/
 | 技术 | 用途 |
 |------|------|
 | PHP 7+ | 仪表盘后端 |
-| Pico CSS 2 | 响应式样式 |
-| Cropper.js | 图片裁剪 |
-| @imgly/background-removal | AI 去背景 |
+| AC 设计系统（自研） | 设计变量 + 组件库（替代原 Pico CSS） |
+| Nunito / JetBrains Mono | 自托管可变字体 |
+| Phosphor Icons | 图标（自托管 web font） |
+| Cropper.js 1.6.2 | 图片裁剪（自托管） |
+| @imgly/background-removal 1.7.0 | AI 去背景（ESM 自托管，WASM 模型自托管） |
 | Auth.js | JWT 认证模块 |
 | EventSource (SSE) | 实时结果推送 |
+
+> 前端页面零外部 CDN 引用，第三方依赖全部本地化于 `src/www/public/static/vendor/`。
 
 ### 安全与认证
 
@@ -341,6 +357,11 @@ NODE_ID=1
 TOKEN=your_node_token
 LLM_RECOGNITION_ENABLED=false
 LLM_API_KEY=your_api_key
+
+# PHP Web 配置（src/www/.env）
+API_BASE_URL=http://127.0.0.1:13138
+UPLOAD_API_KEY=your_upload_api_key   # 与后端 UPLOAD_API_KEYS 一致，仅存服务端
+APP_DEBUG=false                      # 生产必须为 false
 ```
 
 ### 5. 启动 Flask 服务端
@@ -449,15 +470,17 @@ python src/server/runserver.py
 ### 3. 启动 PHP 仪表盘
 
 ```bash
-cd www
+cd src/www
 php -S 127.0.0.1:8000 -t public/
 ```
 
 或在 Windows 下运行：
 
 ```bash
-www\start-server.bat
+src\www\start-server.bat
 ```
+
+> 生产环境请使用 Apache / Nginx + PHP-FPM。`php -S` 为单线程，SSE 流式代理期间会阻塞其他请求。
 
 访问：`http://127.0.0.1:8000`
 
@@ -544,8 +567,10 @@ python src/cli/main.py --mode 4
 |------|------|
 | Flask Web / API | `http://localhost:13138` |
 | PHP 仪表盘 | `http://localhost:8000` |
-| 上传流式接口 | `POST http://localhost:13138/upload` (Accept: `text/event-stream`) |
-| SSE 结果流 | `GET http://localhost:13138/tasks/<task_id>/stream` |
+| 上传流式接口（直连 Flask） | `POST http://localhost:13138/upload` (Accept: `text/event-stream`) |
+| SSE 结果流（直连 Flask） | `GET http://localhost:13138/tasks/<task_id>/stream` |
+| 上传代理（经 PHP，推荐浏览器使用） | `POST http://localhost:8000/api/upload` |
+| SSE 结果代理（经 PHP） | `GET http://localhost:8000/api/tasks/<task_id>/stream` |
 
 ---
 
@@ -622,11 +647,14 @@ LLM_TIMEOUT_SEC=30
 
 LLM 推理在单独的后台线程中执行，不会阻塞节点的主消息循环。
 
-### 前端识别模式
+### 前端上传页功能
 
-上传页面支持两种模式：
-- **快速模式**：默认使用 `auto` 识别方式（由节点自动选择 local/LLM），一键上传识别
-- **高级模式**：可自定义识别方式（local/LLM/auto）和去背景方式（快速Canvas/AI深度学习）
+上传页（`/upload`）支持：
+
+- **本地上传**：点击选择或拖拽（JPG/PNG，最大 10MB），选择后立即显示预览
+- **链接上传**：粘贴图片 URL 直接加载（走相同的处理流程）
+- **图片处理**（可选）：手动框选裁剪（Cropper.js，粉色主题适配）/ 自动裁剪（YOLO）；AI 去背景（imgly + onnxruntime，WASM 模型自托管）
+- **流式识别**：经 PHP 代理 `/api/upload` SSE 透传，实时显示上传/排队/识别进度，结果含置信度条与识别来源徽章（本地模型 / 大模型）
 
 ---
 

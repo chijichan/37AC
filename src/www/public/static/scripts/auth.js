@@ -199,6 +199,9 @@ const Auth = {
     }
 };
 
+// 顶层 const 不会挂载 window，显式暴露供其他脚本（app.js 等）使用
+window.Auth = Auth;
+
 // 自动刷新 token 检查（每60秒检查一次）
 setInterval(async () => {
     const token = Auth.getToken();

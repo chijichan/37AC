@@ -9,115 +9,167 @@ if (!$isAjax) {
 ?>
 
 <style>
+    .dash-page-head {
+        margin-bottom: 1.6rem;
+    }
+
+    .dash-page-head h2 {
+        margin-bottom: .2rem;
+    }
+
     .settings-section {
-        background: var(--pico-card-background-color);
-        padding: 1.5rem;
-        border-radius: var(--pico-border-radius);
-        box-shadow: var(--pico-box-shadow);
-        margin-bottom: 1.5rem;
+        background: var(--ac-surface);
+        padding: 1.4rem 1.5rem;
+        border-radius: var(--ac-radius-card);
+        box-shadow: var(--ac-shadow-card);
+        margin-bottom: 1.3rem;
     }
 
     .settings-section h3 {
-        margin-top: 0;
-        border-bottom: 1px solid var(--pico-muted-border-color);
-        padding-bottom: 0.75rem;
-        margin-bottom: 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: .45rem;
+        margin: 0 0 1.1rem;
+        padding-bottom: .75rem;
+        border-bottom: 1px solid var(--ac-surface-2);
+    }
+
+    .settings-section h3 i {
+        color: var(--ac-pink-500);
+    }
+
+    .form-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0 1rem;
+    }
+
+    .checkbox-row {
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+        font-size: .95rem;
+        font-weight: 600;
+        color: var(--ac-ink-900);
+        cursor: pointer;
+        padding: .35rem 0;
+        width: fit-content;
+    }
+
+    .checkbox-row input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        accent-color: var(--ac-pink-600);
+        cursor: pointer;
+    }
+
+    .danger-zone {
+        display: flex;
+        gap: .8rem;
+        flex-wrap: wrap;
+    }
+
+    @media (max-width: 640px) {
+        .form-grid {
+            grid-template-columns: 1fr;
+        }
     }
 </style>
 
-<!-- 页面标题 -->
-<header style="margin-bottom: 2rem;">
-    <h1><?php require ROOT_PATH . '/views/components/icons/settings.php'; ?> 设置</h1>
-    <p>管理你的账户设置和偏好</p>
+<header class="dash-page-head">
+    <h2>设置</h2>
+    <p>管理你的账户设置和偏好。</p>
 </header>
 
 <!-- 个人信息 -->
 <section class="settings-section">
-    <h3><?php require ROOT_PATH . '/views/components/icons/user.php'; ?> 个人信息</h3>
+    <h3><i class="ph ph-user"></i>个人信息</h3>
     <form id="form-profile">
-        <div class="grid">
-            <label>
-                用户名
-                <input type="text" name="username" id="profile-username" required />
-            </label>
-            <label>
-                邮箱
-                <input type="email" name="email" id="profile-email" />
-            </label>
+        <div class="form-grid">
+            <div class="field">
+                <label>用户名</label>
+                <input type="text" name="username" id="profile-username" class="input" required />
+            </div>
+            <div class="field">
+                <label>邮箱</label>
+                <input type="email" name="email" id="profile-email" class="input" />
+            </div>
         </div>
-        <label>
-            个人简介
-            <textarea name="bio" id="profile-bio" rows="3" placeholder="介绍一下自己…"></textarea>
-        </label>
-        <button type="submit"><?php require ROOT_PATH . '/views/components/icons/save.php'; ?> 保存修改</button>
+        <div class="field">
+            <label>个人简介</label>
+            <textarea name="bio" id="profile-bio" class="textarea" rows="3" placeholder="介绍一下自己…"></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary"><i class="ph ph-floppy-disk"></i> 保存修改</button>
     </form>
 </section>
 
 <!-- 修改密码 -->
 <section class="settings-section">
-    <h3><?php require ROOT_PATH . '/views/components/icons/lock.php'; ?> 修改密码</h3>
+    <h3><i class="ph ph-lock"></i>修改密码</h3>
     <form id="form-password">
-        <div class="grid">
-            <label>
-                当前密码
-                <input type="password" name="old_password" required />
-            </label>
-            <label>
-                新密码
-                <input type="password" name="new_password" required minlength="6" />
-            </label>
-            <label>
-                确认新密码
-                <input type="password" name="confirm_password" required minlength="6" />
-            </label>
+        <div class="form-grid">
+            <div class="field">
+                <label>当前密码</label>
+                <input type="password" name="old_password" class="input" required />
+            </div>
+            <div class="field">
+                <label>新密码</label>
+                <input type="password" name="new_password" class="input" required minlength="6" />
+            </div>
+            <div class="field">
+                <label>确认新密码</label>
+                <input type="password" name="confirm_password" class="input" required minlength="6" />
+            </div>
         </div>
-        <button type="submit"><?php require ROOT_PATH . '/views/components/icons/refresh.php'; ?> 更新密码</button>
+        <button type="submit" class="btn btn-primary"><i class="ph ph-arrows-clockwise"></i> 更新密码</button>
     </form>
 </section>
 
 <!-- 通知设置 -->
 <section class="settings-section">
-    <h3><?php require ROOT_PATH . '/views/components/icons/inform.php'; ?> 通知偏好</h3>
+    <h3><i class="ph ph-bell"></i>通知偏好</h3>
     <form id="form-notifications">
-        <label>
+        <label class="checkbox-row">
             <input type="checkbox" name="email_notifications" checked />
             接收邮件通知
         </label>
-        <label>
+        <label class="checkbox-row">
             <input type="checkbox" name="task_completed" checked />
             任务完成时通知
         </label>
-        <label>
+        <label class="checkbox-row">
             <input type="checkbox" name="node_offline" checked />
             节点离线时通知
         </label>
-        <button type="submit"><?php require ROOT_PATH . '/views/components/icons/save.php'; ?> 保存偏好</button>
+        <div style="margin-top: .9rem;">
+            <button type="submit" class="btn btn-primary"><i class="ph ph-floppy-disk"></i> 保存偏好</button>
+        </div>
     </form>
 </section>
 
 <!-- 账户操作 -->
 <section class="settings-section">
-    <h3><?php require ROOT_PATH . '/views/components/icons/warn.php'; ?> 危险操作</h3>
-    <p style="color: var(--pico-muted-color);">以下操作不可逆，请谨慎操作。</p>
-    <div style="display: flex; gap: 1rem;">
-        <button class="secondary" onclick="Auth.logout()">退出登录</button>
-        <button class="outline" style="color: var(--pico-del-color);" onclick="showDeleteAccountConfirm()">删除账户</button>
+    <h3><i class="ph ph-warning"></i>危险操作</h3>
+    <p style="color: var(--ac-ink-500); font-size: .92rem; margin-bottom: 1rem;">以下操作不可逆，请谨慎操作。</p>
+    <div class="danger-zone">
+        <button class="btn btn-ghost" onclick="Auth.logout()">退出登录</button>
+        <button class="btn btn-danger" onclick="showDeleteAccountConfirm()">删除账户</button>
     </div>
 </section>
 
-<?php $warnIconSvg = file_get_contents(ROOT_PATH . '/views/components/icons/warn.php'); ?>
 <script>
     function showDeleteAccountConfirm() {
         Modal.show('删除账户', `
-            <p style="color: var(--pico-del-color); font-weight: 600;"><?php echo $warnIconSvg; ?> 此操作不可恢复！</p>
+            <p style="color: var(--ac-danger); font-weight: 600;">此操作不可恢复。</p>
             <p>确定要删除你的账户吗？所有数据将被永久清除。</p>
         `, [{
                 text: '取消',
-                class: 'secondary',
+                class: 'btn btn-ghost btn-sm',
                 click: () => Modal.close()
             },
             {
                 text: '确认删除',
+                class: 'btn btn-danger btn-sm',
                 click: () => {
                     Modal.close();
                     Notify.info('请联系管理员删除账户');
@@ -152,13 +204,12 @@ if (!$isAjax) {
         };
 
         const btn = form.querySelector('button[type="submit"]');
-        btn.setAttribute('aria-busy', 'true');
+        btn.disabled = true;
 
         try {
             const result = await Auth.put(`${window.API_BASE_URL}/users/profile`, data);
             if (result.success) {
                 Notify.success('个人信息已更新');
-                // 更新本地存储的用户名
                 if (data.username) localStorage.setItem('username', data.username);
             } else {
                 Notify.error(result.message || '更新失败');
@@ -166,7 +217,7 @@ if (!$isAjax) {
         } catch (e) {
             Notify.error('网络错误');
         } finally {
-            btn.removeAttribute('aria-busy');
+            btn.disabled = false;
         }
     });
 
@@ -184,12 +235,12 @@ if (!$isAjax) {
         }
 
         if (newPassword.length < 6) {
-            Notify.error('新密码长度不能少于6位');
+            Notify.error('新密码长度不能少于 6 位');
             return;
         }
 
         const btn = form.querySelector('button[type="submit"]');
-        btn.setAttribute('aria-busy', 'true');
+        btn.disabled = true;
 
         try {
             const result = await Auth.put(`${window.API_BASE_URL}/users/change-password`, {
@@ -205,7 +256,7 @@ if (!$isAjax) {
         } catch (e) {
             Notify.error('网络错误');
         } finally {
-            btn.removeAttribute('aria-busy');
+            btn.disabled = false;
         }
     });
 
@@ -220,7 +271,7 @@ if (!$isAjax) {
         };
 
         const btn = form.querySelector('button[type="submit"]');
-        btn.setAttribute('aria-busy', 'true');
+        btn.disabled = true;
 
         try {
             // 保存到本地存储（后端预留接口）
@@ -229,7 +280,7 @@ if (!$isAjax) {
         } catch (e) {
             Notify.error('保存失败');
         } finally {
-            btn.removeAttribute('aria-busy');
+            btn.disabled = false;
         }
     });
 

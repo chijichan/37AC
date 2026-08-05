@@ -1,129 +1,47 @@
-<?php require_once ROOT_PATH . '/views/layout.php'; ?>
+<?php
+$extra_css = ['/static/css/pages/auth.css'];
+require_once ROOT_PATH . '/views/layout.php';
+?>
 
-<style>
-    .auth-container {
-        max-width: 420px;
-        margin: 3rem auto;
-        padding: 2rem;
-        background: var(--pico-card-background-color);
-        border-radius: var(--pico-border-radius);
-        box-shadow: var(--pico-box-shadow);
-    }
+<div class="auth-wrap">
+    <div class="auth-card">
+        <h1>登录</h1>
+        <p class="subtitle">欢迎回来，请登录你的账号</p>
 
-    .auth-container h1 {
-        text-align: center;
-        margin-bottom: 0.5rem;
-    }
+        <div id="error-message" class="auth-message error"></div>
+        <div id="success-message" class="auth-message success"></div>
 
-    .auth-container .subtitle {
-        text-align: center;
-        color: var(--pico-muted-color);
-        margin-bottom: 2rem;
-        font-size: 0.9rem;
-    }
+        <form id="login-form">
+            <div class="field">
+                <label for="username">用户名</label>
+                <input type="text" id="username" name="username" class="input" placeholder="请输入用户名"
+                    autocomplete="username" required />
+            </div>
 
-    .auth-container .auth-footer {
-        text-align: center;
-        margin-top: 1.5rem;
-        font-size: 0.875rem;
-        color: var(--pico-muted-color);
-    }
+            <div class="field">
+                <label for="password">密码</label>
+                <input type="password" id="password" name="password" class="input" placeholder="请输入密码"
+                    autocomplete="current-password" required />
+            </div>
 
-    .auth-container .auth-footer a {
-        color: var(--pico-primary);
-        text-decoration: none;
-    }
+            <div class="field">
+                <label class="checkbox-row" for="remember">
+                    <input id="remember" type="checkbox" name="remember" />
+                    记住我（30 天）
+                </label>
+            </div>
 
-    .auth-container .auth-footer a:hover {
-        text-decoration: underline;
-    }
+            <button type="submit" class="btn btn-primary btn-block btn-lg" id="login-btn">登录</button>
+        </form>
 
-    .auth-container .error-message {
-        background: var(--pico-del-color);
-        color: var(--pico-primary-inverse);
-        padding: 0.75rem 1rem;
-        border-radius: var(--pico-border-radius);
-        margin-bottom: 1rem;
-        display: none;
-        font-size: 0.875rem;
-    }
+        <div class="auth-divider">或者</div>
 
-    .auth-container .success-message {
-        background: var(--pico-ins-color);
-        color: var(--pico-primary-inverse);
-        padding: 0.75rem 1rem;
-        border-radius: var(--pico-border-radius);
-        margin-bottom: 1rem;
-        display: none;
-        font-size: 0.875rem;
-    }
-
-    .auth-container .divider {
-        display: flex;
-        align-items: center;
-        gap: 1rem;
-        margin: 1.5rem 0;
-        color: var(--pico-muted-color);
-        font-size: 0.875rem;
-    }
-
-    .auth-container .divider::before,
-    .auth-container .divider::after {
-        content: '';
-        flex: 1;
-        border-bottom: 1px solid var(--pico-muted-border-color);
-    }
-</style>
-
-<div class="auth-container">
-    <h1>登录</h1>
-    <p class="subtitle">欢迎回来，请登录你的账号</p>
-
-    <div id="error-message" class="error-message"></div>
-    <div id="success-message" class="success-message"></div>
-
-    <form id="login-form" onsubmit="return handleLogin(event)">
-        <div class="form-group">
-            <label for="username">用户名</label>
-            <input
-                type="text"
-                id="username"
-                name="username"
-                placeholder="请输入用户名"
-                aria-label="用户名"
-                autocomplete="username"
-                required />
+        <div class="auth-footer">
+            还没有账号？<a href="/auth/register">立即注册</a>
         </div>
-
-        <div class="form-group">
-            <label for="password">密码</label>
-            <input
-                type="password"
-                id="password"
-                name="password"
-                placeholder="请输入密码"
-                aria-label="密码"
-                autocomplete="current-password"
-                required />
+        <div class="auth-footer">
+            <a href="/auth/forgot-password">忘记密码？</a>
         </div>
-
-        <fieldset>
-            <label for="remember">
-                <input role="switch" id="remember" type="checkbox" name="remember" />
-                记住我
-            </label>
-        </fieldset>
-
-        <button type="submit" id="login-btn">登录</button>
-    </form>
-
-    <div class="divider">或者</div>
-
-    <div class="auth-footer">
-        还没有账号？<a href="/auth/register">立即注册</a>
-    </div>
-    <div class="auth-footer" style="margin-top: 0.5rem;">
-        <a href="/auth/forgot-password">忘记密码？</a>
     </div>
 </div>
 
@@ -152,11 +70,11 @@
 
         if (!username || !password) {
             showError('请输入用户名和密码');
-            return false;
+            return;
         }
 
-        btn.setAttribute('aria-busy', 'true');
-        btn.textContent = '登录中...';
+        btn.disabled = true;
+        btn.textContent = '登录中…';
 
         try {
             const response = await fetch(`${API_BASE_URL}/auth/login`, {
@@ -173,7 +91,6 @@
             const result = await response.json();
 
             if (result.success) {
-                // 存储令牌到 localStorage
                 const tokenData = result.data;
                 localStorage.setItem('access_token', tokenData.access_token);
                 localStorage.setItem('refresh_token', tokenData.refresh_token);
@@ -182,30 +99,30 @@
                 localStorage.setItem('role', tokenData.role);
 
                 // 同时写入 Cookie（PHP 端可读）
-                document.cookie = `access_token=${tokenData.access_token}; path=/; max-age=${remember ? 86400 * 30 : 86400}`;
-                document.cookie = `user_id=${tokenData.user_id}; path=/; max-age=${remember ? 86400 * 30 : 86400}`;
-                document.cookie = `username=${tokenData.username}; path=/; max-age=${remember ? 86400 * 30 : 86400}`;
-                document.cookie = `role=${tokenData.role}; path=/; max-age=${remember ? 86400 * 30 : 86400}`;
+                const maxAge = remember ? 86400 * 30 : 86400;
+                document.cookie = `access_token=${tokenData.access_token}; path=/; max-age=${maxAge}`;
+                document.cookie = `user_id=${tokenData.user_id}; path=/; max-age=${maxAge}`;
+                document.cookie = `username=${tokenData.username}; path=/; max-age=${maxAge}`;
+                document.cookie = `role=${tokenData.role}; path=/; max-age=${maxAge}`;
 
-                showSuccess('登录成功！正在跳转...');
+                showSuccess('登录成功，正在跳转…');
 
-                // 跳转到控制台
                 setTimeout(() => {
                     window.location.href = '/dashboard';
                 }, 800);
             } else {
                 showError(result.message || '登录失败');
-                btn.removeAttribute('aria-busy');
+                btn.disabled = false;
                 btn.textContent = '登录';
             }
         } catch (error) {
             showError('网络错误，请检查服务器连接');
-            btn.removeAttribute('aria-busy');
+            btn.disabled = false;
             btn.textContent = '登录';
         }
-
-        return false;
     }
+
+    document.getElementById('login-form').addEventListener('submit', handleLogin);
 </script>
 
 <?php require_once ROOT_PATH . '/views/footer.php'; ?>

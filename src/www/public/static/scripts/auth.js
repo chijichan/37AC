@@ -130,11 +130,11 @@ const Auth = {
                     const retryResponse = await fetch(url, { ...options, headers });
                     return retryResponse;
                 } else {
-                    // 刷新失败，跳转到登录页
+                    // 刷新失败，跳转到登出路由销毁服务端 Session
                     this.clearSession();
                     // 不在 /auth/ 页面才跳转，避免死循环
                     if (!window.location.pathname.startsWith('/auth/')) {
-                        window.location.href = '/auth/login';
+                        window.location.href = '/auth/logout';
                     }
                     return response;
                 }
@@ -187,15 +187,17 @@ const Auth = {
 
     /**
      * 登出
+     * 跳转 /auth/logout：由 PHP 端销毁服务端 Session（含 PHPSESSID），
+     * 防止 session 残留导致登出后仍可访问受保护页面。
      */
     logout() {
         this.clearSession();
-        // 清除 Cookie
+        // 清除业务 Cookie
         document.cookie = 'access_token=; path=/; max-age=0';
         document.cookie = 'user_id=; path=/; max-age=0';
         document.cookie = 'username=; path=/; max-age=0';
         document.cookie = 'role=; path=/; max-age=0';
-        window.location.href = '/auth/login';
+        window.location.href = '/auth/logout';
     }
 };
 

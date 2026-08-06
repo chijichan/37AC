@@ -46,6 +46,35 @@ class Auth_Controller extends Controller
         $this->view('auth/forgot_password', $data);
     }
 
+    // 退出登录：销毁服务端 Session（含 PHPSESSID），防止登出后仍可访问受保护页面
+    public function logout()
+    {
+        session_start();
+        $_SESSION = [];
+        if (ini_get('session.use_cookies')) {
+            $params = session_get_cookie_params();
+            setcookie(
+                session_name(),
+                '',
+                time() - 42000,
+                $params['path'],
+                $params['domain'],
+                $params['secure'],
+                $params['httponly']
+            );
+        }
+        session_destroy();
+
+        // 清除业务 Cookie
+        setcookie('access_token', '', time() - 42000, '/');
+        setcookie('user_id', '', time() - 42000, '/');
+        setcookie('username', '', time() - 42000, '/');
+        setcookie('role', '', time() - 42000, '/');
+
+        header('Location: /auth/login');
+        exit;
+    }
+
     // 重置密码页面
     public function reset_password()
     {

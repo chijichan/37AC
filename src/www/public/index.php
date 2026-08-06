@@ -200,6 +200,7 @@ $router->get('/auth/login', 'auth_controller@login');
 $router->get('/auth/register', 'auth_controller@register');
 $router->get('/auth/forgot-password', 'auth_controller@forgot_password');
 $router->get('/auth/reset-password', 'auth_controller@reset_password');
+$router->get('/auth/logout', 'auth_controller@logout');
 
 // API 代理路由（X-API-Key 由服务端注入，前端零密钥）
 $router->post('/api/upload', 'api_controller@upload');

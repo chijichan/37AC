@@ -572,6 +572,7 @@ require_once ROOT_PATH . '/views/layout.php';
         <img src="https://static.322337.xyz/view.php/2b41dcf3c57aabd59adb77f0c90c6eba.gif" alt="" />
         <p class="loading-text">识别中，请稍候</p>
         <p class="progress-hint" id="progressStatusText">正在上传图片</p>
+        <button type="button" class="btn btn-ghost btn-sm" id="btnCancelRequest">取消识别</button>
     </div>
 
     <!-- 结果 -->
@@ -584,6 +585,21 @@ require_once ROOT_PATH . '/views/layout.php';
     } from '/static/scripts/vendor/imgly-background-removal.esm.js';
 
     /**
+     * 转义 HTML 特殊字符，防止 XSS
+     * @param {string} text
+     * @returns {string}
+     */
+    function escapeHtml(text) {
+        if (text == null) return '';
+        return String(text)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    /**
      * 二次元图片识别工具（上传 → 处理 → 识别）
      */
     class AnimeDetector {
@@ -591,7 +607,6 @@ require_once ROOT_PATH . '/views/layout.php';
             this.initElements();
             this.bindEvents();
             this.state = {
-                uploadMode: 'file', // 上传模式: 'file' | 'link'
                 tempFile: null, // 原始临时文件
                 cropInstance: null, // Cropper.js 实例
                 croppedFile: null, // 最终裁剪文件
@@ -600,6 +615,7 @@ require_once ROOT_PATH . '/views/layout.php';
                 hasCroppedImage: false, // 是否有裁剪后的图片
                 hasBgRemovedImage: false, // 是否有去背景后的图片
             };
+            this.abortController = null;
         }
 
         /* DOM 元素 */
@@ -646,6 +662,9 @@ require_once ROOT_PATH . '/views/layout.php';
             // 裁剪选项切换
             this.enableCropCheckbox.addEventListener('change', () => {
                 this.cropSubOptions.classList.toggle('active', this.enableCropCheckbox.checked);
+                if (!this.enableCropCheckbox.checked) {
+                    this.resetCropState();
+                }
                 this.updateCropMode();
             });
 
@@ -668,6 +687,9 @@ require_once ROOT_PATH . '/views/layout.php';
             // 裁剪按钮
             document.getElementById('btnCropImage').addEventListener('click', () => this.handleCropImage());
             document.getElementById('btnCropReset').addEventListener('click', () => this.handleCropReset());
+
+            // 取消识别按钮
+            document.getElementById('btnCancelRequest').addEventListener('click', () => this.cancelRequest());
         }
 
         /* 链接加载 */
@@ -677,7 +699,27 @@ require_once ROOT_PATH . '/views/layout.php';
                 Notify.error('请输入图片链接');
                 return;
             }
+            if (!this.isValidImageUrl(url)) {
+                Notify.error('请输入有效的图片链接（支持 http/https）');
+                return;
+            }
             this.fetchImageFromURL(url);
+        }
+
+        /* 校验图片链接是否安全 */
+        isValidImageUrl(url) {
+            try {
+                const u = new URL(url, window.location.href);
+                if (u.protocol !== 'http:' && u.protocol !== 'https:') {
+                    return false;
+                }
+                if (u.protocol === 'http:' && window.location.protocol === 'https:') {
+                    return false;
+                }
+                return true;
+            } catch (e) {
+                return false;
+            }
         }
 
         /* 处理文件选择 */
@@ -717,7 +759,7 @@ require_once ROOT_PATH . '/views/layout.php';
             }
 
             this.state.tempFile = file;
-            this.state.hasCroppedImage = false;
+            this.resetCropState();
             this.state.hasBgRemovedImage = false;
 
             // 显示预览，清空上次结果
@@ -740,7 +782,16 @@ require_once ROOT_PATH . '/views/layout.php';
                 this.initCropper();
             } else {
                 this.destroyCropper();
+                if (this.cropModeSelect.value !== 'manual') {
+                    this.resetCropState();
+                }
             }
+        }
+
+        /* 重置裁剪状态 */
+        resetCropState() {
+            this.state.croppedFile = null;
+            this.state.hasCroppedImage = false;
         }
 
         /* 初始化 Cropper */
@@ -932,6 +983,9 @@ require_once ROOT_PATH . '/views/layout.php';
 
                 this.updateProgressStatus('正在上传图片');
 
+                // 每次请求新建 AbortController，用于取消上传/识别
+                this.abortController = new AbortController();
+
                 // 发送流式请求（经 Nginx + PHP 代理，API Key 由服务端注入）
                 // Nginx 多 worker + php-cgi 多进程下长连接不再阻塞其他请求
                 const response = await fetch('/api/upload', {
@@ -941,6 +995,7 @@ require_once ROOT_PATH . '/views/layout.php';
                         'X-Stream-Response': 'true',
                     },
                     body: formData,
+                    signal: this.abortController.signal,
                 });
 
                 if (!response.ok) {
@@ -1013,6 +1068,25 @@ require_once ROOT_PATH . '/views/layout.php';
                     if (streamError) break;
                 }
 
+                // 处理流结束后可能残留的一行数据
+                if (buffer.trim()) {
+                    const trimmed = buffer.trim();
+                    if (!trimmed.startsWith(':') && trimmed.startsWith('data: ')) {
+                        try {
+                            const jsonData = JSON.parse(trimmed.slice(6));
+                            this.handleStreamEvent(jsonData);
+                            if (jsonData.status === 'completed' && jsonData.result) {
+                                finalResult = jsonData.result;
+                            }
+                            if (jsonData.status === 'failed' || jsonData.status === 'error') {
+                                streamError = jsonData.message || '识别过程中发生错误';
+                            }
+                        } catch (e) {
+                            console.error('解析流数据失败:', e);
+                        }
+                    }
+                }
+
                 // 处理最终结果
                 if (streamError) {
                     throw new Error(streamError);
@@ -1023,10 +1097,16 @@ require_once ROOT_PATH . '/views/layout.php';
                     throw new Error('未收到识别结果');
                 }
             } catch (error) {
-                console.error('识别请求失败:', error);
-                this.showError(error.message || '网络连接失败，请检查网络后重试');
+                if (error.name === 'AbortError') {
+                    this.updateProgressStatus('识别已取消');
+                    this.showError('识别已取消');
+                } else {
+                    console.error('识别请求失败:', error);
+                    this.showError(error.message || '网络连接失败，请检查网络后重试');
+                }
             } finally {
                 this.showLoading(false);
+                this.abortController = null;
             }
         }
 
@@ -1111,7 +1191,7 @@ require_once ROOT_PATH . '/views/layout.php';
             if (characterName !== '未知角色') {
                 html += `<a class="result-link" href="https://zh.moegirl.org.cn/${encodeURIComponent(characterName)}" target="_blank" rel="nofollow">萌娘百科</a>`;
             }
-            html += `<span class="badge ${from_source === 0 ? 'badge-pink' : 'badge-mint'}">${from_source === 0 ? '本地模型' : '大模型'}</span>`;
+            html += `<span class="badge ${from_source === 0 ? 'badge-pink' : 'badge-mint'}">${from_source === 0 ? '37ac模型' : '大模型'}</span>`;
             html += '</div>';
             html += `<div class="result-confidence">置信度 <span class="mono">${confidence}%</span></div>`;
 
@@ -1163,8 +1243,8 @@ require_once ROOT_PATH . '/views/layout.php';
         async fetchImageFromURL(url) {
             try {
                 // 校验 URL 格式
-                if (!url.match(/\.(jpg|jpeg|png|webp)$/i) && !url.startsWith('data:image/')) {
-                    Notify.error('请输入有效的图片链接（支持 JPG、PNG、WEBP）');
+                if (!this.isValidImageUrl(url)) {
+                    Notify.error('请输入有效的图片链接（支持 http/https）');
                     return;
                 }
 
@@ -1187,7 +1267,7 @@ require_once ROOT_PATH . '/views/layout.php';
                 });
 
                 this.state.tempFile = file;
-                this.state.hasCroppedImage = false;
+                this.resetCropState();
                 this.state.hasBgRemovedImage = false;
 
                 // 显示预览，清空上次结果
@@ -1211,7 +1291,10 @@ require_once ROOT_PATH . '/views/layout.php';
 
         /* 取消请求 */
         cancelRequest() {
-            // 保留原接口
+            if (this.abortController) {
+                this.abortController.abort();
+                this.abortController = null;
+            }
         }
 
         /* 销毁资源 */
@@ -1220,6 +1303,7 @@ require_once ROOT_PATH . '/views/layout.php';
                 URL.revokeObjectURL(this.state.originalImageURL);
             }
             this.destroyCropper();
+            this.cancelRequest();
         }
     }
 

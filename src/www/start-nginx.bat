@@ -22,11 +22,20 @@ echo Starting 37AC front-end (Nginx + PHP-CGI)...
 echo Server will run at: http://localhost:8000
 echo.
 
-REM --- 1. Check port 8000 is free ---
+REM --- 1. Check port 8000 is free; auto-stop old instances if occupied ---
 netstat -ano | findstr ":8000 " >nul 2>&1
 if %errorlevel%==0 (
-    echo [ERROR] Port 8000 is already in use. Stop the old server first.
-    exit /b 1
+    echo [WARN] Port 8000 is already in use. Stopping old Nginx + PHP-CGI...
+    taskkill /IM nginx.exe /F >nul 2>&1
+    taskkill /IM php-cgi.exe /F >nul 2>&1
+    timeout /t 1 /nobreak >nul
+    REM Re-check after cleanup
+    netstat -ano | findstr ":8000 " >nul 2>&1
+    if %errorlevel%==0 (
+        echo [ERROR] Port 8000 is still in use after cleanup. Please stop it manually.
+        exit /b 1
+    )
+    echo   [OK] Old services stopped
 )
 
 REM --- 2. Start PHP-CGI process pool ---

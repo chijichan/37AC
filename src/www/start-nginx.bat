@@ -5,6 +5,10 @@ REM  Windows has no PHP-FPM, so 4 php-cgi instances
 REM  form a process pool: SSE long connections will
 REM  not block other requests.
 REM  Uses php-cgi.ini (Xdebug disabled + opcache on).
+REM  NOTE: Keep this file ASCII-only! cmd.exe parses
+REM  batch files with GBK codepage; UTF-8 Chinese
+REM  comments cause byte misalignment and break
+REM  keywords like setlocal / for /L.
 REM ============================================
 setlocal enabledelayedexpansion
 
@@ -34,7 +38,11 @@ for /L %%i in (1,1,%CGI_COUNT%) do (
 
 REM --- 3. Start Nginx ---
 cd /d "%NGINX_DIR%"
-start "nginx" /B "%NGINX_DIR%\nginx.exe" -p "%NGINX_DIR%\"
+REM NOTE: The -p prefix must NOT end with a backslash.
+REM A trailing backslash before the closing quote is
+REM treated as an escaped quote by cmd, producing a
+REM wrong prefix (e.g. C:\tools\nginx") and nginx fails.
+start "nginx" /B "%NGINX_DIR%\nginx.exe" -p "%NGINX_DIR%"
 echo   [OK] Nginx started
 echo.
 echo All services started. Keep this window open.

@@ -665,6 +665,7 @@
 }
 
 @media (max-width: 768px) {
+
     .site-footer .footer-inner,
     .site-footer .footer-copyright {
         flex-direction: column;

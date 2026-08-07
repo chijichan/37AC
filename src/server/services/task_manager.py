@@ -24,16 +24,26 @@ class TaskManager:
         """根据识别类型返回重试间隔（秒）。
 
         - "local" → 本地推理较快，使用短间隔
-        - "llm" / "auto" → 节点可能走大模型推理（思考+生成耗时数秒~数十秒），
+        - "llm" → 节点走大模型推理（思考+生成耗时数秒~数十秒），
           重试间隔必须 >= 节点上报的 LLM_TIMEOUT_SEC + 缓冲，
           否则会在节点推理完成前重复分发同一任务。
+        - "auto" → 由节点按自身 LLM_RECOGNITION_ENABLED 决定：
+          若当前没有任何在线节点启用 LLM，auto 必然走 local 快路径 → 短间隔；
+          否则可能分发到 LLM 节点 → 保守长间隔。
         """
         if recognition_type in ("llm", "auto"):
+            # auto 但无 LLM 节点 → 实际走 local 快路径
+            if recognition_type == "auto" and not node_manager.has_llm_enabled_nodes():
+                return TASK_RETRY_INTERVAL_LOCAL
             node_timeout = node_manager.get_llm_timeout_sec()
             if node_timeout > 0:
                 return max(TASK_RETRY_INTERVAL_LLM, node_timeout + 15)
             return TASK_RETRY_INTERVAL_LLM
         return TASK_RETRY_INTERVAL_LOCAL
+
+    def get_retry_interval(self, recognition_type):
+        """公共接口：返回指定识别方式的预计重试间隔（秒），供任务分发方提示等待时间。"""
+        return self._get_retry_interval(recognition_type)
 
     def register_task(self, task_id, image_path=None, image_data=None, max_retries=None, recognition_type="local"):
         """注册一个待处理任务"""

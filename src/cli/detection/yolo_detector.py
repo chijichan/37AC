@@ -225,7 +225,7 @@ def crop_dataset(source_dir: str, output_dir: str, target_classes=None, max_imag
     from config.log_config import get_logger as _get_logger
     _logger = _get_logger("crop_dataset")
 
-    image_extensions = (".jpg", ".jpeg", ".png", ".jfif")
+    from common.constants import IMAGE_EXTENSIONS_BASIC as image_extensions
     processed = 0
     skipped = 0
     failed = 0

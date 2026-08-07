@@ -69,6 +69,19 @@ class NodeManager:
             ]
             return max(timeouts) if timeouts else 0
 
+    def has_llm_enabled_nodes(self):
+        """是否存在启用 LLM 的在线节点。
+
+        用于 auto 识别方式的重试间隔决策：
+        auto 任务实际由节点按自身 LLM_RECOGNITION_ENABLED 决定走 llm 还是 local，
+        若当前没有任何节点启用 LLM，auto 必然走 local 快路径。
+        """
+        with self.lock:
+            return any(
+                info.get("socket") is not None and info.get("llm_enabled")
+                for info in self.nodes.values()
+            )
+
     def update_heartbeat(self, node_id):
         """更新节点心跳时间"""
         with self.lock:

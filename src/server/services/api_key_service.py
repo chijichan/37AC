@@ -1,12 +1,13 @@
 """API密钥管理服务 - 提供API密钥的生成、验证和管理功能"""
 
-import hashlib
 import secrets
 import string
 from datetime import datetime
 
 import pymysql
 
+from common.crypto import sha256_hex
+from common.db_utils import build_update_sql
 from config.base import DB_CONFIG
 
 
@@ -25,7 +26,7 @@ def _generate_key_string(prefix="37ac"):
 
 def _hash_key(api_key: str) -> str:
     """对API密钥进行哈希（SHA-256）"""
-    return hashlib.sha256(api_key.encode("utf-8")).hexdigest()
+    return sha256_hex(api_key)
 
 
 def create_api_key(
@@ -154,28 +155,31 @@ def get_all_api_keys(page: int = 1, per_page: int = 20) -> dict:
 def update_api_key(key_id: int, user_id: int, data: dict) -> dict:
     """更新API密钥信息"""
     allowed_fields = {"name", "permission", "status", "max_usage"}
-    update_fields = []
-    update_values = []
+    updates: dict = {}
 
+    # 校验字段值合法性（使用局部副本，不修改调用方传入的 data）
     for field in allowed_fields:
         if field in data:
-            if field == "permission" and data[field] not in ("read", "write", "admin"):
+            value = data[field]
+            if field == "permission" and value not in ("read", "write", "admin"):
                 return {"success": False, "message": "权限级别无效"}
-            if field == "status" and data[field] not in ("active", "paused", "revoked"):
+            if field == "status" and value not in ("active", "paused", "revoked"):
                 return {"success": False, "message": "状态值无效"}
             if field == "max_usage":
                 try:
-                    data[field] = int(data[field])
+                    value = int(value)
                 except (ValueError, TypeError):
                     return {"success": False, "message": "最大使用次数无效"}
-            update_fields.append(f"{field} = %s")
-            update_values.append(data[field])
+            updates[field] = value
 
-    if not update_fields:
+    sql, params = build_update_sql(
+        "api_keys",
+        updates,
+        "id = %s AND user_id = %s",
+        (key_id, user_id),
+    )
+    if not sql:
         return {"success": False, "message": "没有需要更新的字段"}
-
-    update_values.append(key_id)
-    update_values.append(user_id)
 
     conn = None
     try:
@@ -189,8 +193,7 @@ def update_api_key(key_id: int, user_id: int, data: dict) -> dict:
             if not cursor.fetchone():
                 return {"success": False, "message": "密钥不存在或无权操作"}
 
-            sql = f"UPDATE api_keys SET {', '.join(update_fields)} WHERE id = %s AND user_id = %s"
-            cursor.execute(sql, update_values)
+            cursor.execute(sql, params)
             conn.commit()
 
         return {"success": True, "message": "密钥更新成功"}

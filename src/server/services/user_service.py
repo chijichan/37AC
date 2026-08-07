@@ -2,6 +2,7 @@
 
 import pymysql
 
+from common.db_utils import build_update_sql
 from config.base import DB_CONFIG
 from config.log_config import get_logger
 from services.auth.validators import validate_email, validate_username, validate_password
@@ -48,20 +49,19 @@ def get_user_by_id(user_id: int) -> dict:
 def update_profile(user_id: int, data: dict) -> dict:
     """更新用户个人资料"""
     allowed_fields = {"email", "avatar", "username"}
-    update_fields = []
-    update_values = []
 
     for field in allowed_fields:
-        if field in data:
-            if field == "email" and data[field] and not validate_email(data[field]):
-                return {"success": False, "message": "邮箱格式不正确"}
-            update_fields.append(f"{field} = %s")
-            update_values.append(data[field])
+        if field in data and field == "email" and data[field] and not validate_email(data[field]):
+            return {"success": False, "message": "邮箱格式不正确"}
 
-    if not update_fields:
+    sql, params = build_update_sql(
+        "users",
+        {field: data.get(field) for field in allowed_fields},
+        "id = %s",
+        (user_id,),
+    )
+    if not sql:
         return {"success": False, "message": "没有需要更新的字段"}
-
-    update_values.append(user_id)
 
     conn = None
     try:
@@ -75,8 +75,7 @@ def update_profile(user_id: int, data: dict) -> dict:
                 if cursor.fetchone():
                     return {"success": False, "message": "邮箱已被其他用户使用"}
 
-            sql = f"UPDATE users SET {', '.join(update_fields)} WHERE id = %s"
-            cursor.execute(sql, update_values)
+            cursor.execute(sql, params)
             conn.commit()
 
         return {"success": True, "message": "更新成功"}
@@ -187,8 +186,6 @@ def create_user(username: str, password: str, email: str = None, role: str = "us
 def update_user(user_id: int, data: dict) -> dict:
     """更新用户信息（管理员）"""
     allowed_fields = {"email", "role", "status", "avatar"}
-    update_fields = []
-    update_values = []
 
     for field in allowed_fields:
         if field in data:
@@ -203,13 +200,15 @@ def update_user(user_id: int, data: dict) -> dict:
                     return {"success": False, "message": "状态值无效"}
                 if data[field] not in (0, 1):
                     return {"success": False, "message": "状态值无效"}
-            update_fields.append(f"{field} = %s")
-            update_values.append(data[field])
 
-    if not update_fields:
+    sql, params = build_update_sql(
+        "users",
+        {field: data.get(field) for field in allowed_fields},
+        "id = %s",
+        (user_id,),
+    )
+    if not sql:
         return {"success": False, "message": "没有需要更新的字段"}
-
-    update_values.append(user_id)
 
     conn = None
     try:
@@ -223,8 +222,7 @@ def update_user(user_id: int, data: dict) -> dict:
                 if cursor.fetchone():
                     return {"success": False, "message": "邮箱已被其他用户使用"}
 
-            sql = f"UPDATE users SET {', '.join(update_fields)} WHERE id = %s"
-            cursor.execute(sql, update_values)
+            cursor.execute(sql, params)
             conn.commit()
 
         return {"success": True, "message": "用户更新成功"}

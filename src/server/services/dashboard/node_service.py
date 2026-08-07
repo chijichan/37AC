@@ -1,22 +1,10 @@
 # services/dashboard/node_service.py
 """节点服务 - 节点数据库操作"""
 
-import hashlib
-import secrets
-
 import pymysql
+from common.crypto import generate_node_token, hash_node_token
+from common.db_utils import build_update_sql
 from services.node_manager import get_db_connection
-
-
-def _hash_node_token(token: str) -> str:
-    """对节点 token 进行 SHA-256 哈希"""
-    return hashlib.sha256(token.encode("utf-8")).hexdigest()
-
-
-def generate_node_token():
-    """生成随机节点 token 并返回原始 token 与哈希"""
-    raw_token = secrets.token_urlsafe(32)
-    return raw_token, _hash_node_token(raw_token)
 
 
 def create_node(name, token=None, addr=None, is_active=True, user_id=None, capabilities='["local"]'):
@@ -30,7 +18,7 @@ def create_node(name, token=None, addr=None, is_active=True, user_id=None, capab
     if token is None:
         raw_token, token_hash = generate_node_token()
     else:
-        token_hash = _hash_node_token(token)
+        token_hash = hash_node_token(token)
 
     # addr 列为 NOT NULL，空地址归一化为空字符串（地址是可选项）
     addr = (addr or "").strip() or ""
@@ -76,38 +64,29 @@ def update_node(node_id, name=None, addr=None, capabilities=None, is_active=None
         if not conn:
             return False
 
-        fields = []
-        params = []
-        if name is not None:
-            fields.append("name = %s")
-            params.append(name)
-        if addr is not None:
-            fields.append("addr = %s")
-            params.append(addr)
-        if capabilities is not None:
-            fields.append("capabilities = %s")
-            params.append(capabilities)
-        if is_active is not None:
-            fields.append("is_active = %s")
-            params.append(1 if is_active else 0)
-        if token is not None:
-            fields.append("token = %s")
-            params.append(_hash_node_token(token))
+        updates = {
+            "name": name,
+            "addr": addr,
+            "capabilities": capabilities,
+            "is_active": None if is_active is None else (1 if is_active else 0),
+            "token": hash_node_token(token) if token is not None else None,
+        }
 
-        if not fields:
-            return True  # 无字段需要更新
-
-        fields.append("updated_at = NOW()")
-
-        where = "WHERE id = %s"
-        params.append(node_id)
+        where = "id = %s"
+        where_params = [node_id]
         if not is_admin:
             where += " AND user_id = %s"
-            params.append(user_id)
+            where_params.append(user_id)
+
+        sql, params = build_update_sql(
+            "nodes", updates, where, where_params,
+            raw_assignments=["updated_at = NOW()"],
+        )
+        if not sql:
+            return True  # 无字段需要更新
 
         with conn.cursor() as cursor:
-            sql = "UPDATE nodes SET {} {}".format(", ".join(fields), where)
-            cursor.execute(sql, tuple(params))
+            cursor.execute(sql, params)
             conn.commit()
             return cursor.rowcount > 0
     except Exception:

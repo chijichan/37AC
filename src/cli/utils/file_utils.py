@@ -78,11 +78,14 @@ def save_classes_to_file(file_path: str, class_names: list) -> bool:
 
 
 def check_model_file(file_path: str) -> bool:
-    """检查模型文件是否存在且可读"""
+    """检查模型文件是否存在且可读（必须是文件，目录不算）"""
     if not os.path.exists(file_path):
-        logger.error(f"模型文件不存在: {file_path}")
+        logger.error("模型文件不存在: %s", file_path)
+        return False
+    if not os.path.isfile(file_path):
+        logger.error("模型路径不是文件: %s", file_path)
         return False
     if not os.access(file_path, os.R_OK):
-        logger.error(f"模型文件不可读: {file_path}")
+        logger.error("模型文件不可读: %s", file_path)
         return False
     return True

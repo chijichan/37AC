@@ -1,9 +1,15 @@
 # config/base.py
 """基础配置 - 训练、节点服务、路径等（从环境变量读取）"""
 
+import sys
 import json
 import os
 from pathlib import Path
+
+# 将 src/ 加入 sys.path，使 common 公共包可被导入
+_SRC_ROOT = Path(__file__).resolve().parent.parent.parent
+if str(_SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(_SRC_ROOT))
 
 from dotenv import load_dotenv
 

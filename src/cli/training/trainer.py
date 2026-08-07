@@ -124,7 +124,7 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None):
 
     # 检查数据集目录
     if not os.path.exists(train_dir):
-        logger.error(f"数据集目录不存在: {train_dir}")
+        logger.error("数据集目录不存在: %s", train_dir)
         logger.error(
             "请先创建数据集目录，在每个IP文件夹下，为每个角色创建一个子文件夹，子文件夹内放入对应角色的图片。"
         )

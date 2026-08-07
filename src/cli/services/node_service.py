@@ -1,17 +1,18 @@
 ﻿# services/node_service.py
 
-import socket
-import threading
-import json
-import time
-import os
-import struct
-import errno
 import base64
+import errno
+import os
 import re
+import socket
+import struct
+import threading
+import time
 import uuid
 from pathlib import Path
 from prediction.predictor import predict_image, predict_image_llm
+from common.constants import ALLOWED_IMAGE_EXTENSIONS as _ALLOWED_IMAGE_EXTENSIONS
+from common.protocol import node_json_protocol
 from config.log_config import get_logger
 from config.base import (
     LOCAL_PORT,
@@ -33,163 +34,8 @@ from config.base import (
 
 logger = get_logger("node_service")
 
-
-class JsonProtocol:
-    """JSON 消息发送和接收类，使用自定义消息头长度前缀协议"""
-
-    def __init__(self):
-        self.send_header = "node"
-        self.expected_headers = ["server"]  # 只期待服务端发来的 "server@" 标记
-        self._recv_buffer = b""  # 保存 recv 未消费完的溢出数据
-
-    def send_json(self, sock, msg_dict):
-        """发送一条 JSON 消息到 socket"""
-        try:
-            json_str = json.dumps(msg_dict)
-            json_bytes = json_str.encode("utf-8")
-
-            content_length = len(json_bytes)
-            header_str = f"{self.send_header}@{content_length}"
-            header_bytes = header_str.encode("utf-8")
-
-            full_message = header_bytes + json_bytes
-            sock.sendall(full_message)
-
-            logger.debug(
-                f"[send_json] 发送成功: 头部='{header_str}', 内容长度={content_length}"
-            )
-
-        except Exception as e:
-            logger.error(f"[send_json] 发送失败: {e}")
-            raise
-
-    def recv_json(self, sock):
-        """从 socket 接收一条完整的 JSON 消息"""
-        try:
-            # 1. 查找消息标记
-            found_marker, found_header, buffer = self._find_message_marker(sock)
-            if not found_marker:
-                return None
-
-            # 2. 解析内容长度
-            content_length, content_start = self._parse_content_length(
-                found_marker, buffer
-            )
-            if content_length is None:
-                return None
-
-            # 3. 接收完整内容
-            data = self._receive_full_content(
-                sock, buffer, content_start, content_length
-            )
-            if data is None:
-                return None
-
-            # 4. 解码并返回JSON
-            return self._decode_json(data, found_header)
-
-        except (ConnectionError, ValueError, struct.error) as e:
-            logger.debug(
-                f"[recv_json] 接收 JSON 失败 (期望标记: {self.expected_headers}): {e}"
-            )
-            return None
-        # socket.timeout 不在此处捕获，由主循环 except socket.timeout 统一处理（不计入 None 计数）
-
-    def _find_message_marker(self, sock):
-        """查找消息标记（带最大迭代保护，防止垃圾数据导致无限循环）"""
-        expected_markers = [
-            f"{header}@".encode("utf-8") for header in self.expected_headers
-        ]
-        # 从余留缓冲区开始，避免上次未消费完的数据丢失
-        buffer = self._recv_buffer
-        self._recv_buffer = b""
-        max_marker_len = max(len(marker) for marker in expected_markers)
-        max_iterations = 50  # 防止垃圾数据导致无限循环
-        iterations = 0
-
-        while iterations < max_iterations:
-            iterations += 1
-            chunk = sock.recv(1024)
-            if not chunk:
-                return None, None, None
-
-            buffer += chunk
-
-            # 检查所有可能的标记
-            for marker in expected_markers:
-                marker_pos = buffer.find(marker)
-                if marker_pos != -1:
-                    buffer = buffer[marker_pos:]
-                    found_header = marker[:-1].decode("utf-8")
-                    return marker, found_header, buffer
-
-            # 检查缓冲区是否过大
-            if len(buffer) > max_marker_len * 2:
-                logger.debug(
-                    f"[recv_json] 未找到期望标记 {self.expected_headers}，清空缓冲区重新搜索"
-                )
-                buffer = b""
-
-        logger.warning(
-            f"[recv_json] 连续 {max_iterations} 次未找到期望标记 {self.expected_headers}，放弃并返回 None"
-        )
-        return None, None, None
-
-    def _parse_content_length(self, marker, buffer):
-        """解析内容长度"""
-        length_start = len(marker)
-        num_buffer = b""
-
-        for i in range(length_start, len(buffer)):
-            char_byte = buffer[i : i + 1]
-            try:
-                char = char_byte.decode("utf-8")
-                if char.isdigit():
-                    num_buffer += char_byte
-                else:
-                    break
-            except UnicodeDecodeError:
-                break
-
-        if not num_buffer:
-            logger.error(
-                f"[recv_json] 无法解析长度数字，找到标记: '{marker[:-1].decode('utf-8')}@'"
-            )
-            return None, None
-
-        content_length = int(num_buffer.decode("utf-8"))
-        content_start = length_start + len(num_buffer)
-
-        logger.debug(
-            f"[recv_json] 解析到内容长度: {content_length}, 起始位置: {content_start}"
-        )
-        return content_length, content_start
-
-    def _receive_full_content(self, sock, buffer, content_start, content_length):
-        """接收完整内容，余留数据存入 _recv_buffer 供下次使用"""
-        data = buffer[content_start:]
-
-        while len(data) < content_length:
-            remaining = content_length - len(data)
-            part = sock.recv(min(remaining, 4096))
-            if not part:
-                raise ConnectionError("连接中断，未能接收完整 JSON 数据")
-            data += part
-
-        # 保存本次未消费完的溢出数据，防止丢失后续消息头
-        self._recv_buffer = data[content_length:]
-        return data[:content_length]
-
-    def _decode_json(self, data, found_header):
-        """解码JSON并添加来源信息"""
-        text = data.decode("utf-8")
-        result = json.loads(text)
-        result["_source_header"] = found_header
-        return result
-
-
-# 全局 JSON 协议实例
-json_protocol = JsonProtocol()
+# JSON 协议已提取到 src/common/protocol.py，此处使用节点端实例
+json_protocol = node_json_protocol
 
 # 全局任务数据字典和锁，用于异步处理LLM任务
 task_data = {}
@@ -251,9 +97,6 @@ def start_node_service():
             logger.debug("[节点] 已清理临时图片: %s", image_path)
         except Exception as e:
             logger.warning("[节点] 清理临时图片失败 %s: %s", image_path, e)
-
-    # 图片扩展名白名单（节点侧安全）
-    _ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".jfif", ".bmp", ".gif"}
 
     def _safe_image_extension(filename):
         """从文件名中提取安全的图片扩展名，非法扩展名返回空字符串。"""

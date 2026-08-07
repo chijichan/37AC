@@ -37,8 +37,9 @@ class TestCLIConfig:
         assert LEARNING_RATE == 1e-3
 
     @patch.dict(os.environ, {}, clear=True)
+    @patch("dotenv.load_dotenv", lambda *args, **kwargs: False)
     def test_config_defaults(self):
-        """验证默认值"""
+        """验证默认值（禁用 .env 加载，避免本地配置干扰）"""
         from importlib import reload
         import config.base as cfg
         reload(cfg)

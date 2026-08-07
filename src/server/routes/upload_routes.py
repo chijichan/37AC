@@ -13,18 +13,17 @@ from flask import (
     Blueprint,
     Response,
 )
-from services.node_manager import get_db_connection
+from services.node_manager import get_db_connection, node_manager
 from services.task_dispatcher import dispatch_task
 from services.api_key_service import verify_api_key
 from services.sse_bus import sse_bus
+from services.task_manager import task_manager
 from middleware.rate_limiter import rate_limit
+from common.constants import ALLOWED_IMAGE_EXTENSIONS as _ALLOWED_IMAGE_EXTENSIONS
 from config.log_config import get_logger
 
 upload_bp = Blueprint("upload", __name__)
 logger = get_logger("upload_routes")
-
-# 允许的图片扩展名白名单
-_ALLOWED_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".jfif", ".webp"}
 
 
 def _safe_image_filename(filename):
@@ -167,9 +166,12 @@ def upload_and_predict():
 
             if status == "waiting":
                 # 任务进入等待队列，task_manager 会重试，推送等待通知
+                # 携带 retry_in（预计重试秒数），供前端显示排队倒计时
+                from services.task_manager import task_manager
                 sse_bus.publish(task_id, {
                     "status": "waiting",
                     "message": "没有空闲节点，任务已进入等待队列，节点上线后自动分发",
+                    "retry_in": result.get("retry_in") or task_manager.get_retry_interval(recognition_type),
                     "task_id": task_id,
                     "result": [],
                 })
@@ -198,12 +200,23 @@ def upload_and_predict():
 
             threading.Thread(target=dispatch, daemon=True).start()
 
+            # SSE 等待超时按实际重试策略动态计算：
+            # 重试间隔 × 最大重试次数 + 推理缓冲
+            # 推理缓冲与 task_manager 决策一致：local 快路径 60s，llm 路径 180s
+            retry_interval = task_manager.get_retry_interval(recognition_type)
+            is_llm_path = (
+                recognition_type == "llm"
+                or (recognition_type == "auto" and node_manager.has_llm_enabled_nodes())
+            )
+            inference_buffer = 180 if is_llm_path else 60
+            sse_timeout = retry_interval * 3 + inference_buffer
+
             def generate():
                 # 先发一个 queued 事件
-                yield f"data: {json.dumps({'status': 'queued', 'message': '任务已提交，等待推理...', 'task_id': task_id, 'recognition_type': recognition_type}, ensure_ascii=False)}\n\n"
+                yield f"data: {json.dumps({'status': 'queued', 'message': '任务已提交，等待推理...', 'task_id': task_id, 'recognition_type': recognition_type, 'timeout': sse_timeout}, ensure_ascii=False)}\n\n"
 
                 try:
-                    for event in sse_bus.iter_events(task_id, q, timeout=120):
+                    for event in sse_bus.iter_events(task_id, q, timeout=sse_timeout):
                         yield event
                 finally:
                     sse_bus.unsubscribe(task_id, q)

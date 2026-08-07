@@ -1,5 +1,6 @@
 # utils/validation_utils.py
 import os
+from common.constants import IMAGE_EXTENSIONS_BASIC
 from .image_utils import validate_image_file
 from config.log_config import get_logger
 
@@ -54,7 +55,7 @@ def validate_dataset_images(dataset_dir: str) -> tuple:
 
             # 验证该角色目录下的所有图片文件
             for file in sorted(os.listdir(role_path)):
-                if not file.lower().endswith((".jpg", ".jpeg", ".png")):
+                if not file.lower().endswith(IMAGE_EXTENSIONS_BASIC):
                     logger.warning(f"跳过非图片文件: {role_path}/{file}")
                     continue
                 total_samples += 1

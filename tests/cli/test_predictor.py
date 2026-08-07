@@ -53,6 +53,10 @@ class TestPredictImage:
         mock_load.return_value = []
         mock_check.return_value = True
 
+        # 清空全局类别缓存，避免被前序测试污染（缓存命中会跳过 load 分支）
+        import prediction.predictor as predictor_module
+        predictor_module._classes_cache = None
+
         from prediction.predictor import predict_image
 
         result = predict_image(str(valid_png))

@@ -1,18 +1,17 @@
-"""pytest 全局配置与共享 fixtures"""
+"""pytest 全局配置与共享 fixtures
 
-import os
-import sys
+注意：CLI 与 Server 各自拥有独立的 `config` 包，不能在同一个
+Python 进程中同时解析。因此 sys.path 注入按测试目录拆分：
+- tests/cli/conftest.py    → 仅注入 src/cli + src（公共模块）
+- tests/server/conftest.py → 仅注入 src/server + src（公共模块）
+
+请分别运行 `pytest tests/cli` 与 `pytest tests/server`。
+"""
+
 import tempfile
 from pathlib import Path
 
 import pytest
-
-# ── 将项目源码目录加入 sys.path ──
-_CLI_ROOT = Path(__file__).resolve().parent.parent / "src" / "cli"
-_SERVER_ROOT = Path(__file__).resolve().parent.parent / "src" / "server"
-for p in [_CLI_ROOT, _SERVER_ROOT]:
-    if p.exists() and str(p) not in sys.path:
-        sys.path.insert(0, str(p))
 
 
 # ── 测试用临时目录 fixture ──

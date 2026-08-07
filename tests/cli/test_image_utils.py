@@ -46,14 +46,12 @@ class TestValidateImageFile:
         assert validate_image_file(str(path)) is True
 
     def test_zero_size_image(self, tmp_path: Path):
-        """测试尺寸异常的图片"""
-        from PIL import Image
+        """测试空文件/损坏图片"""
         path = tmp_path / "zero.jpg"
-        # 创建一张 0x0 的图片（理论上无效）
-        img = Image.new("RGB", (0, 0))
-        img.save(str(path))
+        # 0 字节文件（伪造的损坏图片）
+        path.write_bytes(b"")
         result = validate_image_file(str(path))
-        # 0x0 尺寸应被判定为无效
+        # 空文件应被判定为无效
         assert result is False
 
     def test_non_rgb_image(self, tmp_path: Path):

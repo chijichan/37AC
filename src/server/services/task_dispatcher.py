@@ -1,7 +1,7 @@
 """任务分发器 - 将任务分发给 TCP 节点"""
 
-import os
 import base64
+import os
 import time
 
 from config.log_config import get_logger
@@ -45,6 +45,8 @@ def dispatch_task(image_path: str | None, image_data, task_id: str,
     if not node_id:
         response["message"] = "没有空闲节点"
         response["status"] = "waiting"
+        # 携带预计重试间隔（秒），供前端展示等待倒计时
+        response["retry_in"] = task_manager.get_retry_interval(recognition_type)
         # 即使没有空闲节点，也要注册 pending 任务，让 task_manager 重试
         if register_pending:
             task_manager.register_task(
@@ -74,7 +76,8 @@ def dispatch_task(image_path: str | None, image_data, task_id: str,
         # 检查图片大小限制
         if len(image_bytes) > MAX_IMAGE_SIZE:
             logger.error("图片过大: %s 字节，超过10MB限制", len(image_bytes))
-            node_manager.set_node_idle(node_id)
+            # 分配节点时已执行 current_tasks += 1，必须同步减少计数
+            node_manager.decrement_task_count(node_id)
             response["message"] = "图片文件过大"
             response["status"] = "failed"
             return response

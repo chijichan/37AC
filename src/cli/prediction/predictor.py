@@ -8,6 +8,7 @@ import json
 import re
 import time
 import threading
+from common.constants import IMAGE_EXTENSIONS_BASIC
 from utils.image_utils import validate_image_file
 from utils.file_utils import load_classes_from_file, check_model_file
 from models.character_model import CharacterRecognitionModel
@@ -81,7 +82,7 @@ def predict_character():
         if not os.path.exists(user_input):
             logger.info(f"找不到图片: {user_input}，请检查路径是否正确~")
             continue
-        if not user_input.lower().endswith((".jpg", ".jpeg", ".png", ".jfif")):
+        if not user_input.lower().endswith(IMAGE_EXTENSIONS_BASIC):
             logger.info("请上传图片文件（如 .jpg / .png），当前格式可能不支持~")
             continue
 
@@ -100,7 +101,9 @@ def predict_character():
 def _display_prediction_result(result, image_path):
     """显示预测结果（内部辅助函数）"""
     if not result.get("success"):
-        logger.error(f"预测失败: {result.get('error', '未知错误')}")
+        error_msg = result.get("error", "未知错误")
+        logger.error("预测失败: %s", error_msg)
+        print(f"\n预测失败: {error_msg}")
         return
 
     print(f"\n预测结果是: {result['label']}")
@@ -157,7 +160,7 @@ def predict_image(image_path, model_path=None, classes_file=None, use_cache=True
             result["error"] = f"图片文件不存在: {image_path}"
             return result
 
-        if not image_path.lower().endswith((".jpg", ".jpeg", ".png", ".jfif")):
+        if not image_path.lower().endswith(IMAGE_EXTENSIONS_BASIC):
             result["error"] = f"不支持的图片格式: {image_path}"
             return result
 

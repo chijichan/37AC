@@ -1021,6 +1021,7 @@ require_once ROOT_PATH . '/views/layout.php';
                 let buffer = '';
                 let finalResult = null;
                 let streamError = null;
+                let streamTimeout = false;
 
                 while (true) {
                     const {
@@ -1059,6 +1060,12 @@ require_once ROOT_PATH . '/views/layout.php';
                                     streamError = jsonData.message || '识别过程中发生错误';
                                     break;
                                 }
+
+                                // 等待超时：标记但不视为失败，流结束后给出提示而非报错
+                                if (jsonData.status === 'timeout') {
+                                    streamError = null;
+                                    streamTimeout = true;
+                                }
                             } catch (e) {
                                 console.error('解析流数据失败:', e);
                             }
@@ -1081,6 +1088,10 @@ require_once ROOT_PATH . '/views/layout.php';
                             if (jsonData.status === 'failed' || jsonData.status === 'error') {
                                 streamError = jsonData.message || '识别过程中发生错误';
                             }
+                            if (jsonData.status === 'timeout') {
+                                streamError = null;
+                                streamTimeout = true;
+                            }
                         } catch (e) {
                             console.error('解析流数据失败:', e);
                         }
@@ -1093,6 +1104,10 @@ require_once ROOT_PATH . '/views/layout.php';
                 }
                 if (finalResult) {
                     this.showResult(finalResult);
+                } else if (streamTimeout) {
+                    // 等待超时但任务可能仍在后台处理：提示用户稍后查询，而非误报失败
+                    this.updateProgressStatus('识别时间较长，任务仍在后台处理中');
+                    this.showError('等待超时，任务仍在后台处理中，请稍后刷新页面查看结果。若长时间无结果，请检查节点是否在线。');
                 } else {
                     throw new Error('未收到识别结果');
                 }
@@ -1114,14 +1129,25 @@ require_once ROOT_PATH . '/views/layout.php';
         handleStreamEvent(eventData) {
             const status = eventData.status;
             const message = eventData.message || '';
+            // 在函数顶部统一声明，避免 switch case 内重复 const 声明（ES 语法限制）
+            let timeoutSec = 0;
+            let retryIn = 0;
 
             switch (status) {
                 case 'queued':
-                    this.updateProgressStatus('任务已提交，等待推理...');
+                    // 携带预估等待上限（后端按识别方式计算），供用户参考
+                    timeoutSec = eventData.timeout || 0;
+                    this.updateProgressStatus(timeoutSec ?
+                        `任务已提交，等待推理（最长等待约 ${Math.round(timeoutSec / 60)} 分钟）...` :
+                        '任务已提交，等待推理...');
                     break;
 
                 case 'waiting':
-                    this.updateProgressStatus(message || '没有空闲节点，任务排队中...');
+                    // 无空闲节点排队中：显示预计重试间隔，提示节点上线后自动分发
+                    retryIn = eventData.retry_in || 0;
+                    this.updateProgressStatus(retryIn > 0 ?
+                        `${message || '没有空闲节点，任务排队中'}（约 ${retryIn} 秒后自动重试，节点上线即分发）` :
+                        (message || '没有空闲节点，任务排队中...'));
                     break;
 
                 case 'assigned':
@@ -1139,6 +1165,11 @@ require_once ROOT_PATH . '/views/layout.php';
                 case 'failed':
                 case 'error':
                     this.updateProgressStatus(message || '识别失败');
+                    break;
+
+                case 'timeout':
+                    // 等待超时：任务可能仍在后端处理中，提示用户稍后查询而非误报失败
+                    this.updateProgressStatus(message || '等待时间较长，任务仍在后台处理中');
                     break;
             }
         }

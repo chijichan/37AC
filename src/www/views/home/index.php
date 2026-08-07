@@ -161,6 +161,18 @@ require_once ROOT_PATH . '/views/layout.php';
             padding-top: 2.2rem;
         }
 
+        .hero-media::before {
+            inset: 8% 4% -4% 8%;
+        }
+
+        .hero-media video {
+            transform: none;
+        }
+
+        .hero-media:hover video {
+            transform: none;
+        }
+
         .bento {
             grid-template-columns: 1fr;
         }

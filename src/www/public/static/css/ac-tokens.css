@@ -239,6 +239,13 @@ kbd,
     padding-inline: 1.25rem;
 }
 
+/* 锁定容器左右留白，防内联 padding 简写覆盖导致移动端圆角触边 */
+main .ac-container,
+header .ac-container,
+footer .ac-container {
+    padding-inline: 1.25rem;
+}
+
 .ac-main {
     flex: 1;
     width: 100%;

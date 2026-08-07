@@ -6,8 +6,17 @@ from flask import Flask
 from flask_cors import CORS
 
 app = Flask(__name__)
-# CORS(app, origins=['https://www.322337.xyz'])
-CORS(app)  # 允许所有来源访问
+
+# 限制上传体大小为 10MB
+app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024
+
+# CORS 配置
+import os
+allowed_origins = os.getenv("ALLOWED_ORIGINS", "")
+if allowed_origins:
+    CORS(app, origins=[o.strip() for o in allowed_origins.split(",") if o.strip()])
+else:
+    CORS(app)  # 开发环境回退为允许所有来源
 
 # 注册路由蓝图
 from routes.upload_routes import upload_bp

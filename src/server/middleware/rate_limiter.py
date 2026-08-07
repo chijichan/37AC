@@ -25,7 +25,7 @@ class SlidingWindowRateLimiter:
         self._cleanup_thread.start()
 
     def _get_client_key(self):
-        """获取客户端唯一标识：优先用 user_id，否则用 IP"""
+        """获取客户端唯一标识：优先用 user_id，否则用 API Key，最后是真实 IP。"""
         try:
             from flask import g
             user_id = getattr(g, "user_id", None)
@@ -37,9 +37,27 @@ class SlidingWindowRateLimiter:
         api_key = request.headers.get("X-API-Key", "")
         if api_key:
             return f"apikey:{api_key}"
-        # 兜底：IP + User-Agent 前缀
-        ip = request.remote_addr or "unknown"
+        # 兜底：读取真实 IP（支持反向代理）
+        ip = self._get_client_ip()
         return f"ip:{ip}"
+
+    def _get_client_ip(self):
+        """获取客户端真实 IP，支持反向代理但避免客户端伪造。"""
+        import os
+        trusted_proxies = os.getenv("TRUSTED_PROXIES", "").split(",")
+        trusted_proxies = {p.strip() for p in trusted_proxies if p.strip()}
+        remote_addr = request.remote_addr or "unknown"
+
+        # 仅当直接来源是可信代理时才读取 X-Forwarded-For
+        if trusted_proxies and remote_addr in trusted_proxies:
+            forwarded = request.headers.get("X-Forwarded-For", "")
+            if forwarded:
+                # 取最左侧的原始客户端 IP
+                return forwarded.split(",")[0].strip() or remote_addr
+            real_ip = request.headers.get("X-Real-IP", "")
+            if real_ip:
+                return real_ip.strip()
+        return remote_addr
 
     def is_allowed(self) -> bool:
         """检查当前请求是否允许通过"""

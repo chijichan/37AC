@@ -36,6 +36,17 @@ def create_api_key_route():
     if not name:
         return jsonify({"success": False, "message": "密钥名称不能为空"}), 400
 
+    if permission not in ("read", "write", "admin"):
+        return jsonify({"success": False, "message": "权限级别无效"}), 400
+
+    try:
+        max_usage = int(max_usage)
+    except (ValueError, TypeError):
+        return jsonify({"success": False, "message": "最大使用次数必须为正整数"}), 400
+
+    if max_usage <= 0 or max_usage > 100_000_000:
+        return jsonify({"success": False, "message": "最大使用次数必须在 1-100000000 之间"}), 400
+
     result = create_api_key(g.user_id, name, permission, max_usage)
     status_code = 201 if result["success"] else 400
     return jsonify(result), status_code

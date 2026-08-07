@@ -4,7 +4,9 @@
 import uuid
 import json
 import threading
+import os
 from datetime import datetime
+from pathlib import Path
 from flask import (
     request,
     jsonify,
@@ -20,6 +22,39 @@ from config.log_config import get_logger
 
 upload_bp = Blueprint("upload", __name__)
 logger = get_logger("upload_routes")
+
+# 允许的图片扩展名白名单
+_ALLOWED_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".jfif", ".webp"}
+
+
+def _safe_image_filename(filename):
+    """清洗上传文件名，返回安全的文件名或 None。"""
+    if not filename or not isinstance(filename, str):
+        return None
+    base = os.path.basename(filename)
+    ext = Path(base).suffix.lower()
+    name = Path(base).stem
+    # 限制长度，防止日志/数据库异常
+    name = name[:64]
+    if ext in _ALLOWED_IMAGE_EXTENSIONS:
+        return f"{name}{ext}"
+    return None
+
+
+def _detect_image_format(data):
+    """通过文件魔数检测图片真实格式。"""
+    if not data:
+        return ""
+    # PNG
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return ".png"
+    # JPEG
+    if data.startswith(b"\xff\xd8"):
+        return ".jpg"
+    # WEBP
+    if data.startswith(b"RIFF") and len(data) >= 12 and data[8:12] == b"WEBP":
+        return ".webp"
+    return ""
 
 
 def _require_api_key():
@@ -62,11 +97,19 @@ def upload_and_predict():
         if file.filename == "":
             return jsonify({"success": False, "message": "没有选择文件"}), 400
 
-        if not file.filename.lower().endswith((".png", ".jpg", ".jpeg", ".jfif")):
-            return jsonify({"success": False, "message": "请上传 png/jpg/jpeg 格式的图片"}), 400
+        # 校验文件名与扩展名白名单
+        safe_name = _safe_image_filename(file.filename)
+        if not safe_name:
+            return jsonify({"success": False, "message": "请上传 png/jpg/jpeg/webp 格式的图片"}), 400
 
         image_data = file.read()
-        image_filename = file.filename or f"{uuid.uuid4()}.jpg"
+
+        # 校验文件魔数（真实格式）
+        detected_ext = _detect_image_format(image_data)
+        if detected_ext not in (".png", ".jpg", ".jpeg", ".webp"):
+            return jsonify({"success": False, "message": "文件内容不是有效的图片格式"}), 400
+
+        image_filename = safe_name
 
         # 生成任务ID
         task_id = str(uuid.uuid4())
@@ -266,8 +309,9 @@ def get_task_result(task_id):
             return jsonify(json_response), 202
 
     except Exception as e:
+        logger.error("查询任务结果失败: %s", e)
         json_response["status"] = "error"
-        json_response["message"] = f"查询失败: {str(e)}"
+        json_response["message"] = "查询任务结果失败"
         return jsonify(json_response), 500
 
     finally:

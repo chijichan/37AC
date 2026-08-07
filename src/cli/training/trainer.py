@@ -261,7 +261,7 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None):
                 loop = tqdm(train_loader, desc=f"P1 训练 {epoch+1}/{PHASE1_EPOCHS}",
                             bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, "
                                         "{rate_fmt}{postfix}]")
-                for inputs, labels in loop:
+                for batch_idx, (inputs, labels) in enumerate(loop):
                     try:
                         inputs, labels = inputs.to(device), labels.to(device)
                         phase1_optimizer.zero_grad()
@@ -280,8 +280,8 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None):
                             acc=f"{100.*correct/total:.2f}%" if total > 0 else "N/A",
                             lr=f"{PHASE1_LR:.0e}",
                         )
-                    except Exception as e:
-                        logger.error(f"阶段1训练错误: {str(e)}")
+                    except Exception:
+                        logger.exception("阶段1训练错误, epoch=%d, batch=%d", epoch + 1, batch_idx)
                         continue
 
                 loop.close()
@@ -351,7 +351,7 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None):
             loop = tqdm(train_loader, desc=f"P2 训练 {epoch+1}/{phase2_epochs}",
                         bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, "
                                     "{rate_fmt}{postfix}]")
-            for inputs, labels in loop:
+            for batch_idx, (inputs, labels) in enumerate(loop):
                 try:
                     inputs, labels = inputs.to(device), labels.to(device)
                     phase2_optimizer.zero_grad()
@@ -370,8 +370,8 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None):
                         acc=f"{100.*correct/total:.2f}%" if total > 0 else "N/A",
                         lr=f"{current_lr:.0e}",
                     )
-                except Exception as e:
-                    logger.error(f"阶段2训练错误: {str(e)}")
+                except Exception:
+                    logger.exception("阶段2训练错误, epoch=%d, batch=%d", epoch + 1, batch_idx)
                     continue
 
             loop.close()

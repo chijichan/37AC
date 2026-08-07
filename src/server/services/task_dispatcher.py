@@ -40,33 +40,19 @@ def dispatch_task(image_path: str | None, image_data, task_id: str,
         "data": {"task_id": task_id},
     }
 
-    # 根据识别能力类型获取匹配的空闲节点
-    node_id, node_info = node_manager.get_idle_node_by_capability(recognition_type)
+    # 原子性地分配一个可用节点（锁内完成选择、socket 探测、任务计数增加）
+    node_id, socket_obj = node_manager.allocate_node_for_task(recognition_type)
     if not node_id:
-        # 降级：如果没有匹配能力的空闲节点，尝试获取任意空闲节点
-        node_id, node_info = node_manager.get_idle_node()
-        if not node_id:
-            response["message"] = "没有空闲节点"
-            response["status"] = "waiting"
-            # 即使没有空闲节点，也要注册 pending 任务，让 task_manager 重试
-            if register_pending:
-                task_manager.register_task(
-                    task_id,
-                    image_path,
-                    image_data=image_data if isinstance(image_data, bytes) else None,
-                    recognition_type=recognition_type,
-                )
-            return response
-        logger.warning(
-            "没有支持 %s 能力的空闲节点，降级分发到任意节点 node_id=%s",
-            recognition_type, node_id
-        )
-
-    socket_obj = node_info.get("socket")
-    if not socket_obj:
-        node_manager.set_node_idle(node_id)
-        response["message"] = "节点未连接"
-        response["status"] = "failed"
+        response["message"] = "没有空闲节点"
+        response["status"] = "waiting"
+        # 即使没有空闲节点，也要注册 pending 任务，让 task_manager 重试
+        if register_pending:
+            task_manager.register_task(
+                task_id,
+                image_path,
+                image_data=image_data if isinstance(image_data, bytes) else None,
+                recognition_type=recognition_type,
+            )
         return response
 
     try:
@@ -107,18 +93,7 @@ def dispatch_task(image_path: str | None, image_data, task_id: str,
             },
         }
 
-        json_protocol.send_json(socket_obj, task_msg)
-
-        logger.info(
-            "任务已发送: task_id=%s, 图片=%s, 大小=%s字节, 识别方式=%s",
-            task_id, image_filename, len(image_bytes), recognition_type
-        )
-
-        node_manager.increment_task_count(node_id)
-        response["message"] = "任务已分发到节点"
-        response["status"] = "dispatched"
-        response["data"]["node_id"] = node_id
-
+        # 发送前先注册 pending 任务，确保节点断线或发送失败仍可重试
         if register_pending:
             task_manager.register_task(
                 task_id,
@@ -127,11 +102,22 @@ def dispatch_task(image_path: str | None, image_data, task_id: str,
                 recognition_type=recognition_type,
             )
 
+        json_protocol.send_json(socket_obj, task_msg)
+
+        logger.info(
+            "任务已发送: task_id=%s, 图片=%s, 大小=%s字节, 识别方式=%s",
+            task_id, image_filename, len(image_bytes), recognition_type
+        )
+
+        response["message"] = "任务已分发到节点"
+        response["status"] = "dispatched"
+        response["data"]["node_id"] = node_id
+
         return response
 
     except Exception as e:
         logger.error("发送任务失败: %s", e)
-        node_manager.set_node_idle(node_id)
+        node_manager.decrement_task_count(node_id)
         response["message"] = str(e)
         response["status"] = "failed"
         return response

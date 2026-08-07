@@ -180,25 +180,20 @@ def generate_reset_token(email: str) -> dict:
                     "data": {"token": None}
                 }
             else:
+                # 生产环境禁止将 raw_token 返回给客户端
                 logger.error("发送密码重置邮件失败: %s", email_result["message"])
                 return {
-                    "success": True,
-                    "message": f"邮件发送失败({email_result['message']})，但已生成重置令牌",
-                    "data": {
-                        "token": raw_token,
-                        "user_id": user["id"],
-                        "expires_at": expires_at_str
-                    }
+                    "success": False,
+                    "message": "邮件发送失败，请稍后重试",
+                    "data": {"token": None}
                 }
         else:
+            # 未配置 SMTP 时绝不在响应中暴露 raw_token
+            logger.warning("SMTP 未配置，无法发送密码重置邮件")
             return {
-                "success": True,
-                "message": "SMTP 未配置，重置令牌已生成（仅开发/调试模式）",
-                "data": {
-                    "token": raw_token,
-                    "user_id": user["id"],
-                    "expires_at": expires_at_str
-                }
+                "success": False,
+                "message": "邮件服务未配置，无法发送重置链接",
+                "data": {"token": None}
             }
     except Exception as e:
         return {"success": False, "message": f"生成重置令牌失败: {str(e)}"}

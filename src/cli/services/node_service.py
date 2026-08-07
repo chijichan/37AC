@@ -8,6 +8,9 @@ import os
 import struct
 import errno
 import base64
+import re
+import uuid
+from pathlib import Path
 from prediction.predictor import predict_image, predict_image_llm
 from config.log_config import get_logger
 from config.base import (
@@ -233,11 +236,36 @@ def start_node_service():
         """安全删除推理临时图片文件"""
         if not image_path or not os.path.exists(image_path):
             return
+        # 只允许删除 IMAGE_PATH 目录下的文件，防止误删或路径遍历
+        try:
+            real_path = Path(os.path.abspath(image_path))
+            real_base = Path(os.path.abspath(IMAGE_PATH))
+            if real_base not in real_path.parents and real_path != real_base:
+                logger.warning("[节点] 拒绝清理 IMAGE_PATH 外的文件: %s", image_path)
+                return
+        except Exception as e:
+            logger.warning("[节点] 路径校验失败 %s: %s", image_path, e)
+            return
         try:
             os.remove(image_path)
             logger.debug("[节点] 已清理临时图片: %s", image_path)
         except Exception as e:
             logger.warning("[节点] 清理临时图片失败 %s: %s", image_path, e)
+
+    # 图片扩展名白名单（节点侧安全）
+    _ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".jfif", ".bmp", ".gif"}
+
+    def _safe_image_extension(filename):
+        """从文件名中提取安全的图片扩展名，非法扩展名返回空字符串。"""
+        if not filename or not isinstance(filename, str):
+            return ""
+        # 取最后一段扩展名并归一化
+        ext = Path(filename).suffix.lower()
+        # 额外过滤路径分隔符（Path.suffix 已移除路径，再做一次防御）
+        ext = re.sub(r"[\\/]+", "", ext)
+        if ext in _ALLOWED_IMAGE_EXTENSIONS:
+            return ext
+        return ""
 
     # === 连接并注册函数（辅助函数）===
     def connect_and_register():
@@ -514,9 +542,11 @@ def start_node_service():
                                     f"[节点] 图片大小不匹配: 期望={image_size}, 实际={len(image_bytes)}"
                                 )
 
-                            # 保存图片
+                            # 保存图片（使用 UUID 作为磁盘文件名，防止路径遍历）
                             os.makedirs(IMAGE_PATH, exist_ok=True)
-                            local_image_path = os.path.join(IMAGE_PATH, image_filename)
+                            safe_ext = _safe_image_extension(image_filename)
+                            local_image_filename = f"{uuid.uuid4().hex}{safe_ext}"
+                            local_image_path = os.path.join(IMAGE_PATH, local_image_filename)
                             with open(local_image_path, "wb") as f:
                                 f.write(image_bytes)
                             logger.info(f"[节点] 图片已保存到: {local_image_path}")

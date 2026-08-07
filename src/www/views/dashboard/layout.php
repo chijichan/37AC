@@ -251,11 +251,31 @@ require_once ROOT_PATH . '/views/layout.php';
         };
 
         const pageInfo = {
-            'overview': { icon: '<i class="ph ph-gauge"></i>', text: '总览', title: '仪表盘' },
-            'nodes': { icon: '<i class="ph ph-share-network"></i>', text: '节点管理', title: '节点管理' },
-            'apikeys': { icon: '<i class="ph ph-key"></i>', text: 'API 密钥', title: 'API 密钥' },
-            'history': { icon: '<i class="ph ph-clock-counter-clockwise"></i>', text: '使用记录', title: '使用记录' },
-            'settings': { icon: '<i class="ph ph-gear"></i>', text: '设置', title: '设置' }
+            'overview': {
+                icon: '<i class="ph ph-gauge"></i>',
+                text: '总览',
+                title: '仪表盘'
+            },
+            'nodes': {
+                icon: '<i class="ph ph-share-network"></i>',
+                text: '节点管理',
+                title: '节点管理'
+            },
+            'apikeys': {
+                icon: '<i class="ph ph-key"></i>',
+                text: 'API 密钥',
+                title: 'API 密钥'
+            },
+            'history': {
+                icon: '<i class="ph ph-clock-counter-clockwise"></i>',
+                text: '使用记录',
+                title: '使用记录'
+            },
+            'settings': {
+                icon: '<i class="ph ph-gear"></i>',
+                text: '设置',
+                title: '设置'
+            }
         };
 
         navToggle.addEventListener('click', function(e) {
@@ -321,7 +341,9 @@ require_once ROOT_PATH . '/views/layout.php';
 
             if (addToHistory) {
                 const url = page === 'overview' ? '/dashboard' : `/dashboard/${page}`;
-                history.pushState({ page }, '', url);
+                history.pushState({
+                    page
+                }, '', url);
             }
         }
 
@@ -353,8 +375,11 @@ require_once ROOT_PATH . '/views/layout.php';
         }
 
         function fetchJson(url) {
-            return fetch(url, {
-                headers: { Accept: 'application/json' }
+            // 使用 Auth.fetch 自动携带 Bearer token，并支持 401 自动刷新重试
+            return Auth.fetch(url, {
+                headers: {
+                    Accept: 'application/json'
+                }
             }).then((response) => {
                 if (!response.ok) {
                     throw new Error('接口请求失败');

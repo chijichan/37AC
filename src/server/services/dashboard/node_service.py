@@ -1,17 +1,44 @@
 # services/dashboard/node_service.py
 """节点服务 - 节点数据库操作"""
 
+import hashlib
+import secrets
+
 import pymysql
 from services.node_manager import get_db_connection
 
 
-def create_node(name, token, addr=None, is_active=True, user_id=None, capabilities='["local"]'):
-    """向数据库新增节点记录"""
+def _hash_node_token(token: str) -> str:
+    """对节点 token 进行 SHA-256 哈希"""
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def generate_node_token():
+    """生成随机节点 token 并返回原始 token 与哈希"""
+    raw_token = secrets.token_urlsafe(32)
+    return raw_token, _hash_node_token(raw_token)
+
+
+def create_node(name, token=None, addr=None, is_active=True, user_id=None, capabilities='["local"]'):
+    """向数据库新增节点记录。
+
+    若传入 token 为字符串则直接哈希存储；若为 None 则自动生成新的 token。
+    返回 (node_id, raw_token) 元组，raw_token 仅在创建时返回一次。
+    """
     conn = None
+    raw_token = None
+    if token is None:
+        raw_token, token_hash = generate_node_token()
+    else:
+        token_hash = _hash_node_token(token)
+
+    # addr 列为 NOT NULL，空地址归一化为空字符串（地址是可选项）
+    addr = (addr or "").strip() or ""
+
     try:
         conn = get_db_connection()
         if not conn:
-            return None
+            return None, raw_token
 
         with conn.cursor() as cursor:
             cursor.execute(
@@ -19,7 +46,7 @@ def create_node(name, token, addr=None, is_active=True, user_id=None, capabiliti
                    VALUES (%s, %s, %s, %s, %s, %s, %s, NOW(), NOW())""",
                 (
                     name,
-                    token,
+                    token_hash,
                     addr,
                     "offline",
                     1 if is_active else 0,
@@ -28,16 +55,21 @@ def create_node(name, token, addr=None, is_active=True, user_id=None, capabiliti
                 ),
             )
             conn.commit()
-            return cursor.lastrowid
+            return cursor.lastrowid, raw_token
     except Exception:
-        return None
+        return None, raw_token
     finally:
         if conn:
             conn.close()
 
 
-def update_node(node_id, name=None, addr=None, capabilities=None, is_active=None):
-    """更新节点记录"""
+def update_node(node_id, name=None, addr=None, capabilities=None, is_active=None, token=None,
+                user_id=None, is_admin=False):
+    """更新节点记录。
+
+    非管理员（is_admin=False）时，仅允许更新 user_id 名下的节点；
+    管理员不受限制。
+    """
     conn = None
     try:
         conn = get_db_connection()
@@ -58,15 +90,52 @@ def update_node(node_id, name=None, addr=None, capabilities=None, is_active=None
         if is_active is not None:
             fields.append("is_active = %s")
             params.append(1 if is_active else 0)
+        if token is not None:
+            fields.append("token = %s")
+            params.append(_hash_node_token(token))
 
         if not fields:
             return True  # 无字段需要更新
 
         fields.append("updated_at = NOW()")
+
+        where = "WHERE id = %s"
         params.append(node_id)
+        if not is_admin:
+            where += " AND user_id = %s"
+            params.append(user_id)
 
         with conn.cursor() as cursor:
-            sql = "UPDATE nodes SET {} WHERE id = %s".format(", ".join(fields))
+            sql = "UPDATE nodes SET {} {}".format(", ".join(fields), where)
+            cursor.execute(sql, tuple(params))
+            conn.commit()
+            return cursor.rowcount > 0
+    except Exception:
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+
+def delete_node(node_id, user_id=None, is_admin=False):
+    """删除节点记录，返回是否成功。
+
+    非管理员（is_admin=False）时，仅允许删除 user_id 名下的节点；
+    管理员不受限制。
+    """
+    conn = None
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return False
+
+        sql = "DELETE FROM nodes WHERE id = %s"
+        params = [node_id]
+        if not is_admin:
+            sql += " AND user_id = %s"
+            params.append(user_id)
+
+        with conn.cursor() as cursor:
             cursor.execute(sql, tuple(params))
             conn.commit()
             return cursor.rowcount > 0
@@ -78,11 +147,10 @@ def update_node(node_id, name=None, addr=None, capabilities=None, is_active=None
 
 
 def _row_to_node_dict(row):
-    """将数据库行转换为节点字典"""
+    """将数据库行转换为节点字典（不暴露 token）"""
     return {
         "id": row.get("id"),
         "name": row.get("name") or row.get("node_name") or row.get("id"),
-        "token": row.get("token"),
         "capabilities": row.get("capabilities") or '["local"]',
         "status": row.get("status"),
         "addr": row.get("addr"),

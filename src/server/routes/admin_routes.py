@@ -105,6 +105,9 @@ def change_status(user_id):
     if status is None:
         return jsonify({"success": False, "message": "状态值不能为空"}), 400
 
-    result = update_user_status(user_id, int(status))
+    if not isinstance(status, int) or status not in (0, 1):
+        return jsonify({"success": False, "message": "状态值必须为 0 或 1"}), 400
+
+    result = update_user_status(user_id, status)
     status_code = 200 if result["success"] else 400
     return jsonify(result), status_code

@@ -5,7 +5,32 @@ from functools import wraps
 
 from flask import request, jsonify, g
 
-from services.auth_service import decode_token
+from services.auth_service import decode_token, verify_token
+
+
+def _verify_access_token(token):
+    """校验 access token 的有效性、类型及用户状态。
+
+    返回 (payload, error_response, status_code)。
+    payload 仅在验证通过时非 None。
+    """
+    if not token:
+        return None, {"success": False, "message": "未提供认证令牌"}, 401
+
+    payload = decode_token(token)
+    if not payload:
+        return None, {"success": False, "message": "令牌无效或已过期"}, 401
+
+    # 拒绝 refresh token 当作 access token 使用
+    if payload.get("type") == "refresh":
+        return None, {"success": False, "message": "请使用访问令牌而非刷新令牌"}, 401
+
+    # 校验用户是否被禁用或删除
+    result = verify_token(token)
+    if not result.get("success"):
+        return None, {"success": False, "message": result.get("message")}, 401
+
+    return payload, None, None
 
 
 def login_required(f):
@@ -14,16 +39,9 @@ def login_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         token = _extract_token()
-        if not token:
-            return jsonify({"success": False, "message": "未提供认证令牌"}), 401
-
-        payload = decode_token(token)
-        if not payload:
-            return jsonify({"success": False, "message": "令牌无效或已过期"}), 401
-
-        # 拒绝 refresh token 当作 access token 使用
-        if payload.get("type") == "refresh":
-            return jsonify({"success": False, "message": "请使用访问令牌而非刷新令牌"}), 401
+        payload, error, status = _verify_access_token(token)
+        if error:
+            return jsonify(error), status
 
         # 将用户信息存入 Flask 全局上下文
         g.user_id = payload.get("user_id")
@@ -40,16 +58,9 @@ def admin_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         token = _extract_token()
-        if not token:
-            return jsonify({"success": False, "message": "未提供认证令牌"}), 401
-
-        payload = decode_token(token)
-        if not payload:
-            return jsonify({"success": False, "message": "令牌无效或已过期"}), 401
-
-        # 拒绝 refresh token 当作 access token 使用
-        if payload.get("type") == "refresh":
-            return jsonify({"success": False, "message": "请使用访问令牌而非刷新令牌"}), 401
+        payload, error, status = _verify_access_token(token)
+        if error:
+            return jsonify(error), status
 
         if payload.get("role") != "admin":
             return jsonify({"success": False, "message": "需要管理员权限"}), 403
@@ -72,6 +83,7 @@ def optional_login(f):
         if token:
             payload = decode_token(token)
             if payload:
+                # 可选登录不强制校验用户状态，避免影响公开读取接口
                 g.user_id = payload.get("user_id")
                 g.user_role = payload.get("role")
 

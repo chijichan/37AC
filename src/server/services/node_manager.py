@@ -256,6 +256,64 @@ class NodeManager:
                 return node["socket"]
         return None
 
+    def allocate_node_for_task(self, recognition_type="local"):
+        """原子性地分配一个可用于执行任务的节点。
+
+        在锁内同时完成：选择节点、校验 socket 有效性、增加任务计数、
+        并在必要时将节点置为忙碌状态。返回 (node_id, socket_obj) 或 (None, None)。
+        """
+        with self.lock:
+            candidates = []
+            for node_id, info in self.nodes.items():
+                has_socket = info.get("socket") is not None
+                is_idle = info["status"] == "idle"
+                has_capacity = info["current_tasks"] < info["max_tasks"]
+                node_caps = info.get("capabilities", '["local"]')
+                try:
+                    caps_list = json.loads(node_caps)
+                except Exception:
+                    caps_list = ["local"]
+                caps_match = recognition_type == "auto" or recognition_type in caps_list
+
+                if has_socket and is_idle and has_capacity and caps_match:
+                    candidates.append((node_id, info))
+
+            if not candidates and recognition_type != "local":
+                # 降级：尝试任意可用节点
+                for node_id, info in self.nodes.items():
+                    if (info.get("socket") is not None
+                            and info["status"] == "idle"
+                            and info["current_tasks"] < info["max_tasks"]):
+                        candidates.append((node_id, info))
+
+            for node_id, info in candidates:
+                sock = info.get("socket")
+                try:
+                    # 简单探测 socket 是否仍然有效
+                    sock.setblocking(False)
+                    sock.send(b"")
+                except (BlockingIOError, OSError):
+                    pass
+                except Exception:
+                    # socket 已失效，跳过该节点
+                    continue
+                finally:
+                    try:
+                        sock.setblocking(True)
+                    except Exception:
+                        pass
+
+                info["current_tasks"] += 1
+                if info["current_tasks"] >= info["max_tasks"]:
+                    info["status"] = "busy"
+                return node_id, sock
+
+        self._logger.debug(
+            "allocate_node_for_task(%s) 未找到可用节点，当前节点数=%d",
+            recognition_type, len(self.nodes)
+        )
+        return None, None
+
     def cleanup_nodes(self, timeout=30):
         """清理超时节点"""
         current_time = time.time()

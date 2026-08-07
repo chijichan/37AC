@@ -94,22 +94,6 @@ if (!$isAjax) {
         gap: .4rem .8rem;
     }
 
-    .node-token {
-        font-family: var(--ac-font-mono);
-        font-size: .8rem;
-        background: var(--ac-pink-50);
-        color: var(--ac-pink-700);
-        padding: .15rem .55rem;
-        border-radius: var(--ac-radius-pill);
-        cursor: pointer;
-        border: none;
-        transition: background var(--ac-dur-fast) var(--ac-ease-out);
-    }
-
-    .node-token:hover {
-        background: var(--ac-pink-100);
-    }
-
     .node-detail-row {
         display: flex;
         justify-content: space-between;
@@ -170,7 +154,9 @@ if (!$isAjax) {
 
 <section>
     <div id="nodes-list">
-        <div class="card"><div class="skeleton" style="height: 120px;"></div></div>
+        <div class="card">
+            <div class="skeleton" style="height: 120px;"></div>
+        </div>
     </div>
 </section>
 
@@ -201,11 +187,6 @@ if (!$isAjax) {
             document.body.removeChild(ta);
             Notify.success(successMsg);
         });
-    }
-
-    function copyNodeToken(nodeId) {
-        const node = allNodes.find(n => n.id === nodeId);
-        if (node && node.token) copyText(node.token, 'Token 已复制');
     }
 
     async function loadNodes() {
@@ -287,9 +268,6 @@ if (!$isAjax) {
 
                         <div class="node-info-line">
                             <span><i class="ph ph-user"></i> ${escapeHtml(node.username || '未分配')}</span>
-                            <span><i class="ph ph-key"></i>
-                                <button type="button" class="node-token" onclick="copyNodeToken(${node.id})" title="点击复制 Token">${node.token ? escapeHtml(node.token.slice(0, 12)) + '…' : '--'}</button>
-                            </span>
                             <span>ID: ${node.id}</span>
                             <span>能力: ${escapeHtml(formatCapabilities(node.capabilities))}</span>
                         </div>
@@ -318,7 +296,6 @@ if (!$isAjax) {
             ['状态', isOnline ? '在线' : '离线'],
             ['启用状态', node.is_active ? '已启用' : '已禁用'],
             ['地址', node.addr || '--'],
-            ['Token', node.token || '--'],
             ['所属用户', node.username || '未分配'],
             ['负载', (node.load_percentage ?? 0) + '%'],
             ['当前任务', node.current_tasks ?? 0],
@@ -336,6 +313,10 @@ if (!$isAjax) {
         `).join('');
 
         Modal.show(node.name || '未命名节点', bodyHtml, [{
+            text: '删除',
+            class: 'btn btn-danger btn-sm',
+            click: () => confirmDeleteNode(node.id)
+        }, {
             text: '关闭',
             class: 'btn btn-ghost btn-sm',
             click: () => Modal.close()
@@ -353,8 +334,8 @@ if (!$isAjax) {
                 </div>
                 <div class="field">
                     <label>节点 Token</label>
-                    <input type="text" name="token" class="input" placeholder="节点通信密钥" required />
-                    <span class="hint">节点客户端配置的通信密钥</span>
+                    <input type="text" name="token" class="input" placeholder="节点通信密钥（可留空自动生成）" />
+                    <span class="hint">节点客户端配置的通信密钥；留空则由服务器自动生成，创建后一次性显示</span>
                 </div>
                 <div class="field">
                     <label>节点地址</label>
@@ -400,10 +381,6 @@ if (!$isAjax) {
             Notify.error('请输入节点名称');
             return;
         }
-        if (!data.token) {
-            Notify.error('请输入节点 Token');
-            return;
-        }
 
         if (btn) {
             btn.disabled = true;
@@ -420,6 +397,11 @@ if (!$isAjax) {
                 Modal.close();
                 Notify.success('节点添加成功');
                 loadNodes();
+                // 服务端自动生成 Token 时，一次性展示给用户复制
+                const generatedToken = result.data && result.data.token;
+                if (generatedToken) {
+                    showGeneratedToken(generatedToken);
+                }
             } else {
                 Notify.error(result.message || '添加失败');
             }
@@ -431,6 +413,23 @@ if (!$isAjax) {
                 btn.textContent = '确认添加';
             }
         }
+    }
+
+    // 展示一次性生成的节点 Token
+    function showGeneratedToken(token) {
+        const bodyHtml = `
+            <p style="margin-bottom:1rem;">节点已创建！这是该节点唯一的通信 Token，<strong>请立即复制保存</strong>，关闭后将无法再次查看。</p>
+            <div style="display:flex;gap:.5rem;align-items:center;">
+                <code style="flex:1;padding:.6rem .8rem;background:var(--ac-bg);border-radius:var(--ac-radius-input);word-break:break-all;font-size:.82rem;">${escapeHtml(token)}</code>
+                <button class="btn btn-primary btn-sm" onclick="copyText('${token.replace(/'/g, "\\'")}', 'Token 已复制')">复制</button>
+            </div>
+            <p style="margin-top:1rem;font-size:.85rem;color:var(--ac-ink-500);">将 Token 填入节点客户端 .env 的 <code>TOKEN=</code> 配置项。</p>
+        `;
+        Modal.show('节点 Token（仅显示一次）', bodyHtml, [{
+            text: '我已保存',
+            class: 'btn btn-ghost btn-sm',
+            click: () => Modal.close()
+        }]);
     }
 
     // 修改节点弹窗
@@ -452,6 +451,11 @@ if (!$isAjax) {
                 <div class="field">
                     <label>节点名称</label>
                     <input type="text" name="name" class="input" value="${escapeHtml(node.name || '')}" placeholder="例如：推理节点-01" required maxlength="50" />
+                </div>
+                <div class="field">
+                    <label>节点 Token</label>
+                    <input type="text" name="token" class="input" placeholder="留空则不修改 Token" autocomplete="off" />
+                    <span class="hint">可选,留空保持原 Token；填写后节点需用新 Token 重新注册</span>
                 </div>
                 <div class="field">
                     <label>节点地址</label>
@@ -482,6 +486,58 @@ if (!$isAjax) {
         ]);
     }
 
+    // 删除节点确认弹窗
+    function confirmDeleteNode(nodeId) {
+        const node = allNodes.find(n => n.id === nodeId);
+        if (!node) return;
+
+        const isOnline = node.status === 'online';
+        const warning = isOnline ?
+            '<p style="margin-bottom:1rem;color:var(--ac-danger);">该节点当前<strong>在线</strong>，删除后其连接将被立即断开，节点客户端需要重新配置后才能注册。</p>' :
+            '<p style="margin-bottom:1rem;">删除后该节点将从集群中移除，不可恢复。</p>';
+
+        Modal.show('删除节点', `
+            <p style="margin-bottom:.5rem;">确定要删除节点 <strong>${escapeHtml(node.name || '未命名节点')}</strong>（ID: ${node.id}）吗？</p>
+            ${warning}
+        `, [{
+            text: '取消',
+            class: 'btn btn-ghost btn-sm',
+            click: () => Modal.close()
+        }, {
+            text: '确认删除',
+            class: 'btn btn-danger btn-sm',
+            click: (e) => deleteNode(nodeId, e.target)
+        }]);
+    }
+
+    async function deleteNode(nodeId, btn) {
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = '删除中…';
+        }
+
+        try {
+            const response = await Auth.fetch(`${window.API_BASE_URL}/nodes/${nodeId}`, {
+                method: 'DELETE'
+            });
+            const result = await response.json();
+            if (result.success) {
+                Modal.close();
+                Notify.success('节点已删除');
+                loadNodes();
+            } else {
+                Notify.error(result.message || '删除失败');
+            }
+        } catch (e) {
+            Notify.error('网络错误，请检查服务器连接');
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = '确认删除';
+            }
+        }
+    }
+
     async function submitEditNode(nodeId, btn) {
         const form = document.getElementById('form-edit-node');
         if (!form) return;
@@ -491,6 +547,12 @@ if (!$isAjax) {
             addr: form.addr.value.trim() || undefined,
             capabilities: form.capabilities.value.trim() || "local",
         };
+
+        // 仅填写了新 Token 才发送，避免误清空
+        const newToken = form.token.value.trim();
+        if (newToken) {
+            data.token = newToken;
+        }
 
         if (!data.name) {
             Notify.error('节点名称不能为空');

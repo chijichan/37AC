@@ -233,13 +233,14 @@ def predict_image(image_path, model_path=None, classes_file=None, use_cache=True
                 model_handler = CharacterRecognitionModel(NUM_CLASSES)
                 model = model_handler.load_model(model_path, NUM_CLASSES)
                 model.eval()
-                if use_cache:
-                    with _cache_lock:
-                        _model_cache = (model, NUM_CLASSES)
             except Exception as e:
                 result["error"] = f"模型加载失败: {str(e)}"
-                logger.error(f"模型加载失败: {str(e)}", exc_info=True)
+                logger.error("模型加载失败: %s", e, exc_info=True)
                 return result
+
+        if use_cache:
+            with _cache_lock:
+                _model_cache = (model, NUM_CLASSES)
 
         # ======================
         # === 图像预处理和预测 ===

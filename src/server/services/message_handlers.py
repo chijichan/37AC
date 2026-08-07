@@ -4,6 +4,8 @@ import json
 import time
 import os
 import base64
+import hashlib
+import hmac
 import pymysql
 
 from config.base import DB_CONFIG
@@ -14,6 +16,19 @@ from services.async_processor import async_processor
 from services.sse_bus import sse_bus
 
 logger = get_logger("message_handlers")
+
+
+def _hash_node_token(token: str) -> str:
+    """对节点 token 进行 SHA-256 哈希（与 node_service 保持一致）"""
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _verify_node_token(node_id: str, token: str, stored_hash: str | None) -> bool:
+    """时序安全地校验节点 token"""
+    if not node_id or not token or not stored_hash:
+        return False
+    expected = _hash_node_token(token)
+    return hmac.compare_digest(expected, stored_hash)
 
 
 def async_handle_register(conn, addr, msg):
@@ -52,12 +67,12 @@ def async_handle_register(conn, addr, msg):
         query = """
             SELECT id, name, token, capabilities, status, addr, is_active, created_at, updated_at
             FROM nodes
-            WHERE id = %s AND token = %s AND is_active = 1
+            WHERE id = %s AND is_active = 1
         """
-        cursor.execute(query, (node_id, token))
+        cursor.execute(query, (node_id,))
         result = cursor.fetchone()
 
-        if result:
+        if result and _verify_node_token(node_id, token, result.get("token")):
             if node_id in node_manager.nodes:
                 # 节点已注册（重复注册/重连场景）：
                 # 1) 重置任务计数与状态，防止上次会话残留计数导致节点被误判繁忙

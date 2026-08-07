@@ -124,7 +124,7 @@ class CharacterRecognitionModel:
         Returns:
             nn.Module: 加载权重后的模型
         """
-        state_dict = torch.load(load_path, map_location=get_device())
+        state_dict = torch.load(load_path, map_location=get_device(), weights_only=True)
 
         # 仅当模型未构建或类别数不匹配时才重建，避免重复构建
         if not hasattr(self, 'model') or self.model is None \

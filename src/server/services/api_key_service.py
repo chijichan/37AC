@@ -233,19 +233,18 @@ def verify_api_key(api_key: str) -> dict:
         if key_info["status"] != "active":
             return {"success": False, "message": f"API密钥已{key_info['status']}"}
 
-        if (
-            key_info["max_usage"] > 0
-            and key_info["usage_count"] >= key_info["max_usage"]
-        ):
-            return {"success": False, "message": "API密钥使用次数已达上限"}
-
-        # 更新使用计数和最后使用时间
+        # 原子化更新使用计数和最后使用时间，并在同一语句中校验上限
         with conn.cursor() as cursor:
             cursor.execute(
-                "UPDATE api_keys SET usage_count = usage_count + 1, last_used_at = NOW() WHERE id = %s",
+                """UPDATE api_keys
+                   SET usage_count = usage_count + 1, last_used_at = NOW()
+                   WHERE id = %s AND (max_usage <= 0 OR usage_count < max_usage)""",
                 (key_info["id"],),
             )
             conn.commit()
+
+        if cursor.rowcount == 0:
+            return {"success": False, "message": "API密钥使用次数已达上限"}
 
         return {
             "success": True,

@@ -646,13 +646,35 @@
     gap: .8rem;
 }
 
+.site-footer .footer-nav,
+.site-footer .footer-copyright {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    white-space: nowrap;
+}
+
 .site-footer a {
     color: var(--ac-ink-700);
     font-weight: 600;
+    text-decoration: none;
 }
 
 .site-footer a:hover {
     color: var(--ac-pink-600);
+}
+
+@media (max-width: 768px) {
+    .site-footer .footer-inner,
+    .site-footer .footer-copyright {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .site-footer .footer-copyright {
+        gap: .35rem;
+        white-space: normal;
+    }
 }
 
 /* ---------- 全屏加载遮罩 ---------- */

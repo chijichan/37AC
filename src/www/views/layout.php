@@ -2,7 +2,7 @@
 // 页面 meta 变量（视图可在引用本文件前覆盖）
 $site_name = '37AC';
 $page_title = isset($title) && $title ? $title : $site_name;
-$page_title_full = $page_title === $site_name ? $site_name : $page_title . ' - ' . $site_name;
+$page_title_full = $page_title === $site_name ? $site_name : $site_name . ' - ' . $page_title;
 $page_description = isset($description) && $description ? $description : '37AC 是一款面向二次元爱好者的 AI 角色识别与管理平台，支持上传图片识别动漫和游戏角色。';
 $page_keywords = isset($keywords) && $keywords ? $keywords : '37AC,动漫角色识别,二次元识别,AI识别,角色识别';
 $page_robots = isset($robots) && $robots ? $robots : 'index,follow,max-image-preview:large';

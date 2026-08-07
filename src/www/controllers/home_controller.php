@@ -10,7 +10,7 @@ class Home_Controller extends Controller
     public function index()
     {
         $data = [
-            'title' => '首页',
+            'title' => '欢迎来到二次元角色识别小屋',
             'description' => '37AC 是一款面向二次元爱好者的 AI 角色识别平台，支持上传图片快速识别动漫与游戏角色。',
             'keywords' => '37AC,动漫角色识别,二次元识别,AI识别,角色识别',
             'canonical_url' => '/'

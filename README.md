@@ -101,19 +101,24 @@ flowchart TB
 - 包含节点注册、心跳检测、任务派发、结果回传
 - 支持并发任务与动态节点调度
 - **能力感知分发**：节点注册时声明支持的能力（local/LLM），服务端按识别类型自动匹配
+- **智能重试**：任务无节点时自动排队重试，重试间隔按识别方式动态决策（local 快路径 10s / LLM 慢路径 90s，auto 根据在线节点 LLM 能力自动选择）
+- **节点归属权限**：普通用户仅管理自己的节点，管理员拥有全部权限
+- **Token 哈希存储**：节点 Token 仅存 SHA-256 哈希，防库泄露
 - 结果写入 **MySQL** 数据库，支持历史查询
 
 ### 管理仪表盘
 - 自研 **AC 设计系统**（樱花粉单强调色，Nunito + JetBrains Mono 自托管字体，Phosphor 图标）
 - 支持用户注册、登录、密码找回
 - API Key 管理与节点状态监控
+- **节点管理**：创建（可自定义/自动生成 Token）、修改（含 Token 更新）、详情、删除（仅所属用户或管理员）
 - 推理历史查看（服务端真实分页与筛选）与系统设置
 - 上传请求经 PHP 同源代理，站级 API Key 不下发前端
 
 ### 运行安全与稳定性
 - 前端限制上传类型与大小
 - 后端严格区分 JSON 控制消息与图片数据
-- 支持错误提示与任务自动重试
+- **任务自动重试**：无节点排队等待，节点上线自动分发；SSE 等待超时按识别方式动态调整（最长约 7 分钟），超时友好提示不误报失败
+- **统一日志**：根 logger + RotatingFileHandler（10MB×5 轮转），CLI/Server 共享同一配置
 - 推荐生产环境替换默认密钥与密码
 
 ---
@@ -123,12 +128,18 @@ flowchart TB
 ```text
 37AC/
 ├─ src/
+│  ├─ common/                          # ✨ CLI/Server 共享公共模块
+│  │  ├─ protocol.py                  # JSON 消息协议（双端实例）
+│  │  ├─ constants.py                 # 图片扩展名/协议/节点常量
+│  │  ├─ crypto.py                    # 节点 token 哈希与验证
+│  │  ├─ db_utils.py                  # 通用 SQL 构建
+│  │  └─ log_config.py                # 统一日志（根 logger + RotatingFileHandler）
 │  ├─ cli/
 │  │  ├─ main.py
 │  │  ├─ .env.example
 │  │  ├─ config/
 │  │  │  ├─ base.py
-│  │  │  └─ log_config.py
+│  │  │  └─ log_config.py             # 薄封装 → src/common/log_config.py
 │  │  ├─ data/dataset.py
 │  │  ├─ models/character_model.py
 │  │  ├─ training/trainer.py
@@ -153,20 +164,20 @@ flowchart TB
 │     ├─ config/
 │     │  ├─ base.py
 │     │  ├─ email_config.py
-│     │  └─ log_config.py
+│     │  └─ log_config.py             # 薄封装 → src/common/log_config.py
 │     ├─ middleware/
 │     │  ├─ auth_middleware.py
 │     │  └─ rate_limiter.py
 │     ├─ routes/                          # 7 个蓝图
 │     ├─ services/
 │     │  ├─ listen_service.py             # TCP 监听
-│     │  ├─ node_manager.py               # 节点管理
-│     │  ├─ task_manager.py               # 任务重试（LLM感知）
+│     │  ├─ node_manager.py               # 节点管理（含 LLM 能力感知）
+│     │  ├─ task_manager.py               # 任务重试（LLM感知 + auto 智能间隔）
 │     │  ├─ task_dispatcher.py            # 任务分发
 │     │  ├─ message_handlers.py           # 消息处理 + SSE 推送
 │     │  ├─ sse_bus.py                    # SSE 事件总线
 │     │  ├─ async_processor.py            # 异步线程池
-│     │  ├─ protocol/json_protocol.py     # JSON 协议
+│     │  ├─ protocol/json_protocol.py     # JSON 协议（兼容层 → src/common/protocol.py）
 │     │  ├─ auth/                         # 认证工具
 │     │  └─ dashboard/                    # 仪表盘服务
 │     ├─ AC_web/__init__.py               # Flask 应用初始化
@@ -527,7 +538,9 @@ python src/cli/main.py --mode 4
     "node_id": 1,
     "token": "your-node-token",
     "max_tasks": 5,
-    "capabilities": "[\"local\",\"llm\"]"
+    "capabilities": "[\"local\",\"llm\"]",
+    "llm_enabled": false,
+    "llm_timeout_sec": 30
   }
 }
 ```
@@ -535,7 +548,9 @@ python src/cli/main.py --mode 4
 - `capabilities`：JSON 数组字符串，声明节点支持的推理能力
   - `["local"]` — 仅支持本地 ResNet 模型（默认）
   - `["local","llm"]` — 同时支持本地模型和第三方多模态大模型
-- 服务端 `NodeManager.get_idle_node_by_capability()` 根据 `recognition_type` 匹配具备相应能力的空闲节点，实现智能分发
+- `llm_enabled` / `llm_timeout_sec`：节点 LLM 能力与推理超时，服务端据此决策任务重试间隔
+- 节点 Token 在数据库中仅存 **SHA-256 哈希**（新建节点时由服务端生成或用户自定义）
+- 服务端 `NodeManager` 根据 `recognition_type` 匹配具备相应能力的空闲节点，实现智能分发
 
 ### 任务下发消息示例
 
@@ -556,6 +571,19 @@ python src/cli/main.py --mode 4
   - `local` — 使用本地 ResNet 模型
   - `llm` — 使用第三方多模态大模型 API
   - `auto` — 由节点根据自身配置决定
+
+### 任务重试机制
+
+任务分发时若无空闲节点，将进入等待队列自动重试：
+
+| 识别方式 | 重试间隔 | 说明 |
+|---------|---------|------|
+| `local` | 10s | 本地推理快，短间隔快速重试 |
+| `llm` | 90s（或节点上报 LLM 超时 +15s） | 大模型推理耗时数秒~数十秒，避免重复分发 |
+| `auto` | 10s / 90s | **智能决策**：无在线 LLM 节点时走 10s 快路径，否则 90s 保守 |
+
+- 最大重试次数：`TASK_MAX_RETRIES`（默认 3）
+- 等待队列任务在节点上线后自动分发，前端 SSE 实时推送排队状态与预计重试时间
 
 ### 错误码
 
@@ -590,22 +618,20 @@ python src/cli/main.py --mode 4
 pip install -r tests/requirements-test.txt
 ```
 
-运行全部测试：
+> ⚠️ **注意**：CLI 与 Server 各自拥有独立的 `config` 包，不能在同一个 Python 进程中共存。
+> 必须**分目录运行**测试：
 
 ```bash
-pytest
-```
-
-运行特定模块测试：
-
-```bash
-# CLI 模块测试
+# CLI 模块测试（89 个）
 pytest tests/cli/
 
-# 服务端模块测试
+# 服务端模块测试（94 个）
 pytest tests/server/
+```
 
-# 指定测试文件
+指定测试文件：
+
+```bash
 pytest tests/cli/test_file_utils.py
 
 # 带覆盖率报告
@@ -656,7 +682,10 @@ LLM 推理在单独的后台线程中执行，不会阻塞节点的主消息循�
 - **本地上传**：点击选择或拖拽（JPG/PNG，最大 10MB），选择后立即显示预览
 - **链接上传**：粘贴图片 URL 直接加载（走相同的处理流程）
 - **图片处理**（可选）：手动框选裁剪（Cropper.js，粉色主题适配）/ 自动裁剪（YOLO）；AI 去背景（imgly + onnxruntime，WASM 模型自托管）
-- **流式识别**：经 PHP 代理 `/api/upload` SSE 透传，实时显示上传/排队/识别进度，结果含置信度条与识别来源徽章（本地模型 / 大模型）
+- **流式识别**：经 PHP 代理 `/api/upload` SSE 透传，实时显示上传/排队/识别进度
+  - 排队时显示预计重试倒计时（"约 X 秒后自动重试，节点上线即分发"）
+  - SSE 等待超时按识别方式动态计算（local 约 3 分钟 / LLM 约 7 分钟），超时友好提示而非误报失败
+  - 结果含置信度条与识别来源徽章（本地模型 / 大模型）
 
 ---
 

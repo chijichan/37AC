@@ -24,6 +24,8 @@ from config.base import (
     LLM_MODEL_NAME,
     LLM_PROMPT_TEMPLATE,
     LLM_TIMEOUT_SEC,
+    LLM_MAX_TOKEN,
+    LLM_THINKING,
     get_device,
 )
 from config.log_config import get_logger
@@ -404,11 +406,70 @@ def predict_image_llm(image_path: str) -> dict:
             headers["Authorization"] = f"Bearer {LLM_API_KEY}"
 
         # 根据 LLM_API_TYPE 选择请求格式：
+        # - "chat-completions" → OpenAI 兼容格式 (image_url / max_tokens)【默认】
+        # - "responses"        → OpenAI Responses API 格式 (input_image / max_output_tokens)
+        # - "anthropic"        → Anthropic Messages API 格式 (image/source / max_tokens)
         # - "ollama"           → Ollama 原生格式 (images / options)
-        # - "chat-completions" → OpenAI 兼容格式 (image_url / max_tokens)
+        # LLM_THINKING 控制是否开启模型思考（推理）过程：默认关闭，让模型直接输出结果。
         def _build_payload(prompt: str) -> dict:
+            if LLM_API_TYPE == "responses":
+                # OpenAI Responses API（如 gpt-5）：图片放在 input 中，token 上限用 max_output_tokens
+                payload = {
+                    "model": LLM_MODEL_NAME,
+                    "input": [
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "input_text", "text": prompt},
+                                {
+                                    "type": "input_image",
+                                    "image_url": (
+                                        f"data:{image_mime};base64,{image_b64}"
+                                    ),
+                                },
+                            ],
+                        }
+                    ],
+                    "max_output_tokens": LLM_MAX_TOKEN,  # 推理模型思考+结论，需要更多 token
+                    "temperature": 0.1,
+                }
+                if LLM_THINKING:
+                    payload["reasoning"] = {"effort": "high"}
+                return payload
+            if LLM_API_TYPE == "anthropic":
+                # Anthropic Messages API（如 claude）：图片用 image/source (base64)
+                payload = {
+                    "model": LLM_MODEL_NAME,
+                    "max_tokens": LLM_MAX_TOKEN,  # 推理模型思考+结论，需要更多 token
+                    "temperature": 0.1,
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": prompt},
+                                {
+                                    "type": "image",
+                                    "source": {
+                                        "type": "base64",
+                                        "media_type": image_mime,
+                                        "data": image_b64,
+                                    },
+                                },
+                            ],
+                        }
+                    ],
+                }
+                # Anthropic 思考显式开关：开启启用思考并分配预算，关闭则禁用
+                if LLM_THINKING:
+                    payload["thinking"] = {
+                        "type": "enabled",
+                        "budget_tokens": LLM_MAX_TOKEN,
+                    }
+                else:
+                    payload["thinking"] = {"type": "disabled"}
+                return payload
             if LLM_API_TYPE == "ollama":
-                return {
+                payload = {
                     "model": LLM_MODEL_NAME,
                     "messages": [
                         {
@@ -419,12 +480,15 @@ def predict_image_llm(image_path: str) -> dict:
                     ],
                     "stream": False,
                     "options": {
-                        "num_predict": 1024,   # 推理模型思考+结论，需要更多 token
+                        "num_predict": LLM_MAX_TOKEN,  # 推理模型思考+结论，需要更多 token
                         "temperature": 0.1,
                     },
                 }
-            # OpenAI 兼容格式（chat-completions，兜底默认）
-            return {
+                # Ollama 思考开关（对支持思考的模型，如 Qwen）
+                payload["options"]["think"] = LLM_THINKING
+                return payload
+            # OpenAI 兼容格式（chat-completions，兜底默认，mimo 等走此分支）
+            payload = {
                 "model": LLM_MODEL_NAME,
                 "messages": [
                     {
@@ -440,9 +504,18 @@ def predict_image_llm(image_path: str) -> dict:
                         ],
                     }
                 ],
-                "max_tokens": 1024,          # 推理模型思考+结论，需要更多 token
-                "temperature": 0.1,
+                # mimo 等 OpenAI 兼容模型用 max_completion_tokens 限制"思考+回答"总长度
+                "max_completion_tokens": LLM_MAX_TOKEN,
             }
+            # 深度思考开关（mimo / DeepSeek 等用 thinking.type，而非 OpenAI 的 reasoning_effort）：
+            # - 开启思考：显式 enabled；mimo 思考模式不支持 temperature/top_p（强制 1.0/0.95），故不传
+            # - 关闭思考：显式 disabled；此时可传 temperature 保证确定性输出
+            if LLM_THINKING:
+                payload["thinking"] = {"type": "enabled"}
+            else:
+                payload["thinking"] = {"type": "disabled"}
+                payload["temperature"] = 0.1
+            return payload
 
         def _request(prompt: str, _retries: int = 2):
             """向 LLM API 发送一次识别请求，返回解析后的
@@ -525,7 +598,7 @@ def _extract_json(text: str):
     if not text:
         return None
     decoder = json.JSONDecoder()
-    # 遍历每个 '{' 位置，尝试从该处解析完整 JSON
+    # 遍历每个 '{' 位置，尝试用 raw_decode 解析完整 JSON（支持嵌套、容忍尾部杂质）
     for m in re.finditer(r'\{', text):
         try:
             obj, _ = decoder.raw_decode(text[m.start():])
@@ -533,50 +606,131 @@ def _extract_json(text: str):
                 return obj
         except (json.JSONDecodeError, ValueError):
             continue
+    # 兜底：截取第一个 '{' 到最后一个 '}' 之间尝试 json.loads
+    start = text.find("{")
+    end = text.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        try:
+            obj = json.loads(text[start:end + 1])
+            if isinstance(obj, dict):
+                return obj
+        except (json.JSONDecodeError, ValueError):
+            pass
     return None
+
+
+# 作品/IP 名称的强特征词（用于检测 label 顺序是否写反）
+_WORK_NAME_HINTS = (
+    "project", "series", "vocaloid", "utau", "东方", "舰队collection", "舰队收藏",
+    "偶像大师", "lovelive", "live", "歌姬计划", "崩坏", "原神", "明日方舟",
+    "碧蓝航线", "少女前线", "赛马娘", "公主连结", "蔚蓝档案", "fate", "fgo",
+    "宝可梦", "数码宝贝", "奥特曼", "假面骑士", "高达", "舰队", "偶像",
+    "hololive", "nijisanji", "彩虹社",
+)
+
+
+def _normalize_label_order(label: str) -> str:
+    """确保 label 为「作品名/角色名」顺序。
+
+    提示词要求「作品/角色」，但模型偶尔会写反成「角色/作品」。
+    当第二段包含强烈的作品/IP 特征词、而第一段没有时，自动交换顺序。
+    无法可靠判断时保持原样，避免误改正确结果。
+    """
+    if not label or "/" not in label:
+        return label
+    parts = label.split("/")
+    if len(parts) != 2:
+        return label
+    first, second = parts[0].strip(), parts[1].strip()
+    if not first or not second:
+        return label
+    first_lower, second_lower = first.lower(), second.lower()
+    # 第二段像作品名而第一段不像 → 顺序写反，交换
+    if (any(h in second_lower for h in _WORK_NAME_HINTS)
+            and not any(h in first_lower for h in _WORK_NAME_HINTS)):
+        return f"{second}/{first}"
+    return label
 
 
 def _parse_llm_response(resp_data: dict) -> tuple:
     """从 LLM API 响应中提取 (label, confidence, features_used, class_probs)。
 
-    兼容两种格式：
-    - Ollama /api/chat: {"message": {"content": "..."}}
-    - OpenAI 兼容:      {"choices": [{"message": {"content": "..."}}]}
-    - 推理模型:          {"choices": [{"message": {"reasoning_content": "...", "content": null}}]}
+    兼容四种请求格式对应的响应结构：
+    - Ollama /api/chat:      {"message": {"content": "...", "reasoning_content": "..."}}
+    - OpenAI 兼容 chat:      {"choices": [{"message": {"content": "...", "reasoning_content": "..."}}]}
+    - OpenAI Responses API:  {"output": [{"content": [{"type":"output_text","text":"..."}]}]}
+    - Anthropic Messages:    {"content": [{"type":"text","text":"..."}, {"type":"thinking","thinking":"..."}]}
+    - 推理模型:              content 可能为 None/空，结论在 reasoning_content / thinking 中
 
-    LLM 输出结构：
+    与 _DEFAULT_LLM_PROMPT 约定的输出结构一致：
     {"label": "作品/角色名", "confidence": 95, "features_used": ["发色", "服装"],
-     "alternative_guesses": [{"label": "...", "confidence": 55}]}
-    其中 alternative_guesses 统一转换为 class_probs（与本地模型一致的 [{"name", "prob"}] 格式）。
+     "class_probs": [{"label": "其他可能作品名/角色名", "confidence": 3}, ...]}
+    - 优先读取 "class_probs"（提示词约定的字段）
+    - 兼容旧字段 "alternative_guesses"
+    两者统一转换为与本地模型一致的 [{"name": "作品/角色名", "prob": 3}] 格式。
     """
     try:
         content = None
         reasoning = None
 
-        # 先尝试 Ollama 格式 /api/chat
-        message = resp_data.get("message")
-        if message:
-            content = message.get("content")
-            reasoning = message.get("reasoning_content")
-        else:
-            # 再尝试 OpenAI 兼容格式 /v1/chat/completions
+        # 1) Anthropic Messages 格式：content 是块列表
+        content_blocks = resp_data.get("content")
+        if isinstance(content_blocks, list):
+            text_parts, thinking_parts = [], []
+            for block in content_blocks:
+                if not isinstance(block, dict):
+                    continue
+                if block.get("type") == "text" and block.get("text"):
+                    text_parts.append(block["text"])
+                elif block.get("type") == "thinking" and block.get("thinking"):
+                    thinking_parts.append(block["thinking"])
+            content = "\n".join(text_parts) or None
+            reasoning = "\n".join(thinking_parts) or None
+
+        # 2) OpenAI Responses API 格式：output 数组，块类型 output_text
+        if content is None and isinstance(resp_data.get("output"), list):
+            text_parts, reasoning_parts = [], []
+            for item in resp_data["output"]:
+                if not isinstance(item, dict):
+                    continue
+                inner = item.get("content") or []
+                if isinstance(inner, list):
+                    for block in inner:
+                        if not isinstance(block, dict):
+                            continue
+                        if block.get("type") == "output_text" and block.get("text"):
+                            text_parts.append(block["text"])
+                        elif block.get("type") == "reasoning" and block.get("summary"):
+                            reasoning_parts.append(str(block["summary"]))
+            content = "\n".join(text_parts) or None
+            reasoning = "\n".join(reasoning_parts) or None
+
+        # 3) Ollama /api/chat 格式
+        if content is None:
+            message = resp_data.get("message")
+            if message:
+                content = message.get("content")
+                reasoning = message.get("reasoning_content")
+
+        # 4) OpenAI 兼容格式 /v1/chat/completions
+        if content is None:
             choices = resp_data.get("choices") or [{}]
             message = choices[0].get("message", {}) if len(choices) > 0 else {}
             content = message.get("content")
             reasoning = message.get("reasoning_content")
 
-        # 推理模型：content 可能为 None/空，结论在 reasoning_content 中
+        # 推理模型：content 可能为 None/空。
+        # 重要：绝不能把纯推理过程（reasoning_content）当作最终答案。
+        # 仅当 reasoning 中能提取出完整 JSON（含 label）时才采用，否则视为无有效内容。
         if not content and reasoning:
-            text = str(reasoning).strip()
-            # 1) 优先从全文搜索 JSON 结构化结果（推理过程末尾通常输出结论）
-            parsed = _extract_json(text)
+            parsed = _extract_json(str(reasoning))
             if parsed and parsed.get("label"):
                 content = json.dumps(parsed, ensure_ascii=False)
                 logger.info("[LLM] 从 reasoning_content 提取到 JSON 结论")
             else:
-                # 2) 无 JSON 时，取尾部内容（结论通常在末尾）
-                content = text[-300:] if len(text) > 300 else text
-                logger.info("[LLM] 使用 reasoning_content 作为识别内容")
+                logger.warning(
+                    "[LLM] content 为空且 reasoning 中无有效 JSON 结论，放弃识别"
+                )
 
         if not content:
             logger.error("[LLM] API 返回空内容: %s", resp_data)
@@ -600,14 +754,29 @@ def _parse_llm_response(resp_data: dict) -> tuple:
             if isinstance(raw_features, list):
                 features_used = [str(f).strip() for f in raw_features if str(f).strip()]
 
-            # alternative_guesses -> class_probs（与本地模型统一格式）
-            raw_alt = parsed.get("alternative_guesses") or []
-            if isinstance(raw_alt, list):
-                class_probs = [
-                    {"name": str(g.get("label", "")).strip(), "prob": float(g.get("confidence", 0))}
-                    for g in raw_alt
-                    if isinstance(g, dict) and g.get("label")
-                ]
+            # 备选角色 → class_probs（与本地模型统一 [{"name", "prob"}] 格式）
+            # 提示词约定字段为 "class_probs"（{"label","confidence"}），
+            # 兼容旧字段 "alternative_guesses"。
+            raw_alts = parsed.get("class_probs")
+            if not isinstance(raw_alts, list):
+                raw_alts = parsed.get("alternative_guesses")
+            if isinstance(raw_alts, list):
+                probs = []
+                for g in raw_alts:
+                    if not isinstance(g, dict):
+                        continue
+                    # 兼容两种字段命名：提示词用 label/confidence，本地统一用 name/prob
+                    name = str(g.get("label") or g.get("name") or "").strip()
+                    if not name:
+                        continue
+                    # 与主 label 一致，确保「作品/角色」顺序
+                    name = _normalize_label_order(name)
+                    # 跳过提示词占位符条目（如 "作品名/角色名"）
+                    if _is_placeholder_label(name):
+                        continue
+                    prob = float(g.get("confidence", g.get("prob", 0)) or 0)
+                    probs.append({"name": name, "prob": prob})
+                class_probs = probs
 
             if not label:
                 reason = parsed.get("reason")
@@ -616,6 +785,9 @@ def _parse_llm_response(resp_data: dict) -> tuple:
             # 降级：纯文本作为标签
             label = content
             confidence = 95.0
+
+        # 确保「作品/角色」顺序（模型偶尔会写成「角色/作品」）
+        label = _normalize_label_order(label)
 
         # 过滤非角色标签（安全审查、拒绝回答等）
         if _is_invalid_label(label):
@@ -629,6 +801,19 @@ def _parse_llm_response(resp_data: dict) -> tuple:
         return ("", 0.0, [], [])
 
 
+def _is_placeholder_label(label: str) -> bool:
+    """判断标签是否为提示词模板占位符（模型未真正识别，回显了示例占位文本）。
+
+    如 "作品名/角色名"、"未知作品/角色名" 等。这类文本永远不会是真实角色名。
+    """
+    if not label:
+        return False
+    lower = label.lower()
+    placeholder_markers = ["作品名", "角色名", "未知作品", "未知角色",
+                           "example", "示例", "character name", "work name"]
+    return any(pm in lower for pm in placeholder_markers)
+
+
 def _is_invalid_label(label: str) -> bool:
     """判断 LLM 输出的标签是否为有效的角色名称。"""
     if not label:
@@ -639,6 +824,10 @@ def _is_invalid_label(label: str) -> bool:
         return True
 
     lower = label.lower()
+
+    # 提示词模板占位符（如 "作品名/角色名"、"未知作品/角色名"）
+    if _is_placeholder_label(label):
+        return True
 
     # 安全审查关键词
     safety_keywords = ["user safety", "safe", "unsafe", "content safety", "nsfw"]
@@ -660,8 +849,10 @@ def _is_invalid_label(label: str) -> bool:
         if re.search(p, label):
             return True
 
-    # 中文句子特征：句号、感叹号、问号、冒号、破折号等表明这是一段描述而非角色名
-    sentence_markers = ['。', '！', '？', '：', '——', '～', '~', '…', '●']
+    # 中文句子特征：句号、感叹号、问号、破折号等表明这是一段描述而非角色名
+    # 注意：不包含全角冒号"："，它常见于作品标题（如"崩坏：星穹铁道/银狼"），
+    # 若加入会导致这类合法标签被误杀。
+    sentence_markers = ['。', '！', '？', '——', '～', '~', '…', '●']
     for m in sentence_markers:
         if m in label:
             return True

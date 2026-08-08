@@ -1022,6 +1022,7 @@ require_once ROOT_PATH . '/views/layout.php';
                 let finalResult = null;
                 let streamError = null;
                 let streamTimeout = false;
+                this.currentTaskId = null; // 记录 task_id，用于 SSE 完成事件丢失时回退查询
 
                 while (true) {
                     const {
@@ -1109,7 +1110,9 @@ require_once ROOT_PATH . '/views/layout.php';
                     this.updateProgressStatus('识别时间较长，任务仍在后台处理中');
                     this.showError('等待超时，任务仍在后台处理中，请稍后刷新页面查看结果。若长时间无结果，请检查节点是否在线。');
                 } else {
-                    throw new Error('未收到识别结果');
+                    // 流正常结束但未收到结果：多为 SSE 完成事件经代理丢失。
+                    // 结果其实已保存在数据库，回退查询 /api/tasks/{task_id}，避免误报失败。
+                    await this.recoverResult();
                 }
             } catch (error) {
                 if (error.name === 'AbortError') {
@@ -1129,6 +1132,10 @@ require_once ROOT_PATH . '/views/layout.php';
         handleStreamEvent(eventData) {
             const status = eventData.status;
             const message = eventData.message || '';
+            // 记录 task_id（queued 事件最先携带），供完成事件丢失时回退查询
+            if (eventData.task_id) {
+                this.currentTaskId = eventData.task_id;
+            }
             // 在函数顶部统一声明，避免 switch case 内重复 const 声明（ES 语法限制）
             let timeoutSec = 0;
             let retryIn = 0;
@@ -1268,6 +1275,51 @@ require_once ROOT_PATH . '/views/layout.php';
         /* 隐藏结果 */
         hideResult() {
             this.resultWrap.classList.remove('active');
+        }
+
+        /* 回退查询任务结果：SSE 完成事件丢失时，轮询 /api/tasks/{task_id} 获取已保存的结果 */
+        async recoverResult() {
+            if (!this.currentTaskId) {
+                throw new Error('未收到识别结果');
+            }
+            const taskId = this.currentTaskId;
+            this.updateProgressStatus('正在获取识别结果...');
+
+            // 最多轮询若干次，间隔递增：结果已在数据库，短时内即可查询到
+            const maxAttempts = 6;
+            for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+                try {
+                    const resp = await fetch(`/api/tasks/${encodeURIComponent(taskId)}`, {
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest'
+                        },
+                    });
+                    if (resp.ok) {
+                        const data = await resp.json();
+                        const result = data && data.result;
+                        // 完成且带结果 → 展示
+                        if (result && data.status === 'completed') {
+                            this.showResult(result);
+                            return;
+                        }
+                        // 明确失败 / 错误 → 直接抛出对应提示
+                        if (data.status === 'failed' || data.status === 'error') {
+                            throw new Error(data.message || '识别失败，请稍后重试');
+                        }
+                        // pending / 尚无结果 → 继续轮询
+                    }
+                } catch (e) {
+                    // 网络瞬时错误可重试；业务错误直接上抛
+                    if (e && e.message && e.message !== '未收到识别结果' && e.message !== 'Failed to fetch') {
+                        throw e;
+                    }
+                }
+                await new Promise(resolve => setTimeout(resolve, 1500 * attempt));
+            }
+
+            // 轮询结束仍未拿到结果：提示稍后刷新查询，而非误报失败
+            this.updateProgressStatus('识别时间较长，任务仍在后台处理中');
+            this.showError('识别结果暂未返回，任务可能仍在后台处理中，请稍后刷新页面查看结果。若长时间无结果，请检查节点是否在线。');
         }
 
         /* 从 URL 获取图片 */

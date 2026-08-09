@@ -1,7 +1,10 @@
 # main.py
-from PIL import Image, ImageFile
+import os
 import sys
+import logging
 import argparse
+
+from PIL import Image, ImageFile
 
 from config.log_config import init_logging, get_logger
 
@@ -101,6 +104,28 @@ MENU_ACTIONS = {
 }
 
 
+def _force_exit(code: int = 0):
+    """立即退出，绕过解释器的线程关闭流程。
+
+    原因：torch 在启动时留有非 daemon 后台线程，正常退出时 Python 会执行
+    threading._shutdown() 去 join 它们；若此时刚好有 Ctrl+C 信号到达，会
+    中断 shutdown 并打印 "Exception ignored in: <module 'threading'>" 的
+    干扰性堆栈（CPython gh-112301）。
+
+    这里先冲刷日志与标准输出，再用 os._exit 直接终止，跳过该竞态。
+    """
+    try:
+        logging.shutdown()
+    except Exception:
+        pass
+    try:
+        sys.stdout.flush()
+        sys.stderr.flush()
+    except Exception:
+        pass
+    os._exit(code)
+
+
 def main():
     # 初始化统一日志系统（必须在 main 内，避免 DataLoader 子进程重复触发）
     init_logging()
@@ -155,11 +180,11 @@ def main():
         except KeyboardInterrupt:
             print()  # 换行，避免 ^C 糊在输入行
             logger.info("\n按 Ctrl+C 退出程序，再见~")
-            break
+            _force_exit(0)
         except EOFError:
             print()
             logger.info("收到 EOF，退出程序")
-            break
+            _force_exit(0)
         except Exception as e:
             logger.error(f"主程序出现错误: {str(e)}", exc_info=True)
             logger.info("程序出现未知错误，请重启程序")

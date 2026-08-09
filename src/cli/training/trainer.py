@@ -176,20 +176,23 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None):
             train_idx, val_idx = _split_dataset(full_dataset, VAL_SPLIT_RATIO)
             train_subset = Subset(full_dataset, train_idx)
             val_subset = _ValSubset(full_dataset, val_idx)
+            # 使用 num_workers=0：Windows 上 spawn 子进程会在 Ctrl+C 时
+            # 因重新导入 main.py 抛出干扰性的 KeyboardInterrupt 堆栈。
+            # 若需要多进程提速，可在 .env 设置 NUM_WORKERS>0（代价是 Ctrl+C 中断体验变差）。
             train_loader = DataLoader(
                 train_subset, batch_size=BATCH_SIZE, shuffle=True,
-                num_workers=NUM_WORKERS
+                num_workers=0
             )
             val_loader = DataLoader(
                 val_subset, batch_size=BATCH_SIZE, shuffle=False,
-                num_workers=NUM_WORKERS
+                num_workers=0
             )
             logger.info("数据集拆分: 训练 %d 张, 验证 %d 张",
                         len(train_idx), len(val_idx))
         else:
             train_loader = DataLoader(
                 full_dataset, batch_size=BATCH_SIZE, shuffle=True,
-                num_workers=NUM_WORKERS
+                num_workers=0
             )
             val_loader = None
             logger.info("使用全部 %d 张图片训练（无验证集）", len(full_dataset))

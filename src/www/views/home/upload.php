@@ -1203,8 +1203,8 @@ require_once ROOT_PATH . '/views/layout.php';
 
         /* 生成结果 HTML（兼容节点返回结构：label/confidence(0-100)/class_probs/recognition_type） */
         generateResultHTML(data) {
-            // 归一化置信度：节点返回 0-100，旧格式为 0-1
-            const toPercent = (v) => (v > 1 ? v : v * 100);
+            // 置信度：API 明确使用 0-100 表示百分数，直接使用无需换算
+            const toPercent = (v) => Number(v) || 0;
             const rawConfidence = Number(data.confidence) || 0;
 
             const topCharacters = data.top_characters || (data.class_probs || []).map(p => ({
@@ -1248,9 +1248,9 @@ require_once ROOT_PATH . '/views/layout.php';
 
         /* 生成概率条目 HTML */
         generateProbabilityItem(item) {
-            // 兼容 {name, probability(0-1)} 与节点 {name, prob(0-100)}
+            // 兼容 {name, probability(0-100)} 与节点 {name, prob(0-100)}，均按 0-100 处理
             const raw = Number(item.probability ?? item.prob) || 0;
-            const percentage = (raw > 1 ? raw : raw * 100).toFixed(2);
+            const percentage = raw.toFixed(2);
             return `
                 <div class="prob-item">
                     <span class="name">${escapeHtml(item.name)}</span>

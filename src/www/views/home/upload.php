@@ -1203,7 +1203,7 @@ require_once ROOT_PATH . '/views/layout.php';
 
         /* 生成结果 HTML（兼容节点返回结构：label/confidence(0-100)/class_probs/recognition_type） */
         generateResultHTML(data) {
-            // 置信度：API 明确使用 0-100 表示百分数，直接使用无需换算
+            // 置信度：API 明确使用 0-100 表示百分数
             const toPercent = (v) => Number(v) || 0;
             const rawConfidence = Number(data.confidence) || 0;
 

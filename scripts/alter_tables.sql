@@ -5,7 +5,14 @@
 -- 3. 创建 api_keys 表
 -- 4. task_results 表添加 user_id 和 api_key_id 字段
 -- 5. 创建 password_reset_tokens 表
+-- 6. users 表添加 token_version 字段（单端登录）
 -- =============================================
+
+-- 6. users 表添加 token_version 字段
+-- 单端登录：每次登录将 token_version 自增 1，写入 JWT payload，
+-- 验证时比对，版本不一致则旧令牌立即失效（旧登录被踢下线）
+ALTER TABLE users
+    ADD COLUMN token_version INT(11) NOT NULL DEFAULT 0 COMMENT '令牌版本号，用于单端登录（每次登录自增）';
 
 -- 1. nodes 表添加 user_id 字段
 ALTER TABLE nodes

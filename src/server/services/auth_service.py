@@ -21,13 +21,14 @@ from services.db import get_connection
 logger = get_logger("auth_service")
 
 
-def _generate_token(user_id: int, role: str, expires_in: int, token_type: str = "access") -> str:
+def _generate_token(user_id: int, role: str, expires_in: int, token_type: str = "access", token_version: int = 0) -> str:
     """生成 JWT 令牌"""
     now = datetime.now(timezone.utc)
     payload = {
         "user_id": user_id,
         "role": role,
         "type": token_type,
+        "token_version": token_version,
         "iat": now,
         "exp": now + timedelta(seconds=expires_in),
         "jti": secrets.token_hex(16),
@@ -47,12 +48,13 @@ def decode_token(token: str) -> dict:
 
 
 def verify_token(token: str) -> dict:
-    """验证 JWT 令牌并检查用户状态"""
+    """验证 JWT 令牌并检查用户状态（含单端登录版本校验）"""
     payload = decode_token(token)
     if not payload:
         return {"success": False, "message": "令牌无效或已过期"}
 
     user_id = payload.get("user_id")
+    token_version = payload.get("token_version", 0)
 
     conn = get_connection()
     if not conn:
@@ -60,7 +62,7 @@ def verify_token(token: str) -> dict:
     try:
         with conn.cursor(pymysql.cursors.DictCursor) as cursor:
             cursor.execute(
-                "SELECT id, username, role, status FROM users WHERE id = %s",
+                "SELECT id, username, role, status, token_version FROM users WHERE id = %s",
                 (user_id,),
             )
             user = cursor.fetchone()
@@ -70,6 +72,11 @@ def verify_token(token: str) -> dict:
 
         if user["status"] == 0:
             return {"success": False, "message": "账号已被禁用"}
+
+        # 单端登录：令牌携带的版本号必须与数据库当前版本一致，
+        # 不一致说明该用户已在其他设备重新登录，此令牌已失效
+        if user["token_version"] != token_version:
+            return {"success": False, "message": "账号已在其他设备登录，请重新登录"}
 
         return {
             "success": True,
@@ -158,7 +165,17 @@ def login(username: str, password: str, ip: str = None) -> dict:
         if not verify_password(password, user["password_hash"]):
             return {"success": False, "message": "用户名或密码错误"}
 
-        with conn.cursor() as cursor:
+        # 单端登录：每次登录将 token_version 自增，使旧登录立即失效
+        with conn.cursor(pymysql.cursors.DictCursor) as cursor:
+            cursor.execute(
+                "UPDATE users SET token_version = token_version + 1 WHERE id = %s",
+                (user["id"],),
+            )
+            cursor.execute(
+                "SELECT token_version FROM users WHERE id = %s",
+                (user["id"],),
+            )
+            new_version = cursor.fetchone()["token_version"]
             cursor.execute(
                 "UPDATE users SET last_login_at = NOW(), last_login_ip = %s WHERE id = %s",
                 (ip or "0.0.0.0", user["id"]),
@@ -166,10 +183,10 @@ def login(username: str, password: str, ip: str = None) -> dict:
             conn.commit()
 
         access_token = _generate_token(
-            user["id"], user["role"], JWT_ACCESS_TOKEN_EXPIRES, "access"
+            user["id"], user["role"], JWT_ACCESS_TOKEN_EXPIRES, "access", new_version
         )
         refresh_token_value = _generate_token(
-            user["id"], user["role"], JWT_REFRESH_TOKEN_EXPIRES, "refresh"
+            user["id"], user["role"], JWT_REFRESH_TOKEN_EXPIRES, "refresh", new_version
         )
 
         return {
@@ -203,6 +220,7 @@ def refresh_token(refresh_token_str: str) -> dict:
 
     user_id = payload.get("user_id")
     role = payload.get("role")
+    token_version = payload.get("token_version", 0)
 
     # 验证用户是否仍存在且未被禁用
     conn = get_connection()
@@ -210,7 +228,7 @@ def refresh_token(refresh_token_str: str) -> dict:
         try:
             with conn.cursor(pymysql.cursors.DictCursor) as cursor:
                 cursor.execute(
-                    "SELECT id, status FROM users WHERE id = %s",
+                    "SELECT id, status, token_version FROM users WHERE id = %s",
                     (user_id,),
                 )
                 user = cursor.fetchone()
@@ -218,6 +236,9 @@ def refresh_token(refresh_token_str: str) -> dict:
                 return {"success": False, "message": "用户不存在"}
             if user["status"] == 0:
                 return {"success": False, "message": "账号已被禁用"}
+            # 单端登录：版本不一致则旧登录已失效，拒绝刷新
+            if user["token_version"] != token_version:
+                return {"success": False, "message": "账号已在其他设备登录，请重新登录"}
         except Exception as e:
             return {"success": False, "message": f"验证失败: {str(e)}"}
         finally:
@@ -226,7 +247,7 @@ def refresh_token(refresh_token_str: str) -> dict:
         return {"success": False, "message": "数据库连接失败"}
 
     # 生成新的访问令牌
-    new_access_token = _generate_token(user_id, role, JWT_ACCESS_TOKEN_EXPIRES, "access")
+    new_access_token = _generate_token(user_id, role, JWT_ACCESS_TOKEN_EXPIRES, "access", token_version)
 
     return {
         "success": True,

@@ -32,6 +32,7 @@ DATASET_DIR = Path(os.getenv("DATASET_DIR", "W:/Img"))
 MODEL_DIR = ROOT_PATH / "saves" / "models"
 MODEL_PATH = MODEL_DIR / os.getenv("MODEL_FILENAME", "37ac-v0.0.1.pth")
 CLASSES_TXT_PATH = MODEL_DIR / "classes.txt"
+CLASSES_JSON_PATH = MODEL_DIR / "classes.json"
 # 已有模型权重备份目录
 MODEL_BAK_DIR = MODEL_DIR / "_bak"
 

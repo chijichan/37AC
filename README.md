@@ -156,7 +156,8 @@ flowchart TB
 │  │     ├─ logs/
 │  │     └─ models/
 │  │        ├─ 37ac-v0.0.1.pth           # 模型权重
-│  │        └─ classes.txt                # 类别映射
+│  │        ├─ classes.txt                # 类别映射（每行 IP/角色，兼容）
+│  │        └─ classes.json               # 类别结构化（{IP/角色: {id,ip,name_zh}}，优先）
 │  └─ server/
 │     ├─ runserver.py
 │     ├─ .env.example

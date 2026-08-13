@@ -10,6 +10,9 @@ from utils.file_utils import (
     ensure_directory_exists,
     load_classes_from_file,
     save_classes_to_file,
+    save_classes_to_json,
+    classes_to_json_dict,
+    parse_class_name,
     check_model_file,
 )
 
@@ -90,6 +93,43 @@ class TestLoadClassesFromFile:
         classes = load_classes_from_file(str(file))
         assert classes == ["角色A", "角色B"]
 
+    def test_load_json_spec_format(self, tmp_path: Path):
+        """测试加载规范格式 classes.json（顶层对象）"""
+        import json as _json
+        file = tmp_path / "classes.json"
+        data = {
+            "蔚蓝档案/白子": {"id": "白子", "ip": "蔚蓝档案", "name_zh": "白子"},
+            "原神/荧": {"id": "荧", "ip": "原神", "name_zh": "荧"},
+        }
+        file.write_text(_json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        classes = load_classes_from_file(str(file))
+        assert classes == ["蔚蓝档案/白子", "原神/荧"]
+
+    def test_load_json_list_format(self, tmp_path: Path):
+        """测试加载宽松数组格式 classes.json（兼容）"""
+        import json as _json
+        file = tmp_path / "classes.json"
+        data = [
+            {"id": "白子", "ip": "蔚蓝档案", "name_zh": "白子"},
+            {"id": "荧", "ip": "原神", "name_zh": "荧"},
+        ]
+        file.write_text(_json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        classes = load_classes_from_file(str(file))
+        assert classes == ["蔚蓝档案/白子", "原神/荧"]
+
+    def test_parse_class_name(self):
+        """测试类别名拆分"""
+        assert parse_class_name("蔚蓝档案/白子") == ("蔚蓝档案", "白子")
+        assert parse_class_name("初音未来") == ("", "初音未来")
+
+    def test_classes_to_json_dict(self):
+        """测试类别列表转规范 JSON 字典"""
+        data = classes_to_json_dict(["蔚蓝档案/白子", "原神/荧"])
+        assert data == {
+            "蔚蓝档案/白子": {"id": "白子", "ip": "蔚蓝档案", "name_zh": "白子"},
+            "原神/荧": {"id": "荧", "ip": "原神", "name_zh": "荧"},
+        }
+
 
 class TestSaveClassesToFile:
     """测试保存类别到文件"""
@@ -106,6 +146,22 @@ class TestSaveClassesToFile:
         file = tmp_path / "classes.txt"
         assert save_classes_to_file(str(file), []) is True
         assert file.exists()
+
+    def test_save_json_and_load(self, tmp_path: Path):
+        """测试保存 classes.json 后可正确加载"""
+        file = tmp_path / "classes.json"
+        classes = ["原神/荧", "原神/空"]
+        assert save_classes_to_json(str(file), classes) is True
+        assert load_classes_from_file(str(file)) == classes
+
+    def test_txt_json_roundtrip(self, tmp_path: Path):
+        """测试 txt 与 json 保存后可互相读取一致"""
+        classes = ["原神/荧", "原神/空", "蔚蓝档案/白子"]
+        txt = tmp_path / "classes.txt"
+        jsn = tmp_path / "classes.json"
+        save_classes_to_file(str(txt), classes)
+        save_classes_to_json(str(jsn), classes)
+        assert load_classes_from_file(str(txt)) == load_classes_from_file(str(jsn)) == classes
 
 
 class TestCheckModelFile:

@@ -8,7 +8,7 @@ from torchvision import transforms
 from PIL import Image
 from data.dataset import IPRoleImageFolder
 from models.character_model import CharacterRecognitionModel
-from utils.file_utils import save_classes_to_file
+from utils.file_utils import save_classes_to_file, save_classes_to_json
 from config.base import *
 from config.log_config import get_logger
 
@@ -36,12 +36,18 @@ def _backup_old_model(model_path, bak_dir):
     shutil.copy2(str(model_path), str(bak_path))
     logger.info("旧模型已备份 → %s", bak_path)
 
-    # 同时备份 classes.txt
+    # 同时备份 classes.txt 与 classes.json
     classes_txt = model_path.parent / "classes.txt"
     if classes_txt.exists():
         bak_classes = bak_dir / f"classes_bak_{timestamp}.txt"
         shutil.copy2(str(classes_txt), str(bak_classes))
         logger.info("旧 classes.txt 已备份 → %s", bak_classes)
+
+    classes_json = model_path.parent / "classes.json"
+    if classes_json.exists():
+        bak_classes_json = bak_dir / f"classes_bak_{timestamp}.json"
+        shutil.copy2(str(classes_json), str(bak_classes_json))
+        logger.info("旧 classes.json 已备份 → %s", bak_classes_json)
 
 logger = get_logger(__name__)
 
@@ -317,6 +323,7 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None):
                     epochs_no_improve = 0
                     logger.info("保存最佳模型 (正确率: %.2f%%) → %s", best_val_acc, str(MODEL_PATH))
                     save_classes_to_file(CLASSES_TXT_PATH, class_names)
+                    save_classes_to_json(CLASSES_JSON_PATH, class_names)
                 elif EARLY_STOP_PATIENCE > 0:
                     epochs_no_improve += 1
         else:
@@ -409,6 +416,7 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None):
                 epochs_no_improve = 0
                 logger.info("保存最佳模型 (正确率: %.2f%%) → %s", best_val_acc, str(MODEL_PATH))
                 save_classes_to_file(CLASSES_TXT_PATH, class_names)
+                save_classes_to_json(CLASSES_JSON_PATH, class_names)
             elif EARLY_STOP_PATIENCE > 0:
                 epochs_no_improve += 1
                 if epochs_no_improve >= EARLY_STOP_PATIENCE:
@@ -428,6 +436,7 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None):
             if 'model_handler' in dir() and 'class_names' in dir() and class_names:
                 model_handler.save_model(MODEL_PATH)
                 save_classes_to_file(CLASSES_TXT_PATH, class_names)
+                save_classes_to_json(CLASSES_JSON_PATH, class_names)
                 logger.warning("已保存当前模型至: %s (正确率: %.2f%%)", str(MODEL_PATH), best_val_acc)
             else:
                 logger.warning("模型尚未初始化，无需保存")

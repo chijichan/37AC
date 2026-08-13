@@ -15,6 +15,7 @@ from models.character_model import CharacterRecognitionModel
 from config.base import (
     IMAGE_SIZE,
     CLASSES_TXT_PATH,
+    CLASSES_JSON_PATH,
     MODEL_LOAD_PATH,
     YOLO_ENABLED,
     LLM_RECOGNITION_ENABLED,
@@ -56,10 +57,20 @@ _classes_cache = None
 _cache_lock = threading.Lock()
 
 
+def _default_classes_file() -> str:
+    """返回默认类别文件路径：优先 classes.json，否则回退 classes.txt。"""
+    try:
+        if CLASSES_JSON_PATH.exists():
+            return str(CLASSES_JSON_PATH)
+    except Exception:
+        pass
+    return str(CLASSES_TXT_PATH)
+
+
 def predict_character():
     """交互式预测函数（保持原有功能）"""
     # --- 1. 加载类别 ---
-    CLASS_NAMES = load_classes_from_file(CLASSES_TXT_PATH)
+    CLASS_NAMES = load_classes_from_file(_default_classes_file())
     if not CLASS_NAMES:
         return
 
@@ -142,7 +153,7 @@ def predict_image(image_path, model_path=None, classes_file=None, use_cache=True
     """
     # 使用默认路径或传入的路径
     model_path = model_path or MODEL_LOAD_PATH
-    classes_file = classes_file or CLASSES_TXT_PATH
+    classes_file = classes_file or _default_classes_file()
 
     # 初始化结果字典
     result = {

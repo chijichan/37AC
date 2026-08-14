@@ -1015,7 +1015,7 @@ require_once ROOT_PATH . '/views/layout.php';
 
                 // 处理 SSE 流式响应
                 // 后端事件格式：{"status":"queued|waiting|processing|completed|failed|error", ...}
-                // 完成时携带 result（节点返回的预测结构：label/confidence/class_probs）
+                // 完成时携带 result（节点返回的预测结构：class_probs 按概率降序，第一项即最佳结果）
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder();
                 let buffer = '';
@@ -1201,24 +1201,24 @@ require_once ROOT_PATH . '/views/layout.php';
             this.resultWrap.classList.add('active');
         }
 
-        /* 生成结果 HTML（兼容节点返回结构：label/confidence(0-100)/class_probs/recognition_type） */
+        /* 生成结果 HTML（统一结构：class_probs 按概率降序，第一项即最佳结果，不再依赖顶层 label/confidence） */
         generateResultHTML(data) {
             // 置信度：API 明确使用 0-100 表示百分数
             const toPercent = (v) => Number(v) || 0;
-            const rawConfidence = Number(data.confidence) || 0;
 
             const topCharacters = data.top_characters || (data.class_probs || []).map(p => ({
                 name: p.name,
                 probability: toPercent(Number(p.prob) || 0),
             }));
-            // label 格式为「作品名/角色名」（角色IP/角色名），拆分为 IP 与角色名分别展示
-            const labelParts = (data.label || '').split('/').map(s => s.trim()).filter(Boolean);
+            const top = topCharacters[0] || { name: '', probability: 0 };
+            // 最佳结果格式为「作品名/角色名」（角色IP/角色名），拆分为 IP 与角色名分别展示
+            const labelParts = (top.name || '').split('/').map(s => s.trim()).filter(Boolean);
             const characterIP = labelParts[0] || '未知作品';
             const characterName = labelParts[1] || labelParts[0] || '未知角色';
             const from_source = (data.from_source !== undefined) ?
                 data.from_source :
                 (data.recognition_type === 'llm' ? 1 : 0);
-            const confidence = toPercent(rawConfidence).toFixed(2);
+            const confidence = toPercent(top.probability).toFixed(2);
 
             let html = '<div class="card result-card">';
             html += '<div class="result-top">';

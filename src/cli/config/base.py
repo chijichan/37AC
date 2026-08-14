@@ -95,6 +95,12 @@ MAX_TASKS = int(os.getenv("MAX_TASKS", "5"))
 # ==================== 第三方大模型（LLM）识别配置 ====================
 # 使用多模态大模型（如 DeepSeek、GPT-4V 等）进行图片识别
 LLM_RECOGNITION_ENABLED = os.getenv("LLM_RECOGNITION_ENABLED", "False").lower() == "true"
+# 训练结束后是否使用 LLM 为每个角色生成 features_used / tags 并写入 classes.json
+# （需同时启用 LLM_RECOGNITION_ENABLED；会按角色逐个调用 API，注意成本）
+LLM_ENRICH_FEATURES = os.getenv("LLM_ENRICH_FEATURES", "False").lower() == "true"
+# 实验性：LLM 识别时把 classes.json 中已知角色的 features_used / tags 附加到提示词，
+# 让大模型对照角色数据库匹配识别（需同时启用 LLM_RECOGNITION_ENABLED）
+LLM_DB_RECOGNITION = os.getenv("LLM_DB_RECOGNITION", "False").lower() == "true"
 LLM_API_KEY = os.getenv("LLM_API_KEY", "")
 LLM_API_URL = os.getenv("LLM_API_URL", "https://api.deepseek.com/v1/chat/completions")
 # API 类型：

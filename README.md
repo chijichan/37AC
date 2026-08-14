@@ -385,19 +385,49 @@ python src/server/runserver.py
 
 ## 使用方法
 
+### 0. 命令行总览
+
+CLI 采用**子命令**设计（无参数运行则进入交互菜单）：
+
+| 命令 | 说明 |
+|------|------|
+| `python main.py` | 进入交互菜单（默认，等价于 `menu`） |
+| `python main.py train [--resume [PATH]] [--dataset PATH] [--yolo-crop]` | 训练模型 |
+| `python main.py predict [--llm] [--image PATH]` | 识别角色（默认本地模型；`--llm` 用大模型） |
+| `python main.py dataset verify` | 验证数据集图像 |
+| `python main.py dataset crop` | YOLO 裁剪数据集 |
+| `python main.py node` | 启动节点服务 |
+
+交互菜单中 **[2] 识别角色** 会先弹出**识别方式子菜单**：
+
+```
+  选择识别方式
+  [1] 本地模型（37ac ResNet，离线快速）
+  [2] LLM 大模型（多模态识别，需配置 API）
+  [0] 返回主菜单
+----------------------------------------
+请选择 (1/2/0):
+```
+
+- **[1] 本地模型** — 使用本地 37ac ResNet 模型（需已训练模型与 classes.json）
+- **[2] LLM 大模型** — 使用多模态 API 识别（需 `.env` 中 `LLM_RECOGNITION_ENABLED=true`）
+
 ### 1. 训练模型
 
-#### 命令行模式
+#### 命令行模式（子命令）
 
 ```bash
 # 从头训练（ImageNet 预训练）
-python src/cli/main.py --mode 1
+python src/cli/main.py train
 
 # 继续训练（自动使用当前模型权重）
-python src/cli/main.py --mode 1 --resume
+python src/cli/main.py train --resume
 
 # 继续训练（指定历史权重文件）
-python src/cli/main.py --mode 1 --resume saves/models/37ac_p_2026071315.tar
+python src/cli/main.py train --resume saves/models/37ac_p_2026071315.tar
+
+# 指定数据集 + YOLO 裁剪后训练
+python src/cli/main.py train --dataset ./data --yolo-crop
 ```
 
 命令行模式下 `--resume` 参数直接决定训练方式，不会弹出交互子菜单。
@@ -534,7 +564,7 @@ src\www\stop-nginx.bat
 ### 4. 启动边缘节点
 
 ```bash
-python src/cli/main.py --mode 4
+python src/cli/main.py node
 ```
 
 > 推荐启动顺序：Flask 服务端 -> PHP 仪表盘 -> 边缘节点
@@ -623,6 +653,44 @@ python src/cli/main.py --mode 4
 
 任务结果中的 `result` 字段在出错时包含 `error` 描述。
 
+### 识别结果结构（统一）
+
+节点返回的 `result` 为**统一结构**：不再提供顶层 `label` / `confidence` 字段，
+最佳结果一律取 `class_probs` 第一项（按概率降序）：
+
+```json
+{
+  "success": true,
+  "class_probs": [
+    { "name": "原神/荧", "prob": 93.0 },
+    { "name": "原神/空", "prob": 5.2 }
+  ],
+  "features_used": ["金发", "双辫"],
+  "tags": ["长发", "女性角色"],
+  "recognition_type": "llm"
+}
+```
+
+- `class_probs`：`[{name, prob}]`，`prob` 为 0-100 百分数，第一项即最佳结果
+- `features_used` / `tags`：仅 LLM 识别时存在（本地模型为空）
+- 服务器仪表盘/历史记录的展示字段（label/confidence）由 `class_probs[0]` 推导，
+  并兼容旧结构（顶层 label/confidence/score 等）
+
+#### LLM 识别置信度：特征/标签交叉计算
+
+启用实验性数据库识别模式（`LLM_DB_RECOGNITION=true`）后，LLM 的单一
+`label` + `confidence` 不再作为最终结论，而是把 LLM 提取的 `features_used` / `tags`
+与 `classes.json` 中该角色的档案做匹配度计算后**交叉加权**：
+
+```
+交叉置信度 = 70% × LLM 置信度 + 30% × 特征/标签匹配度(0-100)
+特征/标签匹配度 < 25% 时置信度封顶 45%
+```
+
+- 匹配度高 → 置信度基本保留（甚至小幅提升）
+- 匹配度低 → 置信度被明显压低，`class_probs` 按交叉后的概率重新排序
+- 需先用 `LLM_ENRICH_FEATURES=true` 训练生成角色档案（features_used/tags）
+
 ---
 
 ## 访问方式
@@ -640,8 +708,9 @@ python src/cli/main.py --mode 4
 
 ## 可选功能
 
-- CLI 图片校验：`python src/cli/main.py --mode 3`
-- 单张命令行预测：`python src/cli/main.py --mode 2`
+- CLI 图片校验：`python src/cli/main.py dataset verify`
+- 单张命令行预测：`python src/cli/main.py predict --image <图片路径>`
+- LLM 识别：`python src/cli/main.py predict --llm`
 - 环境检查：`python verify_env.py`
 
 ### 运行测试
@@ -708,6 +777,39 @@ LLM_TIMEOUT_SEC=30
 ```
 
 LLM 推理在单独的后台线程中执行，不会阻塞节点的主消息循环。
+
+#### 角色档案（features_used / tags）
+
+训练结束后可用 LLM 为每个角色生成**视觉特征**（`features_used`，如 `["青色头发", "双马尾"]`）与**标签**（`tags`，如 `["长发", "女性角色", "偶像风"]`），写入 `classes.json`：
+
+```env
+# 训练结束后为每个角色生成 features_used / tags（需同时启用 LLM 识别，按角色逐个调用 API）
+LLM_ENRICH_FEATURES=true
+```
+
+生成的 `classes.json` 条目形如：
+
+```json
+"Piapro_Characters/初音未来": {
+  "id": "初音未来",
+  "ip": "Piapro_Characters",
+  "name_zh": "初音未来",
+  "features_used": ["青色头发", "双马尾"],
+  "tags": ["长发", "绿发", "金瞳", "女性角色", "偶像风", "连衣裙"]
+}
+```
+
+已生成档案的角色会被跳过（不重复消耗 API）。
+
+#### 实验性：基于角色数据库的 LLM 识别
+
+启用后，LLM 识别请求会把 `classes.json` 中已知角色的特征/标签附加到提示词，让大模型**对照角色数据库**匹配识别：
+
+```env
+LLM_DB_RECOGNITION=true
+```
+
+> 实验性功能：需先通过 `LLM_ENRICH_FEATURES=true` 训练生成角色档案；角色较多时提示词会变长，注意模型上下文限制。
 
 ### 前端上传页功能
 

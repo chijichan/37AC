@@ -116,13 +116,16 @@ def get_overview_data():
     recent_tasks = get_recent_tasks(limit=5)
 
     if not recent_tasks:
+        # 演示数据：识别结果统一为 class_probs 结构（label/confidence 由第一项推导）
         recent_tasks = [
             {
                 "task_id": f"demo-{i+1}",
                 "status": "success",
-                "label": "示例结果",
+                "label": "示例角色",
                 "confidence": 90.0 - i * 3,
-                "result": {"label": "示例角色", "confidence": 90.0 - i * 3},
+                "result": {
+                    "class_probs": [{"name": "示例角色", "prob": 90.0 - i * 3}]
+                },
             }
             for i in range(5)
         ]

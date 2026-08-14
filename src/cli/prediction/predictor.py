@@ -10,7 +10,7 @@ import time
 import threading
 from common.constants import IMAGE_EXTENSIONS_BASIC
 from utils.image_utils import validate_image_file
-from utils.file_utils import load_classes_from_file, check_model_file
+from utils.file_utils import load_classes_from_file, load_classes_json_data, check_model_file
 from models.character_model import CharacterRecognitionModel
 from config.base import (
     IMAGE_SIZE,
@@ -18,6 +18,7 @@ from config.base import (
     MODEL_LOAD_PATH,
     YOLO_ENABLED,
     LLM_RECOGNITION_ENABLED,
+    LLM_DB_RECOGNITION,
     LLM_API_KEY,
     LLM_API_URL,
     LLM_API_TYPE,
@@ -61,25 +62,45 @@ def _default_classes_file() -> str:
     return str(CLASSES_JSON_PATH)
 
 
-def predict_character():
-    """交互式预测函数（保持原有功能）"""
-    # --- 1. 加载类别 ---
-    CLASS_NAMES = load_classes_from_file(_default_classes_file())
-    if not CLASS_NAMES:
-        return
+def predict_character(recognition_method: str = "local", image_path: str = None):
+    """交互式预测函数
 
-    # --- 2. 验证模型文件存在 ---
-    if not check_model_file(MODEL_LOAD_PATH):
-        return
-
-    # --- 3. 用户输入图片路径 ---
-    while True:
-        try:
-            user_input = input("请输入你要预测的图片路径（或输入 0 返回主菜单）: ").strip().strip("\"'").strip("\x1a")
-        except (KeyboardInterrupt, EOFError):
-            print()
-            logger.info("好的，返回主菜单~")
+    Args:
+        recognition_method: 识别方式
+            - "local"：使用本地 37ac ResNet 模型（默认）
+            - "llm"：使用第三方多模态大模型 API（需 LLM_RECOGNITION_ENABLED=true）
+        image_path: 非空时直接识别该单张图片后返回（命令行 --image 模式），
+            否则进入交互循环由用户输入图片路径
+    """
+    # --- 1. 按识别方式加载前置依赖 ---
+    if recognition_method == "llm":
+        if not LLM_RECOGNITION_ENABLED:
+            logger.warning("LLM 识别未启用（LLM_RECOGNITION_ENABLED=False），请先在 .env 中开启")
+            print("\nLLM 识别未启用，请在 .env 中设置 LLM_RECOGNITION_ENABLED=true")
             return
+        logger.info("识别方式: LLM 大模型")
+    else:
+        # 本地模型：加载类别 + 验证模型文件存在
+        CLASS_NAMES = load_classes_from_file(_default_classes_file())
+        if not CLASS_NAMES:
+            return
+
+        if not check_model_file(MODEL_LOAD_PATH):
+            return
+        logger.info("识别方式: 本地模型")
+
+    # --- 2. 用户输入图片路径 ---
+    single_shot = image_path is not None
+    while True:
+        if single_shot:
+            user_input = image_path
+        else:
+            try:
+                user_input = input("请输入你要预测的图片路径（或输入 0 返回主菜单）: ").strip().strip("\"'").strip("\x1a")
+            except (KeyboardInterrupt, EOFError):
+                print()
+                logger.info("好的，返回主菜单~")
+                return
         if user_input == "0" or user_input == "":
             logger.info("好的，返回主菜单~")
             return
@@ -100,23 +121,40 @@ def predict_character():
             logger.info(f"图像文件可能已损坏或格式不正确: {TEST_IMAGE_PATH}")
             continue
 
-        # 使用新的predict_image函数进行预测
-        result = predict_image(TEST_IMAGE_PATH)
+        # 按识别方式调用对应引擎
+        if recognition_method == "llm":
+            result = predict_image_llm(TEST_IMAGE_PATH)
+        else:
+            result = predict_image(TEST_IMAGE_PATH)
         _display_prediction_result(result, TEST_IMAGE_PATH)
+
+        # 命令行 --image 单张模式：识别完即返回
+        if single_shot:
+            return
 
 
 def _display_prediction_result(result, image_path):
-    """显示预测结果（内部辅助函数）"""
+    """显示预测结果（内部辅助函数）
+
+    统一结构：只依赖 result["class_probs"]（按概率降序，第一项即最佳结果），
+    不再使用顶层 label / confidence 字段。
+    """
     if not result.get("success"):
         error_msg = result.get("error", "未知错误")
         logger.error("预测失败: %s", error_msg)
         print(f"\n预测失败: {error_msg}")
         return
 
-    print(f"\n预测结果是: {result['label']}")
-    print(f"置信度: {result['confidence']:.2f}%")
+    probs = result.get("class_probs") or []
+    if not probs:
+        print("\n未识别到角色")
+        return
+
+    top = probs[0]
+    print(f"\n预测结果是: {top['name']}")
+    print(f"置信度: {top['prob']:.2f}%")
     print(f"图片路径: {image_path}")
-    for item in result["class_probs"]:
+    for item in probs[1:]:
         print(f"   → {item['name']}: {item['prob']:.1f}%")
     print()
 
@@ -138,12 +176,12 @@ def predict_image(image_path, model_path=None, classes_file=None, use_cache=True
         dict: 包含预测结果的字典，格式如下：
             {
                 "success": bool,           # 是否成功
-                "label": str,              # 预测标签
-                "confidence": float,       # 置信度(0-100)
-                "class_probs": list,       # 各类别概率列表 [{"name": str, "prob": float}]
+                "class_probs": list,       # 各类别概率列表（按概率降序，[{"name", "prob"}]，第一项即最佳结果）
+                "features_used": list,     # 可解释文本特征（本地模型为空）
                 "image_path": str,         # 图片路径
                 "error": str               # 错误信息（失败时）
             }
+        不再返回顶层 label / confidence 字段，最佳结果统一取 class_probs[0]。
     """
     # 使用默认路径或传入的路径
     model_path = model_path or MODEL_LOAD_PATH
@@ -152,8 +190,6 @@ def predict_image(image_path, model_path=None, classes_file=None, use_cache=True
     # 初始化结果字典
     result = {
         "success": False,
-        "label": "",
-        "confidence": 0.0,
         "class_probs": [],
         "image_path": image_path,
         "error": None,
@@ -282,12 +318,10 @@ def predict_image(image_path, model_path=None, classes_file=None, use_cache=True
                 )
                 class_probs = [p for p in sorted_probs if p["prob"] > 0][:10]
 
-                # 成功返回结果
+                # 成功返回结果（class_probs 已按概率降序，第一项即最佳结果）
                 result.update(
                     {
                         "success": True,
-                        "label": label,
-                        "confidence": round(confidence_value, 2),
                         "class_probs": class_probs,
                         "features_used": [],  # 本地模型无可解释文本特征，留空
                         "yolo_detected": yolo_info is not None,
@@ -337,7 +371,7 @@ def predict_batch(image_paths, **kwargs):
 # ======================
 def quick_predict(image_path):
     """
-    快速预测，只返回标签和置信度
+    快速预测，只返回标签和置信度（取自 class_probs 第一项）
 
     Args:
         image_path (str): 图片路径
@@ -346,18 +380,146 @@ def quick_predict(image_path):
         tuple: (label, confidence) 或 (None, None) 如果失败
     """
     result = predict_image(image_path)
-    if result["success"]:
-        return result["label"], result["confidence"]
-    else:
-        return None, None
+    if result["success"] and result.get("class_probs"):
+        top = result["class_probs"][0]
+        return top["name"], top["prob"]
+    return None, None
 
 
 # ======================
 # 第三方大模型（LLM）识别
 # ======================
 
+def _build_db_prompt(base_prompt: str) -> str:
+    """实验性（LLM_DB_RECOGNITION=True）：把 classes.json 中已知角色的
+    features_used / tags 附加到提示词，让 LLM 对照角色数据库匹配识别。
+
+    Args:
+        base_prompt: 原始识别提示词
+
+    Returns:
+        str: 附加了角色数据库的提示词；加载失败或数据库为空时返回原提示词
+    """
+    try:
+        from utils.file_utils import load_classes_json_data
+
+        data = load_classes_json_data(str(CLASSES_JSON_PATH))
+    except Exception as e:
+        logger.warning("[LLM] 加载角色数据库失败，使用默认提示词: %s", e)
+        return base_prompt
+    if not data:
+        return base_prompt
+
+    lines = [
+        "",
+        "【已知角色数据库（供你对照匹配，label 应优先从下列角色中选择）】",
+    ]
+    for name, meta in data.items():
+        if not isinstance(meta, dict):
+            continue
+        feats = meta.get("features_used") or []
+        tags = meta.get("tags") or []
+        parts = []
+        if feats:
+            parts.append("特征: " + "、".join(str(f) for f in feats))
+        if tags:
+            parts.append("标签: " + "、".join(str(t) for t in tags))
+        if parts:
+            lines.append(f"- {name}（{'；'.join(parts)}）")
+    if len(lines) <= 1:
+        return base_prompt
+    return base_prompt + "\n".join(lines)
+
+
+def _cross_compute_confidence(label, confidence, features_used, tags, profiles):
+    """用角色数据库（classes.json 中的 features_used / tags）与 LLM 输出的
+    特征/标签交叉计算置信度。
+
+    原理：LLM 给出的 label + confidence 不再作为最终结论，而是把 LLM 提取的
+    features_used / tags 与数据库中该角色的档案做匹配度计算，再与 LLM 置信度
+    交叉加权：
+      - 匹配度高 → 置信度基本保留（甚至小幅提升）
+      - 匹配度低 → 置信度被明显压低（特征/标签完全对不上时封顶 45%）
+
+    Args:
+        label: LLM 判定的角色（"IP/角色"）
+        confidence: LLM 给出的置信度（0-100）
+        features_used: LLM 提取的视觉特征列表
+        tags: LLM 提取的标签列表
+        profiles: classes.json 的角色档案 dict {类别名: {features_used, tags}}
+
+    Returns:
+        (float, bool): (交叉计算后的置信度, 是否命中数据库档案)
+    """
+    if not profiles:
+        return confidence, False
+    profile = profiles.get(label)
+    if not profile or not isinstance(profile, dict):
+        return confidence, False
+
+    prof_feats = set(str(f) for f in (profile.get("features_used") or []))
+    prof_tags = set(str(t) for t in (profile.get("tags") or []))
+    llm_feats = set(str(f) for f in (features_used or []))
+    llm_tags = set(str(t) for t in (tags or []))
+    if not prof_feats and not prof_tags:
+        # 档案为空，无法交叉验证，保持原置信度
+        return confidence, True
+
+    def _overlap(a, b):
+        """重合度：交集大小 / 较长的集合（0~1）"""
+        if not a or not b:
+            return 0.0
+        return len(a & b) / max(len(a), len(b))
+
+    # 标签语义更宽泛、更适合交叉验证，权重更高
+    tag_score = _overlap(llm_tags, prof_tags)
+    feat_score = _overlap(llm_feats, prof_feats)
+    match_score = 0.6 * tag_score + 0.4 * feat_score  # 0~1
+
+    # 交叉置信度 = 70% LLM 置信度 + 30% 特征/标签匹配度
+    crossed = 0.7 * float(confidence) + 0.3 * match_score * 100.0
+    if match_score < 0.25:
+        # 特征/标签与数据库档案基本对不上，即使 LLM 高置信也压到 45% 以下
+        crossed = min(crossed, 45.0)
+    return round(crossed, 2), True
+
+
+def _merge_llm_class_probs(label, confidence, class_probs):
+    """把 LLM 的主结论（label + confidence）与备选列表合并为统一的 class_probs。
+
+    统一结构：按概率降序的 [{"name": "IP/角色", "prob": 0-100}]，第一项即最佳结果。
+    旧的备选格式 {"label", "confidence"} 在 _parse_llm_response 中已转换为
+    {"name", "prob"}。
+
+    Args:
+        label: LLM 判定的角色（"IP/角色"）
+        confidence: 主结论置信度（0-100，可能已经过交叉计算）
+        class_probs: 备选角色列表 [{"name", "prob"}]
+
+    Returns:
+        list: 合并、去重、降序排列后的 class_probs（最多 10 项）
+    """
+    merged = [{"name": label, "prob": round(float(confidence), 2)}]
+    seen = {label}
+    for item in class_probs or []:
+        name = str(item.get("name") or "").strip()
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        try:
+            prob = round(float(item.get("prob", 0) or 0), 2)
+        except (TypeError, ValueError):
+            prob = 0.0
+        merged.append({"name": name, "prob": prob})
+    merged.sort(key=lambda x: x["prob"], reverse=True)
+    return merged[:10]
+
+
 def predict_image_llm(image_path: str) -> dict:
     """通过第三方多模态 API（如 DeepSeek、GPT-4V）识别图片角色。
+
+    识别结果统一结构：最佳结果在 class_probs[0]（{name, prob}），
+    不再返回顶层 label / confidence 字段。
 
     Args:
         image_path (str): 图片本地路径
@@ -367,8 +529,6 @@ def predict_image_llm(image_path: str) -> dict:
     """
     result = {
         "success": False,
-        "label": "",
-        "confidence": 0.0,
         "class_probs": [],
         "image_path": image_path,
         "error": None,
@@ -524,7 +684,7 @@ def predict_image_llm(image_path: str) -> dict:
 
         def _request(prompt: str, _retries: int = 2):
             """向 LLM API 发送一次识别请求，返回解析后的
-            (label, confidence, features_used, class_probs)。
+            (label, confidence, features_used, tags, class_probs)。
 
             ConnectionError（网关断开）时自动重试，最多 _retries 次。
             """
@@ -545,33 +705,53 @@ def predict_image_llm(image_path: str) -> dict:
                         continue
                     result["error"] = f"LLM 连接失败: {e}"
                     logger.error("[LLM] %s", result["error"])
-                    return None, None, [], []
+                    return None, None, [], [], []
                 except requests.Timeout:
                     result["error"] = f"API 请求超时 ({LLM_TIMEOUT_SEC}秒)"
                     logger.error("[LLM] %s", result["error"])
-                    return None, None, [], []
+                    return None, None, [], [], []
                 break
             if resp.status_code != 200:
                 result["error"] = f"API 返回错误 ({resp.status_code}): {resp.text[:200]}"
                 logger.error("[LLM] %s", result["error"])
-                return None, None, [], []
+                return None, None, [], [], []
             resp_data = resp.json()
             return _parse_llm_response(resp_data)
 
-        label, confidence, features_used, class_probs = _request(LLM_PROMPT_TEMPLATE)
+        # 实验性模式（LLM_DB_RECOGNITION=True）：把 classes.json 中已知角色的
+        # features_used / tags 附加到提示词，让 LLM 对照角色数据库匹配识别
+        prompt = LLM_PROMPT_TEMPLATE
+        if LLM_DB_RECOGNITION:
+            prompt = _build_db_prompt(prompt)
+
+        label, confidence, features_used, tags, class_probs = _request(prompt)
 
         if not label or label.lower() == "unknown":
             result["error"] = f"LLM 无法识别该角色: {label}"
             logger.warning("[LLM] %s", result["error"])
             return result
 
+        # 实验性（LLM_DB_RECOGNITION=True）：用 classes.json 中的角色档案
+        # （features_used / tags）与 LLM 输出的特征/标签交叉计算置信度，
+        # 不再以 LLM 单一的 label/confidence 作为最终结论
+        if LLM_DB_RECOGNITION:
+            try:
+                profiles = load_classes_json_data(str(CLASSES_JSON_PATH))
+                confidence, _ = _cross_compute_confidence(
+                    label, confidence, features_used, tags, profiles
+                )
+                logger.info("[LLM] 交叉计算置信度: %s -> %.2f%%", label, confidence)
+            except Exception as e:
+                logger.warning("[LLM] 交叉计算置信度失败，使用 LLM 原始置信度: %s", e)
+
+        # 统一结果结构：最佳结果在 class_probs[0]，不再返回顶层 label/confidence
+        merged_probs = _merge_llm_class_probs(label, confidence, class_probs)
         result.update(
             {
                 "success": True,
-                "label": label,
-                "confidence": confidence,
-                "class_probs": class_probs,
+                "class_probs": merged_probs,
                 "features_used": features_used,
+                "tags": tags,
             }
         )
         logger.info("[LLM] 识别成功: %s -> %s", image_path, label)
@@ -658,7 +838,7 @@ def _normalize_label_order(label: str) -> str:
 
 
 def _parse_llm_response(resp_data: dict) -> tuple:
-    """从 LLM API 响应中提取 (label, confidence, features_used, class_probs)。
+    """从 LLM API 响应中提取 (label, confidence, features_used, tags, class_probs)。
 
     兼容四种请求格式对应的响应结构：
     - Ollama /api/chat:      {"message": {"content": "...", "reasoning_content": "..."}}
@@ -669,7 +849,7 @@ def _parse_llm_response(resp_data: dict) -> tuple:
 
     与 _DEFAULT_LLM_PROMPT 约定的输出结构一致：
     {"label": "作品/角色名", "confidence": 95, "features_used": ["发色", "服装"],
-     "class_probs": [{"label": "其他可能作品名/角色名", "confidence": 3}, ...]}
+     "tags": ["银发", "女性角色"], "class_probs": [{"label": "...", "confidence": 3}, ...]}
     - 优先读取 "class_probs"（提示词约定的字段）
     - 兼容旧字段 "alternative_guesses"
     两者统一转换为与本地模型一致的 [{"name": "作品/角色名", "prob": 3}] 格式。
@@ -739,12 +919,13 @@ def _parse_llm_response(resp_data: dict) -> tuple:
 
         if not content:
             logger.error("[LLM] API 返回空内容: %s", resp_data)
-            return ("", 0.0, [], [])
+            return ("", 0.0, [], [], [])
 
         content = str(content).strip()
 
         # 默认值
         features_used = []
+        tags = []
         class_probs = []
 
         # 优先从 JSON 中提取结构化结果（支持嵌套结构）
@@ -758,6 +939,11 @@ def _parse_llm_response(resp_data: dict) -> tuple:
             raw_features = parsed.get("features_used")
             if isinstance(raw_features, list):
                 features_used = [str(f).strip() for f in raw_features if str(f).strip()]
+
+            # 标签（如 ["银发", "长发", "女性角色", "偶像风"]）
+            raw_tags = parsed.get("tags")
+            if isinstance(raw_tags, list):
+                tags = [str(t).strip() for t in raw_tags if str(t).strip()]
 
             # 备选角色 → class_probs（与本地模型统一 [{"name", "prob"}] 格式）
             # 提示词约定字段为 "class_probs"（{"label","confidence"}），
@@ -797,13 +983,13 @@ def _parse_llm_response(resp_data: dict) -> tuple:
         # 过滤非角色标签（安全审查、拒绝回答等）
         if _is_invalid_label(label):
             logger.warning("[LLM] 过滤无效标签: %s", label)
-            return ("", 0.0, [], [])
+            return ("", 0.0, [], [], [])
 
-        return label, confidence, features_used, class_probs
+        return label, confidence, features_used, tags, class_probs
 
     except (KeyError, IndexError, ValueError, json.JSONDecodeError) as e:
         logger.error("[LLM] 无法解析 API 响应: %s, 错误: %s", resp_data, e)
-        return ("", 0.0, [], [])
+        return ("", 0.0, [], [], [])
 
 
 def _is_placeholder_label(label: str) -> bool:

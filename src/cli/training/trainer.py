@@ -1,5 +1,6 @@
 # training/trainer.py
 import os
+import json
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -293,13 +294,94 @@ def _evaluate_per_ip_success_rate(model, dataset, device, class_names):
                     cstat["correct"] += 1
 
     table = _build_ip_success_table(ip_stats)
-    print(table)
     logger.info("\n%s", table)
 
     class_table = _build_class_success_table(class_stats)
-    print(class_table)
     logger.info("\n%s", class_table)
     return ip_stats
+
+
+def _enrich_classes_with_llm_features(dataset, class_names):
+    """训练结束后，用 LLM（多模态）为每个角色生成 features_used / tags 并写入 classes.json。
+
+    仅当 LLM_ENRICH_FEATURES=True 且 LLM_RECOGNITION_ENABLED=True 时执行；
+    已有 features_used 或 tags 的角色会跳过，避免重复消耗 API。
+    每个角色取数据集中的第一张图片作为代表图，复用 predict_image_llm 返回的
+    features_used / tags 字段。
+
+    Args:
+        dataset: 全量数据集（IPRoleImageFolder，含 samples 属性）
+        class_names: 类别名列表（"IP/角色"）
+    """
+    if not LLM_ENRICH_FEATURES:
+        return
+    if not LLM_RECOGNITION_ENABLED:
+        logger.warning(
+            "LLM_ENRICH_FEATURES=True 但 LLM_RECOGNITION_ENABLED=False，跳过角色特征补充"
+        )
+        return
+    if dataset is None or len(dataset) == 0 or not class_names:
+        return
+
+    try:
+        from prediction.predictor import predict_image_llm
+    except ImportError:
+        logger.warning("无法导入 LLM 识别模块，跳过角色特征补充")
+        return
+
+    # 读取已有 profiles（features_used / tags），避免对已补充的角色重复调用 API
+    existing_profiles = {}
+    try:
+        if CLASSES_JSON_PATH.exists():
+            with open(CLASSES_JSON_PATH, "r", encoding="utf-8") as f:
+                raw = json.load(f)
+            if isinstance(raw, dict):
+                for key, val in raw.items():
+                    if isinstance(val, dict) and (val.get("features_used") or val.get("tags")):
+                        existing_profiles[key] = {
+                            "features_used": val.get("features_used") or [],
+                            "tags": val.get("tags") or [],
+                        }
+    except Exception as e:
+        logger.warning("读取已有 classes.json 失败: %s", e)
+
+    # 每个角色取第一张图片作为代表图
+    sample_by_label = {}
+    for path, label in dataset.samples:
+        sample_by_label.setdefault(label, path)
+
+    logger.info("=" * 50)
+    logger.info("使用 LLM 为 %d 个角色生成 features_used / tags ...", len(class_names))
+    profiles = {}
+    for idx, cls in enumerate(class_names, 1):
+        if existing_profiles.get(cls):
+            profiles[cls] = existing_profiles[cls]
+            logger.info("[%d/%d] %s 已有 profile，跳过", idx, len(class_names), cls)
+            continue
+        img = sample_by_label.get(idx)
+        if not img:
+            continue
+        try:
+            result = predict_image_llm(str(img))
+            feats = result.get("features_used") or []
+            tags = result.get("tags") or []
+            profiles[cls] = {"features_used": feats, "tags": tags}
+            logger.info(
+                "[%d/%d] %s -> features_used=%s tags=%s",
+                idx, len(class_names), cls, feats, tags,
+            )
+        except Exception as e:
+            logger.warning("[%d/%d] %s 生成 profile 失败: %s", idx, len(class_names), cls, e)
+
+    if profiles:
+        save_classes_to_json(CLASSES_JSON_PATH, class_names, profiles=profiles)
+        logger.info(
+            "已将 %d 个角色的 features_used/tags 写入 → %s",
+            len(profiles), str(CLASSES_JSON_PATH),
+        )
+    else:
+        logger.info("没有可写入的 features_used/tags")
+    logger.info("=" * 50)
 
 
 def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None):
@@ -617,6 +699,9 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None):
 
         # 训练结束后：对全量数据集按 IP 分组输出各数据集的识别成功率（非置信度）
         _evaluate_per_ip_success_rate(model, full_dataset, device, class_names)
+
+        # 训练结束后：使用 LLM 为每个角色补充 features_used / tags（可选，需 LLM_ENRICH_FEATURES=True）
+        _enrich_classes_with_llm_features(full_dataset, class_names)
 
     except KeyboardInterrupt:
         logger.warning("\n" + "=" * 50)

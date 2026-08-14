@@ -260,7 +260,13 @@ if (!$isAjax) {
                     `<span class="api-key-tag">${escapeHtml(task.api_key_name)}</span>` :
                     '<span class="api-key-tag">--</span>';
 
-                const confidence = task.confidence;
+                // 统一结果结构：最佳结果取自 result.class_probs[0]（服务器通常已推导 label/confidence，此处兜底）
+                const resultProbs = task.result && Array.isArray(task.result.class_probs) ? task.result.class_probs : [];
+                const topProb = resultProbs[0] || null;
+                const taskLabel = task.label || (topProb && topProb.name) || '--';
+                const taskConf = task.confidence != null ? task.confidence : (topProb && topProb.prob != null ? topProb.prob : null);
+
+                const confidence = taskConf;
                 const confidenceStr = confidence != null ?
                     (typeof confidence === 'number' ? `${confidence.toFixed(1)}%` : `${escapeHtml(confidence)}%`) :
                     '--';
@@ -276,7 +282,7 @@ if (!$isAjax) {
                         <td><small class="mono" title="${escapeHtml(task.task_id || '')}">${taskIdShort}</small></td>
                         <td><small>${escapeHtml(task.created_at || '--')}</small></td>
                         <td><small>${escapeHtml(filename)}</small></td>
-                        <td><strong>${escapeHtml(task.label || '--')}</strong></td>
+                        <td><strong>${escapeHtml(taskLabel)}</strong></td>
                         <td class="mono">${confidenceStr}</td>
                         <td>${apiKeyInfo}</td>
                         <td>${statusHtml}</td>
@@ -296,6 +302,12 @@ if (!$isAjax) {
         const task = allTasks[index];
         if (!task) return;
 
+        // 统一结果结构：最佳结果取自 result.class_probs[0]（服务器通常已推导，此处兜底）
+        const resultProbs = task.result && Array.isArray(task.result.class_probs) ? task.result.class_probs : [];
+        const topProb = resultProbs[0] || null;
+        const taskLabel = task.label || (topProb && topProb.name) || '--';
+        const taskConf = task.confidence != null ? task.confidence : (topProb && topProb.prob != null ? topProb.prob : null);
+
         const resultJson = task.result ?
             (typeof task.result === 'object' ? JSON.stringify(task.result, null, 2) : String(task.result)) :
             '无';
@@ -305,8 +317,8 @@ if (!$isAjax) {
                 <div class="detail-item"><strong>任务 ID</strong><span>${escapeHtml(task.task_id || '--')}</span></div>
                 <div class="detail-item"><strong>时间</strong><span>${escapeHtml(task.created_at || '--')}</span></div>
                 <div class="detail-item"><strong>状态</strong><span>${task.status === 'completed' ? '已完成' : '处理中'}</span></div>
-                <div class="detail-item"><strong>识别结果</strong><span>${escapeHtml(task.label || '--')}</span></div>
-                <div class="detail-item"><strong>置信度</strong><span>${task.confidence != null ? escapeHtml(String(task.confidence)) + '%' : '--'}</span></div>
+                <div class="detail-item"><strong>识别结果</strong><span>${escapeHtml(taskLabel)}</span></div>
+                <div class="detail-item"><strong>置信度</strong><span>${taskConf != null ? escapeHtml(String(taskConf)) + '%' : '--'}</span></div>
                 <div class="detail-item"><strong>API 密钥</strong><span>${escapeHtml(task.api_key_name || '--')}</span></div>
             </div>
             <strong style="display:block; font-size:.78rem; color:var(--ac-ink-500); margin-bottom:.3rem;">原始返回数据</strong>

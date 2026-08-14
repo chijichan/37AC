@@ -121,28 +121,41 @@ def load_classes_from_file(file_path: str) -> list:
         return []
 
 
-def classes_to_json_dict(class_names: list) -> dict:
+def classes_to_json_dict(class_names: list, profiles: dict = None) -> dict:
     """将类别名列表转换为规范结构的 JSON 字典。
 
-    规范格式：{ "IP/角色": {"id": 角色名, "ip": 所属IP, "name_zh": 备用中文名}, ... }
+    规范格式：
+    { "IP/角色": {"id": 角色名, "ip": 所属IP, "name_zh": 备用中文名,
+                  "features_used": ["视觉特征", ...], "tags": ["标签", ...]}, ... }
     返回的 dict 保持 class_names 的原始顺序（Python 3.7+ 字典保序）。
+    若传入 profiles（{类别名: {"features_used": [...], "tags": [...]}}），
+    则给对应角色附加 features_used / tags。
     """
     data = {}
+    profiles = profiles or {}
     for name in class_names:
         name = name.strip()
         if not name:
             continue
         ip, role = parse_class_name(name)
         # name_zh 作为备用展示名，默认与角色名一致，可由外部自行覆盖
-        data[name] = {"id": role, "ip": ip, "name_zh": role}
+        entry = {"id": role, "ip": ip, "name_zh": role}
+        profile = profiles.get(name) or {}
+        features = profile.get("features_used")
+        if features:
+            entry["features_used"] = list(features)
+        tags = profile.get("tags")
+        if tags:
+            entry["tags"] = list(tags)
+        data[name] = entry
     return data
 
 
-def save_classes_to_json(file_path: str, class_names: list) -> bool:
-    """保存类别列表为规范结构的 JSON 文件（{IP/角色: {id, ip, name_zh}}）"""
+def save_classes_to_json(file_path: str, class_names: list, profiles: dict = None) -> bool:
+    """保存类别列表为规范结构的 JSON 文件（{IP/角色: {id, ip, name_zh, features_used?, tags?}}）"""
     try:
         ensure_directory_exists(os.path.dirname(file_path))
-        data = classes_to_json_dict(class_names)
+        data = classes_to_json_dict(class_names, profiles)
         with open(file_path, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
         logger.info(f"类别信息已保存到: {file_path}")
@@ -150,6 +163,38 @@ def save_classes_to_json(file_path: str, class_names: list) -> bool:
     except Exception as e:
         logger.error(f"保存类别 JSON 失败 {file_path}: {str(e)}")
         return False
+
+
+def load_classes_json_data(file_path: str) -> dict:
+    """从 classes.json 加载完整的类别元数据字典（供 LLM 识别对照等使用）。
+
+    Returns:
+        dict: {"IP/角色": {"id", "ip", "name_zh", "features_used"?, "tags"?}, ...}
+        文件不存在 / 格式异常时返回空 dict。
+    """
+    try:
+        if not os.path.exists(file_path):
+            return {}
+        with open(file_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, dict):
+            return data
+        # 宽松数组格式：转换为 dict（键为 "IP/角色"）
+        result = {}
+        if isinstance(data, list):
+            for item in data:
+                if isinstance(item, dict):
+                    ip = str(item.get("ip", "") or "")
+                    rid = str(item.get("id", "") or "")
+                    name = f"{ip}/{rid}" if ip and rid else (rid or ip)
+                    if name:
+                        result[name] = item
+                elif isinstance(item, str) and item:
+                    result[item] = {"id": item, "ip": "", "name_zh": item}
+        return result
+    except Exception as e:
+        logger.error(f"加载类别元数据失败 {file_path}: {str(e)}")
+        return {}
 
 
 def check_model_file(file_path: str) -> bool:

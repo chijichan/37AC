@@ -7,7 +7,13 @@ from services.node_manager import get_db_connection
 
 
 def _parse_task_result(result_json_str):
-    """解析任务结果 JSON 字符串"""
+    """解析任务结果 JSON 字符串
+
+    新结构（识别结果统一为 class_probs）：
+        {"success": true, "class_probs": [{"name": "IP/角色", "prob": 0-100}, ...], ...}
+    展示用 label / confidence 从 class_probs 第一项推导；
+    兼容旧结构（顶层 label / confidence / class / prediction / score 等）。
+    """
     if isinstance(result_json_str, bytes):
         result_json_str = result_json_str.decode("utf-8", errors="ignore")
 
@@ -20,16 +26,32 @@ def _parse_task_result(result_json_str):
             "raw_result": result_json_str,
         }
 
-    label = result.get("label") or result.get("class") or result.get("prediction")
-    confidence = (
-        result.get("confidence") or result.get("score") or result.get("probability")
-    )
-    if isinstance(confidence, str):
-        confidence = confidence.strip().rstrip("%")
-        try:
-            confidence = float(confidence)
-        except Exception:
-            confidence = None
+    label = None
+    confidence = None
+
+    # 新结构：从 class_probs 第一项推导最佳结果
+    class_probs = result.get("class_probs")
+    if isinstance(class_probs, list) and class_probs:
+        top = class_probs[0]
+        if isinstance(top, dict):
+            label = top.get("name") or top.get("label")
+            prob = top.get("prob", top.get("probability"))
+            if isinstance(prob, (int, float)) and not isinstance(prob, bool):
+                confidence = float(prob)
+
+    # 兼容旧结构：顶层 label / confidence（含 class / prediction / score 等别名）
+    if not label:
+        label = result.get("label") or result.get("class") or result.get("prediction")
+    if confidence is None:
+        confidence = (
+            result.get("confidence") or result.get("score") or result.get("probability")
+        )
+        if isinstance(confidence, str):
+            confidence = confidence.strip().rstrip("%")
+            try:
+                confidence = float(confidence)
+            except Exception:
+                confidence = None
 
     return {
         "label": label,

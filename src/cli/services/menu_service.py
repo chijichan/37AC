@@ -9,6 +9,40 @@ from config.log_config import get_logger
 logger = get_logger(__name__)
 
 
+def drain_pending_input():
+    """丢弃 stdin 中残留的输入（如训练/识别等长任务期间用户按下的回车）。
+
+    长任务执行时用户按下的按键会积压在输入缓冲区，任务结束后会被主菜单的
+    input() 逐条当作选择消费（空输入不会退出，但会反复重绘主菜单）。
+    在每次重新提示前调用本函数清空缓冲区，即可避免主菜单重复打印。
+    """
+    # Windows 控制台：msvcrt 非阻塞探测并读取按键
+    if sys.platform == "win32":
+        try:
+            import msvcrt
+            while msvcrt.kbhit():
+                try:
+                    msvcrt.getwch()
+                except Exception:
+                    break
+            return
+        except (ImportError, OSError):
+            pass
+    # 其他平台 / 管道输入：select 非阻塞读取
+    try:
+        import select
+        while True:
+            ready, _, _ = select.select([sys.stdin], [], [], 0)
+            if not ready:
+                break
+            try:
+                sys.stdin.readline()
+            except Exception:
+                break
+    except (ImportError, OSError, ValueError):
+        pass
+
+
 def verify_images_function():
     """验证数据集中的图像文件（适配 IP/角色 两级目录结构）"""
     from config.base import DATASET_DIR
@@ -113,6 +147,7 @@ def show_dataset_menu():
 def run_dataset_settings():
     """数据集管理子菜单交互循环"""
     while True:
+        drain_pending_input()
         show_dataset_menu()
         try:
             choice = input("请选择 (1/2/0): ").strip().strip("\x1a")
@@ -137,13 +172,9 @@ def _cjk_display_width(text: str) -> int:
     return width
 
 
-def _pad_display(text: str, width: int, align: str = "left") -> str:
-    """按显示宽度补齐空格（兼容中文全角字符），支持左对齐/居中。"""
-    pad = max(0, width - _cjk_display_width(text))
-    if align == "center":
-        left = pad // 2
-        return " " * left + text + " " * (pad - left)
-    return text + " " * pad
+def _pad_display(text: str, width: int) -> str:
+    """按显示宽度左对齐补齐空格（兼容中文全角字符）。"""
+    return text + " " * max(0, width - _cjk_display_width(text))
 
 
 # 主菜单项: (编号, 名称, 功能说明)
@@ -154,6 +185,35 @@ _MENU_ITEMS = [
     ("4", "节点服务", "启动分布式识别节点"),
     ("0", "退出程序", "结束程序并退出"),
 ]
+
+
+def ask_recognition_method():
+    """询问用户选择识别方式：本地模型 或 LLM 大模型。
+    返回 "local" / "llm"，或 None 表示返回主菜单。
+    """
+    print()
+    print("=" * 40)
+    print("  选择识别方式")
+    print("=" * 40)
+    print("  [1] 本地模型（37ac ResNet，离线快速）")
+    print("  [2] LLM 大模型（多模态识别，需配置 API）")
+    print("  [0] 返回主菜单")
+    print("-" * 40)
+
+    while True:
+        try:
+            choice = input("请选择 (1/2/0): ").strip().strip("\x1a")
+        except (KeyboardInterrupt, EOFError):
+            print()
+            return None
+        if choice == "0" or choice == "":
+            return None
+        elif choice == "1":
+            return "local"
+        elif choice == "2":
+            return "llm"
+        else:
+            print("无效选择，请输入 1、2 或 0")
 
 
 def show_menu():
@@ -181,8 +241,6 @@ def show_menu():
                                                                              """
     )
     print()
-    print("=" * 48)
-    print(_pad_display("AC 主菜单", 48, align="center"))
     print("=" * 48)
     for key, name, desc in _MENU_ITEMS:
         print(_pad_display(f"  [{key}] {name}", 19) + desc)

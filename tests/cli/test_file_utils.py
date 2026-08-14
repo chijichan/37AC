@@ -9,6 +9,7 @@ from utils.file_utils import (
     calculate_file_hash,
     ensure_directory_exists,
     load_classes_from_file,
+    load_classes_json_data,
     save_classes_to_json,
     classes_to_json_dict,
     parse_class_name,
@@ -129,6 +130,24 @@ class TestLoadClassesFromFile:
             "原神/荧": {"id": "荧", "ip": "原神", "name_zh": "荧"},
         }
 
+    def test_classes_to_json_dict_with_profiles(self):
+        """测试带 features_used / tags 的角色档案写入"""
+        data = classes_to_json_dict(
+            ["Piapro_Characters/初音未来", "蔚蓝档案/白子"],
+            profiles={
+                "Piapro_Characters/初音未来": {
+                    "features_used": ["青色头发", "双马尾"],
+                    "tags": ["长发", "绿发", "金瞳", "女性角色", "偶像风", "连衣裙"],
+                },
+            },
+        )
+        entry = data["Piapro_Characters/初音未来"]
+        assert entry["features_used"] == ["青色头发", "双马尾"]
+        assert entry["tags"] == ["长发", "绿发", "金瞳", "女性角色", "偶像风", "连衣裙"]
+        # 未提供档案的角色不包含 features_used / tags
+        assert "features_used" not in data["蔚蓝档案/白子"]
+        assert "tags" not in data["蔚蓝档案/白子"]
+
 
 class TestSaveClassesToJson:
     """测试保存类别到 classes.json"""
@@ -139,6 +158,25 @@ class TestSaveClassesToJson:
         classes = ["原神/荧", "原神/空"]
         assert save_classes_to_json(str(file), classes) is True
         assert load_classes_from_file(str(file)) == classes
+
+    def test_save_json_with_profiles_and_load_meta(self, tmp_path: Path):
+        """测试保存带 features_used / tags 的 classes.json，且可加载元数据"""
+        file = tmp_path / "classes.json"
+        classes = ["Piapro_Characters/初音未来"]
+        profiles = {
+            "Piapro_Characters/初音未来": {
+                "features_used": ["青色头发", "双马尾"],
+                "tags": ["长发", "女性角色"],
+            },
+        }
+        assert save_classes_to_json(str(file), classes, profiles=profiles) is True
+        data = load_classes_json_data(str(file))
+        assert data["Piapro_Characters/初音未来"]["features_used"] == ["青色头发", "双马尾"]
+        assert data["Piapro_Characters/初音未来"]["tags"] == ["长发", "女性角色"]
+
+    def test_load_classes_json_data_missing_file(self):
+        """测试加载不存在的 classes.json 返回空 dict"""
+        assert load_classes_json_data(r"C:\nonexistent\classes.json") == {}
 
 
 class TestCheckModelFile:

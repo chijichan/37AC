@@ -14,13 +14,18 @@ logger = get_logger(__name__)
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 # 导入各个模块
-from training.trainer import train_model
-from prediction.predictor import predict_character
-from services.menu_service import show_menu, ask_dataset_choice, run_dataset_settings
-from services.node_service import start_node_service
+# 注意：torch/torchvision 相关模块（training.trainer、prediction.predictor、
+# services.node_service）改为在对应动作函数内延迟导入，避免启动时加载
+# PyTorch 导致菜单出现缓慢；菜单本身只依赖轻量模块。
+from services.menu_service import (
+    show_menu,
+    ask_dataset_choice,
+    run_dataset_settings,
+    drain_pending_input,
+)
 
 
-# 菜单操作映射：mode → (名称, 处理函数)
+# 菜单操作映射：菜单编号 → (处理函数)
 def _action_train(args):
     """训练模型"""
     logger.info("\n=== 1. 训练模型 ===")
@@ -37,8 +42,8 @@ def _action_train(args):
         else:
             resume_model = args.resume
             logger.info("继续训练模式（命令行），使用指定权重: %s", resume_model)
-    elif args and args.mode:
-        # 命令行模式：--mode 1 不带 --resume，从头训练
+    elif args and getattr(args, "command", None) == "train":
+        # train 子命令：命令行模式，不带 --resume 即从头训练
         logger.info("从头训练模式（命令行），使用 ImageNet 预训练")
     else:
         # 交互模式：弹出子菜单让用户选择
@@ -70,6 +75,10 @@ def _action_train(args):
             else:
                 print("无效选择，请输入 1、2 或 0")
 
+    # 训练方式和数据集都确定后才加载训练模块（PyTorch 加载较慢，菜单/选择过程不受影响）
+    logger.info("正在加载训练模块（首次加载 PyTorch 较慢，请稍候）...")
+    from training.trainer import train_model  # 延迟导入（PyTorch 加载较慢）
+
     if args and args.dataset:
         train_model(dataset_dir=args.dataset, use_yolo_crop=args.yolo_crop,
                     resume_model=resume_model)
@@ -81,18 +90,48 @@ def _action_train(args):
                     resume_model=resume_model)
 
 
-def _action_predict(_args=None):
+def _action_predict(args=None):
+    """识别角色（交互菜单 [2] 弹出识别方式子菜单；predict 子命令用 --llm/--image）"""
+    from prediction.predictor import predict_character  # 延迟导入（PyTorch 加载较慢）
+    from services.menu_service import ask_recognition_method
+
+    # 识别方式：命令行 predict 子命令由 --llm 决定；交互菜单弹出子菜单选择
+    if args is not None and getattr(args, "command", None) == "predict":
+        method = "llm" if getattr(args, "llm", False) else "local"
+    else:
+        method = ask_recognition_method()
+    if method is None:
+        return
+
     logger.info("\n=== 2. 识别角色 ===")
-    predict_character()
+    logger.info("正在加载识别模块（首次加载 PyTorch 较慢，请稍候）...")
+    predict_character(
+        recognition_method=method,
+        image_path=getattr(args, "image", None) if args is not None else None,
+    )
 
 
-def _action_dataset(_args=None):
+def _action_dataset(args=None):
     logger.info("\n=== 3. 数据集管理 ===")
+    if args is not None and getattr(args, "command", None) == "dataset":
+        # dataset 子命令：verify / crop 直接执行；无操作参数时进入交互子菜单
+        from services.menu_service import verify_images_function, crop_dataset_function
+
+        action = getattr(args, "dataset_action", None)
+        if action == "verify":
+            verify_images_function()
+            return
+        if action == "crop":
+            crop_dataset_function()
+            return
     run_dataset_settings()
 
 
-def _action_node(_args=None):
+def _action_node(args=None):
+    from services.node_service import start_node_service  # 延迟导入（内部会加载 predictor/torch）
+
     logger.info("\n=== 4. 节点服务 ===")
+    logger.info("正在加载节点服务模块（首次加载 PyTorch 较慢，请稍候）...")
     start_node_service()
 
 
@@ -101,6 +140,14 @@ MENU_ACTIONS = {
     "2": _action_predict,
     "3": _action_dataset,
     "4": _action_node,
+}
+
+# 命令行子命令 → 处理函数
+COMMAND_ACTIONS = {
+    "train": _action_train,
+    "predict": _action_predict,
+    "dataset": _action_dataset,
+    "node": _action_node,
 }
 
 
@@ -131,40 +178,65 @@ def main():
     init_logging()
 
     parser = argparse.ArgumentParser(
-        description="Anime Character Auto Classifier (AC) - 命令行工具",
+        prog="main.py",
+        description="37AC 动漫角色识别命令行工具",
         epilog="示例:\n"
-               "  python main.py --mode 1                          # 训练模型\n"
-               "  python main.py --mode 1 --dataset ./data         # 指定数据集训练\n"
-               "  python main.py --mode 1 --resume                 # 继续训练\n"
-               "  python main.py --mode 1 --yolo-crop              # 使用 YOLO 裁剪后训练\n"
-               "  python main.py --mode 2                          # 识别角色\n"
-               "  python main.py --mode 3                          # 数据集管理\n"
-               "  python main.py --mode 4                          # 节点服务\n"
-               "  python main.py (无参数)                          # 进入交互菜单",
+               "  python main.py                         # 进入交互菜单（默认）\n"
+               "  python main.py train                   # 训练模型（从头，ImageNet 预训练）\n"
+               "  python main.py train --resume          # 继续训练（自动使用当前模型）\n"
+               "  python main.py train --resume w.pth --dataset ./data --yolo-crop\n"
+               "  python main.py predict                 # 识别角色（本地模型，交互输入图片）\n"
+               "  python main.py predict --llm           # 识别角色（LLM 大模型）\n"
+               "  python main.py predict --llm --image x.jpg   # 直接识别单张图片\n"
+               "  python main.py dataset verify          # 验证数据集图像\n"
+               "  python main.py dataset crop            # YOLO 裁剪数据集\n"
+               "  python main.py node                    # 启动节点服务",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("--mode", type=int, choices=[1, 2, 3, 4],
-                        help="运行模式: 1-训练模型, 2-识别角色, 3-数据集管理, 4-节点服务", default=None)
-    parser.add_argument("--gpu", type=bool, default=False, help="是否启用 GPU 加速 (默认: False)")
-    parser.add_argument("--yolo-crop", action="store_true", help="训练前使用 YOLO 对原始数据集进行裁剪预处理")
-    parser.add_argument("--dataset", type=str, default=None,
-                        help="训练数据集路径（默认使用 .env 配置或交互选择）")
-    parser.add_argument("--resume", type=str, default=None, nargs="?",
-                        const="auto", metavar="MODEL_PATH",
-                        help="从已有模型权重继续训练（指定 .pth 路径，或留空自动使用当前模型）")
-    args = parser.parse_args()
-    logger.debug("命令行参数: mode=%s, gpu=%s, yolo_crop=%s, dataset=%s, resume=%s",
-                 args.mode, args.gpu, args.yolo_crop, args.dataset, args.resume)
+    subparsers = parser.add_subparsers(dest="command", metavar="命令", help="要执行的操作")
 
-    # 命令行模式
-    if args.mode and str(args.mode) in MENU_ACTIONS:
-        handler = MENU_ACTIONS[str(args.mode)]
-        handler(args)
+    # 交互菜单（默认，也可显式指定）
+    subparsers.add_parser("menu", help="进入交互菜单（默认行为）")
+
+    # train：训练模型
+    p_train = subparsers.add_parser("train", help="训练角色识别模型")
+    p_train.add_argument("--dataset", type=str, default=None,
+                         help="数据集路径（默认使用 .env 的 DATASET_DIR 或交互选择）")
+    p_train.add_argument("--resume", type=str, default=None, nargs="?",
+                         const="auto", metavar="PATH",
+                         help="继续训练：指定 .pth 权重路径，或留空自动使用当前模型")
+    p_train.add_argument("--yolo-crop", action="store_true",
+                         help="训练前先用 YOLO 裁剪原始数据集")
+
+    # predict：识别角色
+    p_predict = subparsers.add_parser("predict", help="识别图片中的角色")
+    p_predict.add_argument("--llm", action="store_true",
+                           help="使用 LLM 大模型识别（默认使用本地 37ac 模型）")
+    p_predict.add_argument("--image", type=str, default=None,
+                           help="直接识别指定图片后退出（默认交互输入图片路径）")
+
+    # dataset：数据集管理
+    p_dataset = subparsers.add_parser("dataset", help="数据集管理（验证/裁剪，无操作参数时进入交互菜单）")
+    ds_sub = p_dataset.add_subparsers(dest="dataset_action", metavar="操作", help="数据集操作")
+    ds_sub.add_parser("verify", help="验证数据集图像有效性")
+    ds_sub.add_parser("crop", help="使用 YOLO 裁剪数据集")
+
+    # node：节点服务
+    subparsers.add_parser("node", help="启动分布式识别节点服务")
+
+    args = parser.parse_args()
+    logger.debug("命令行参数: %s", vars(args))
+
+    # 命令行子命令模式
+    if args.command in COMMAND_ACTIONS:
+        COMMAND_ACTIONS[args.command](args)
         return
 
-    # 交互模式
+    # 交互模式（无参数或 menu 子命令）
     while True:
         try:
+            # 丢弃训练/识别等长任务期间残留的按键，避免结束后主菜单被逐条消费重复打印
+            drain_pending_input()
             show_menu()
             choice = input("请输入你的选择 (1/2/3/4/0): ").strip().strip("\x1a")
 

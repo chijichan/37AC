@@ -1,4 +1,4 @@
-﻿# services/node_service.py
+# services/node_service.py
 
 import base64
 import errno
@@ -257,7 +257,7 @@ def start_node_service():
                         result = info["store"]["value"]
                     else:
                         logger.warning("[节点] 推理任务 %s 等待超时 (%ds)", tid, timeout_sec)
-                        result = {"success": False, "label": "", "confidence": 0.0, "class_probs": [], "error": f"inference timeout after {timeout_sec} seconds"}
+                        result = {"success": False, "class_probs": [], "error": f"inference timeout after {timeout_sec} seconds"}
                     result["recognition_type"] = info["effective_type"]
 
                     response_msg = {
@@ -422,8 +422,6 @@ def start_node_service():
                                     logger.error("[节点] %s 推理失败: %s", effective_type, exc, exc_info=True)
                                     store["value"] = {
                                         "success": False,
-                                        "label": "",
-                                        "confidence": 0.0,
                                         "class_probs": [],
                                         "error": f"{effective_type} inference failed: {exc}",
                                     }

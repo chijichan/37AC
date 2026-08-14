@@ -68,6 +68,17 @@ class TestPredictImage:
         from prediction.predictor import predict_character
         assert callable(predict_character)
 
+    def test_predict_character_llm_disabled_returns(self, capsys):
+        """测试 LLM 未启用时 predict_character(llm) 直接返回并提示"""
+        from unittest.mock import patch
+
+        from prediction.predictor import predict_character
+
+        with patch("prediction.predictor.LLM_RECOGNITION_ENABLED", False):
+            predict_character(recognition_method="llm")
+        captured = capsys.readouterr()
+        assert "未启用" in captured.out
+
 
 class TestPredictTransforms:
     """测试预测预处理变换"""
@@ -104,13 +115,11 @@ class TestDisplayPredictionResult:
     """测试显示预测结果"""
 
     def test_success_result(self, capsys):
-        """测试成功结果的显示"""
+        """测试成功结果的显示（统一结构：最佳结果取自 class_probs[0]）"""
         from prediction.predictor import _display_prediction_result
 
         result = {
             "success": True,
-            "label": "原神/荧",
-            "confidence": 95.5,
             "class_probs": [
                 {"name": "原神/荧", "prob": 95.5},
                 {"name": "原神/空", "prob": 3.2},
@@ -121,6 +130,20 @@ class TestDisplayPredictionResult:
         captured = capsys.readouterr()
         assert "原神/荧" in captured.out
         assert "95.50%" in captured.out
+        assert "原神/空" in captured.out
+
+    def test_success_empty_class_probs(self, capsys):
+        """测试成功但 class_probs 为空"""
+        from prediction.predictor import _display_prediction_result
+
+        result = {
+            "success": True,
+            "class_probs": [],
+            "image_path": r"C:\test.jpg",
+        }
+        _display_prediction_result(result, r"C:\test.jpg")
+        captured = capsys.readouterr()
+        assert "未识别到角色" in captured.out
 
     def test_failure_result(self, capsys):
         """测试失败结果的显示"""
@@ -129,11 +152,151 @@ class TestDisplayPredictionResult:
         result = {
             "success": False,
             "error": "模型加载失败",
-            "label": "",
-            "confidence": 0.0,
             "class_probs": [],
             "image_path": r"C:\test.jpg",
         }
         _display_prediction_result(result, r"C:\test.jpg")
         captured = capsys.readouterr()
         assert "模型加载失败" in captured.out
+
+
+class TestLlmRecognition:
+    """测试 LLM 识别相关函数"""
+
+    def test_parse_llm_response_with_tags(self):
+        """测试解析 features_used 与 tags"""
+        from prediction.predictor import _parse_llm_response
+
+        resp = {
+            "choices": [
+                {
+                    "message": {
+                        "content": (
+                            '{"label": "原神/荧", "confidence": 90, '
+                            '"features_used": ["金发", "双辫"], '
+                            '"tags": ["长发", "女性角色"]}'
+                        )
+                    }
+                }
+            ]
+        }
+        label, confidence, features_used, tags, class_probs = _parse_llm_response(resp)
+        assert label == "原神/荧"
+        assert confidence == 90.0
+        assert features_used == ["金发", "双辫"]
+        assert tags == ["长发", "女性角色"]
+        assert class_probs == []
+
+    def test_build_db_prompt_appends_character_db(self):
+        """测试把角色数据库（特征/标签）附加到提示词"""
+        from unittest.mock import patch
+
+        from prediction.predictor import _build_db_prompt
+
+        fake_data = {
+            "原神/荧": {
+                "id": "荧", "ip": "原神", "name_zh": "荧",
+                "features_used": ["金发", "双辫"],
+                "tags": ["长发", "女性角色"],
+            },
+        }
+        with patch("utils.file_utils.load_classes_json_data", return_value=fake_data):
+            prompt = _build_db_prompt("基础识别提示词")
+        assert "基础识别提示词" in prompt
+        assert "已知角色数据库" in prompt
+        assert "原神/荧" in prompt
+        assert "金发" in prompt
+        assert "双辫" in prompt
+        assert "女性角色" in prompt
+
+    def test_build_db_prompt_empty_db_returns_base(self):
+        """测试角色数据库为空时返回原提示词"""
+        from unittest.mock import patch
+
+        from prediction.predictor import _build_db_prompt
+
+        with patch("utils.file_utils.load_classes_json_data", return_value={}):
+            prompt = _build_db_prompt("基础识别提示词")
+        assert prompt == "基础识别提示词"
+
+
+class TestCrossComputeConfidence:
+    """测试 LLM 交叉计算置信度"""
+
+    def test_matching_profile_keeps_confidence(self):
+        """测试特征/标签匹配时置信度基本保留"""
+        from prediction.predictor import _cross_compute_confidence
+
+        profiles = {
+            "原神/荧": {
+                "features_used": ["金发", "双辫"],
+                "tags": ["长发", "女性角色"],
+            },
+        }
+        conf, hit = _cross_compute_confidence(
+            "原神/荧", 90.0,
+            ["金发", "双辫"], ["长发", "女性角色"],
+            profiles,
+        )
+        assert hit is True
+        # 完全匹配 → 交叉后应接近原置信度（0.7*90 + 0.3*100 = 93）
+        assert conf == 93.0
+
+    def test_mismatching_profile_penalizes(self):
+        """测试特征/标签不匹配时置信度被压低"""
+        from prediction.predictor import _cross_compute_confidence
+
+        profiles = {
+            "原神/荧": {
+                "features_used": ["金发", "双辫"],
+                "tags": ["长发", "女性角色"],
+            },
+        }
+        conf, hit = _cross_compute_confidence(
+            "原神/荧", 95.0,
+            ["红发", "短发"], ["短发", "男性角色"],
+            profiles,
+        )
+        assert hit is True
+        # 完全不匹配 → 封顶 45
+        assert conf == 45.0
+
+    def test_no_profile_keeps_confidence(self):
+        """测试数据库无该角色档案时保持原置信度"""
+        from prediction.predictor import _cross_compute_confidence
+
+        conf, hit = _cross_compute_confidence(
+            "原神/未知角色", 88.0, ["金发"], ["女性角色"], {}
+        )
+        assert hit is False
+        assert conf == 88.0
+
+
+class TestMergeLlmClassProbs:
+    """测试 LLM 主结论与备选合并为 class_probs"""
+
+    def test_merge_and_sort(self):
+        """测试合并去重并按概率降序"""
+        from prediction.predictor import _merge_llm_class_probs
+
+        merged = _merge_llm_class_probs(
+            "原神/荧", 90.0,
+            [{"name": "原神/空", "prob": 70.0}, {"name": "蔚蓝档案/白子", "prob": 80.0}],
+        )
+        assert merged[0] == {"name": "原神/荧", "prob": 90.0}
+        assert merged[1] == {"name": "蔚蓝档案/白子", "prob": 80.0}
+        assert merged[2] == {"name": "原神/空", "prob": 70.0}
+        # 去重：与主结论相同的备选被忽略
+        merged2 = _merge_llm_class_probs("原神/荧", 90.0, [{"name": "原神/荧", "prob": 99.0}])
+        assert len(merged2) == 1
+
+    def test_merge_crossed_confidence(self):
+        """测试交叉计算后的置信度参与排序"""
+        from prediction.predictor import _merge_llm_class_probs
+
+        # 主结论被交叉计算压低到 40 后，应排在备选之后
+        merged = _merge_llm_class_probs(
+            "原神/荧", 40.0,
+            [{"name": "原神/空", "prob": 60.0}],
+        )
+        assert merged[0]["name"] == "原神/空"

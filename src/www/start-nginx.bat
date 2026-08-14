@@ -1,59 +1,69 @@
 @echo off
 REM ============================================
-REM  37AC front-end start script (Nginx + PHP-CGI)
-REM  Windows has no PHP-FPM, so 4 php-cgi instances
-REM  form a process pool: SSE long connections will
-REM  not block other requests.
-REM  Uses php-cgi.ini (Xdebug disabled + opcache on).
-REM  NOTE: Keep this file ASCII-only! cmd.exe parses
-REM  batch files with GBK codepage; UTF-8 Chinese
-REM  comments cause byte misalignment and break
-REM  keywords like setlocal / for /L.
+REM  37AC front-end start (Nginx + PHP-CGI pool)
+REM  Site: http://localhost:8000
+REM  Services start HIDDEN & DETACHED (no cmd
+REM  windows; VS Code terminal stays free; close
+REM  terminal will NOT stop services).
+REM  No hardcoded paths: resolves nginx/php-cgi
+REM  from env vars (NGINX_HOME / PHP_HOME) or PATH.
+REM  ASCII-only file (cmd uses OEM codepage)
 REM ============================================
 setlocal enabledelayedexpansion
 
-set NGINX_DIR=C:\tools\nginx
-set PHP_CGI=E:\apps\PHP\php-cgi.exe
-set PHP_INI=E:\apps\PHP\php-cgi.ini
 set CGI_BASE_PORT=9001
 set CGI_COUNT=4
 
-echo Starting 37AC front-end (Nginx + PHP-CGI)...
-echo Server will run at: http://localhost:8000
+echo Starting 37AC front-end (hidden, background)...
+echo Site: http://localhost:8000
 echo.
 
-REM --- 1. Check port 8000 is free; auto-stop old instances if occupied ---
-netstat -ano | findstr ":8000 " >nul 2>&1
-if %errorlevel%==0 (
-    echo [WARN] Port 8000 is already in use. Stopping old Nginx + PHP-CGI...
-    taskkill /IM nginx.exe /F >nul 2>&1
-    taskkill /IM php-cgi.exe /F >nul 2>&1
-    timeout /t 1 /nobreak >nul
-    REM Re-check after cleanup
-    netstat -ano | findstr ":8000 " >nul 2>&1
-    if %errorlevel%==0 (
-        echo [ERROR] Port 8000 is still in use after cleanup. Please stop it manually.
-        exit /b 1
-    )
-    echo   [OK] Old services stopped
+REM --- Resolve nginx.exe (NGINX_HOME first, then PATH) ---
+set "NGINX_EXE="
+if defined NGINX_HOME if exist "%NGINX_HOME%\nginx.exe" set "NGINX_EXE=%NGINX_HOME%\nginx.exe"
+if not defined NGINX_EXE for /f "delims=" %%i in ('where nginx 2^>nul') do if not defined NGINX_EXE set "NGINX_EXE=%%i"
+if not defined NGINX_EXE (
+    echo [ERROR] nginx.exe not found. Add nginx dir to PATH or set NGINX_HOME.
+    exit /b 1
 )
+for %%i in ("%NGINX_EXE%") do set "NGINX_PREFIX=%%~dpi"
+set "NGINX_PREFIX=%NGINX_PREFIX:~0,-1%"
+echo   [OK] nginx: %NGINX_EXE%
 
-REM --- 2. Start PHP-CGI process pool ---
+REM --- Resolve php-cgi.exe (PHP_HOME first, then PATH) ---
+set "PHP_EXE="
+if defined PHP_HOME if exist "%PHP_HOME%\php-cgi.exe" set "PHP_EXE=%PHP_HOME%\php-cgi.exe"
+if not defined PHP_EXE for /f "delims=" %%i in ('where php-cgi 2^>nul') do if not defined PHP_EXE set "PHP_EXE=%%i"
+if not defined PHP_EXE (
+    echo [ERROR] php-cgi.exe not found. Add PHP dir to PATH or set PHP_HOME.
+    exit /b 1
+)
+for %%i in ("%PHP_EXE%") do set "PHP_DIR=%%~dpi"
+set "PHP_INI=%PHP_DIR%php-cgi.ini"
+if not exist "%PHP_INI%" set "PHP_INI="
+echo   [OK] php-cgi: %PHP_EXE%
+
+echo.
+
+REM --- Free port 8000 first (kills whatever holds it) ---
+call "%~dp0stop-nginx.bat" -q
+
+REM --- Start PHP-CGI pool (9001..9004), hidden & detached ---
 for /L %%i in (1,1,%CGI_COUNT%) do (
     set /a PORT=%CGI_BASE_PORT% + %%i - 1
-    start "php-cgi-!PORT!" /B "%PHP_CGI%" -b 127.0.0.1:!PORT! -c "%PHP_INI%"
-    echo   [OK] php-cgi instance started on port !PORT!
+    if defined PHP_INI (
+        powershell -NoProfile -WindowStyle Hidden -Command "Start-Process -FilePath '%PHP_EXE%' -ArgumentList '-b','127.0.0.1:!PORT!','-c','%PHP_INI%'"
+    ) else (
+        powershell -NoProfile -WindowStyle Hidden -Command "Start-Process -FilePath '%PHP_EXE%' -ArgumentList '-b','127.0.0.1:!PORT!'"
+    )
+    echo   [OK] php-cgi on port !PORT!
 )
 
-REM --- 3. Start Nginx ---
-cd /d "%NGINX_DIR%"
-REM NOTE: The -p prefix must NOT end with a backslash.
-REM A trailing backslash before the closing quote is
-REM treated as an escaped quote by cmd, producing a
-REM wrong prefix (e.g. C:\tools\nginx") and nginx fails.
-start "nginx" /B "%NGINX_DIR%\nginx.exe" -p "%NGINX_DIR%"
+REM --- Start Nginx, hidden & detached ---
+REM NOTE: -p prefix must NOT end with a backslash.
+powershell -NoProfile -WindowStyle Hidden -Command "Start-Process -FilePath '%NGINX_EXE%' -ArgumentList '-p','%NGINX_PREFIX%'"
 echo   [OK] Nginx started
+
 echo.
-echo All services started. Keep this window open.
-echo Stop with: stop-nginx.bat
-pause
+echo All services are running in the background (no windows).
+echo Site: http://localhost:8000   Stop with: stop-nginx.bat

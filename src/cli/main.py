@@ -225,6 +225,20 @@ def main():
     subparsers.add_parser("node", help="启动分布式识别节点服务")
 
     args = parser.parse_args()
+
+    # 交互模式（未使用子命令）时，子命令专属参数不存在于 Namespace，
+    # 统一补默认值，避免动作函数访问 args.resume / args.dataset 等抛 AttributeError
+    for _attr, _default in (
+        ("resume", None),
+        ("dataset", None),
+        ("yolo_crop", False),
+        ("llm", False),
+        ("image", None),
+        ("dataset_action", None),
+    ):
+        if not hasattr(args, _attr):
+            setattr(args, _attr, _default)
+
     logger.debug("命令行参数: %s", vars(args))
 
     # 命令行子命令模式

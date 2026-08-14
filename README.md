@@ -655,26 +655,43 @@ python src/cli/main.py node
 
 ### 识别结果结构（统一）
 
-节点返回的 `result` 为**统一结构**：不再提供顶层 `label` / `confidence` 字段，
-最佳结果一律取 `class_probs` 第一项（按概率降序）：
+全项目只有三种相关结构，规范定义见 `src/common/recognition.py`（CLI/Server 共用），
+旧格式（`label`/`confidence`/`probability`/字符串百分比）统一在该模块归一化：
+
+**① 类别对象（Class）** — `classes.json` 条目，类别名 = 整个对象：
+
+```json
+"原神/荧": { "id": "荧", "ip": "原神", "name_zh": "荧",
+             "features_used": ["金发", "双辫"], "tags": ["长发", "女性角色"] }
+```
+
+**② 候选角色项（Candidate）** — `class_probs` 中每一项 = 类别对象 + 排名信息：
+
+```json
+{ "name": "原神/荧", "prob": 93.0, "id": "荧", "ip": "原神",
+  "name_zh": "荧", "features_used": ["金发", "双辫"], "tags": ["长发", "女性角色"] }
+```
+
+**③ 识别结果（Result）** — 推理引擎的统一返回：
 
 ```json
 {
   "success": true,
-  "class_probs": [
-    { "name": "原神/荧", "prob": 93.0 },
-    { "name": "原神/空", "prob": 5.2 }
-  ],
-  "features_used": ["金发", "双辫"],
-  "tags": ["长发", "女性角色"],
-  "recognition_type": "llm"
+  "class_probs": [ Candidate, ... ],
+  "image_path": "...",
+  "recognition_type": "local" | "llm",
+  "error": null,
+  "features_used": [...],
+  "tags": [...]
 }
 ```
 
-- `class_probs`：`[{name, prob}]`，`prob` 为 0-100 百分数，第一项即最佳结果
-- `features_used` / `tags`：仅 LLM 识别时存在（本地模型为空）
-- 服务器仪表盘/历史记录的展示字段（label/confidence）由 `class_probs[0]` 推导，
-  并兼容旧结构（顶层 label/confidence/score 等）
+- `name`：唯一标识（`IP/角色`，数据集路径参考 / 模型索引 / JSON 键）
+- `prob`：0-100 百分数；`class_probs` 按 `prob` 降序，**第一项即最佳结果**（无顶层 label/confidence）
+- `id`/`ip`/`name_zh`/`features_used`/`tags`：存在 `classes.json` 档案时自动附加
+- 顶层 `features_used`/`tags` 为 LLM 主结论的冗余快照（本地模型为空）
+
+> `classes.json` 是**类别注册表**（类别对象的唯一存放处），不可删除。
 
 #### LLM 识别置信度：特征/标签交叉计算
 

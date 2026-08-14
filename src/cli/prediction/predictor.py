@@ -9,6 +9,7 @@ import re
 import time
 import threading
 from common.constants import IMAGE_EXTENSIONS_BASIC
+from common.recognition import parse_candidate_entry
 from utils.image_utils import validate_image_file
 from utils.file_utils import load_classes_from_file, load_classes_json_data, check_model_file
 from models.character_model import CharacterRecognitionModel
@@ -54,7 +55,47 @@ PREDICT_TRANSFORMS = transforms.Compose(
 # 缓存结构：{ "model": nn.Module, "num_classes": int, "classes": list }
 _model_cache = None
 _classes_cache = None
+_registry_cache = None
 _cache_lock = threading.Lock()
+
+
+def _load_class_registry() -> dict:
+    """加载 classes.json 角色注册表（{类别键: 类别对象}），带进程内缓存。
+
+    类别名 = 整个对象："IP/角色" 仅作为唯一标识（路径参考/模型索引），
+    完整类别定义（id/ip/name_zh/features_used/tags）来自 classes.json。
+    """
+    global _registry_cache
+    if _registry_cache is None:
+        _registry_cache = load_classes_json_data(str(CLASSES_JSON_PATH))
+    return _registry_cache
+
+
+def _enrich_probs_with_metadata(class_probs):
+    """从 classes.json 注册表为 class_probs 各项附加完整类别对象元数据。
+
+    使识别结果中的每个类别项携带整个对象：
+    {name, prob, name_zh, ip, features_used, tags}。
+    注册表缺失 / 无该类别时保持原样。
+    """
+    if not class_probs:
+        return class_probs
+    try:
+        registry = _load_class_registry()
+    except Exception:
+        return class_probs
+    if not registry:
+        return class_probs
+    for item in class_probs:
+        name = item.get("name")
+        meta = registry.get(name)
+        if not meta or not isinstance(meta, dict):
+            continue
+        item.setdefault("name_zh", meta.get("name_zh") or meta.get("id") or name)
+        item.setdefault("ip", meta.get("ip") or "")
+        item.setdefault("features_used", list(meta.get("features_used") or []))
+        item.setdefault("tags", list(meta.get("tags") or []))
+    return class_probs
 
 
 def _default_classes_file() -> str:
@@ -153,6 +194,16 @@ def _display_prediction_result(result, image_path):
     top = probs[0]
     print(f"\n预测结果是: {top['name']}")
     print(f"置信度: {top['prob']:.2f}%")
+    # 类别名 = 整个对象：最佳类别携带完整对象（name_zh/ip/features_used/tags）
+    name_zh = top.get("name_zh")
+    if name_zh and name_zh != top["name"]:
+        print(f"中文名: {name_zh}")
+    feats = top.get("features_used") or []
+    if feats:
+        print(f"特征: {'、'.join(feats)}")
+    tags = top.get("tags") or []
+    if tags:
+        print(f"标签: {'、'.join(tags)}")
     print(f"图片路径: {image_path}")
     for item in probs[1:]:
         print(f"   → {item['name']}: {item['prob']:.1f}%")
@@ -319,6 +370,8 @@ def predict_image(image_path, model_path=None, classes_file=None, use_cache=True
                 class_probs = [p for p in sorted_probs if p["prob"] > 0][:10]
 
                 # 成功返回结果（class_probs 已按概率降序，第一项即最佳结果）
+                # 类别名 = 整个对象：从 classes.json 附加 name_zh/ip/features_used/tags
+                _enrich_probs_with_metadata(class_probs)
                 result.update(
                     {
                         "success": True,
@@ -746,6 +799,8 @@ def predict_image_llm(image_path: str) -> dict:
 
         # 统一结果结构：最佳结果在 class_probs[0]，不再返回顶层 label/confidence
         merged_probs = _merge_llm_class_probs(label, confidence, class_probs)
+        # 类别名 = 整个对象：从 classes.json 附加 name_zh/ip/features_used/tags
+        _enrich_probs_with_metadata(merged_probs)
         result.update(
             {
                 "success": True,
@@ -945,7 +1000,7 @@ def _parse_llm_response(resp_data: dict) -> tuple:
             if isinstance(raw_tags, list):
                 tags = [str(t).strip() for t in raw_tags if str(t).strip()]
 
-            # 备选角色 → class_probs（与本地模型统一 [{"name", "prob"}] 格式）
+            # 备选角色 → class_probs（统一 Candidate 结构，见 common/recognition.py）
             # 提示词约定字段为 "class_probs"（{"label","confidence"}），
             # 兼容旧字段 "alternative_guesses"。
             raw_alts = parsed.get("class_probs")
@@ -954,19 +1009,15 @@ def _parse_llm_response(resp_data: dict) -> tuple:
             if isinstance(raw_alts, list):
                 probs = []
                 for g in raw_alts:
-                    if not isinstance(g, dict):
-                        continue
-                    # 兼容两种字段命名：提示词用 label/confidence，本地统一用 name/prob
-                    name = str(g.get("label") or g.get("name") or "").strip()
-                    if not name:
+                    candidate = parse_candidate_entry(g)
+                    if not candidate:
                         continue
                     # 与主 label 一致，确保「作品/角色」顺序
-                    name = _normalize_label_order(name)
+                    candidate["name"] = _normalize_label_order(candidate["name"])
                     # 跳过提示词占位符条目（如 "作品名/角色名"）
-                    if _is_placeholder_label(name):
+                    if _is_placeholder_label(candidate["name"]):
                         continue
-                    prob = float(g.get("confidence", g.get("prob", 0)) or 0)
-                    probs.append({"name": name, "prob": prob})
+                    probs.append(candidate)
                 class_probs = probs
 
             if not label:

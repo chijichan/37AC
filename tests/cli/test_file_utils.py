@@ -10,6 +10,7 @@ from utils.file_utils import (
     ensure_directory_exists,
     load_classes_from_file,
     load_classes_json_data,
+    load_classes_registry,
     save_classes_to_json,
     classes_to_json_dict,
     parse_class_name,
@@ -177,6 +178,29 @@ class TestSaveClassesToJson:
     def test_load_classes_json_data_missing_file(self):
         """测试加载不存在的 classes.json 返回空 dict"""
         assert load_classes_json_data(r"C:\nonexistent\classes.json") == {}
+
+    def test_load_classes_registry(self, tmp_path: Path):
+        """测试加载完整角色类别注册表（类别名 = 整个对象）"""
+        import json as _json
+
+        file = tmp_path / "classes.json"
+        data = {
+            "蔚蓝档案/黑见茜香": {
+                "id": "黑见茜香", "ip": "蔚蓝档案", "name_zh": "黑见茜香",
+                "features_used": ["银发", "编发", "制服"],
+                "tags": ["银发", "编发", "女性角色"],
+            },
+        }
+        file.write_text(_json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+        registry = load_classes_registry(str(file))
+        assert len(registry) == 1
+        entry = registry[0]
+        assert entry["key"] == "蔚蓝档案/黑见茜香"
+        assert entry["id"] == "黑见茜香"
+        assert entry["ip"] == "蔚蓝档案"
+        assert entry["features_used"] == ["银发", "编发", "制服"]
+        assert entry["tags"] == ["银发", "编发", "女性角色"]
 
 
 class TestCheckModelFile:

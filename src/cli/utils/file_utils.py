@@ -197,6 +197,33 @@ def load_classes_json_data(file_path: str) -> dict:
         return {}
 
 
+def load_classes_registry(file_path: str) -> list:
+    """加载完整的角色类别注册表（类别名 = 整个对象）。
+
+    "IP/角色" 字符串仅作为唯一标识（数据集路径参考 / 模型索引 / JSON 键），
+    类别本身的完整定义是对象：{key, id, ip, name_zh, features_used, tags}。
+
+    Returns:
+        list: 按类别顺序排列的完整对象列表；文件不存在 / 格式异常时返回空列表。
+    """
+    data = load_classes_json_data(file_path)
+    registry = []
+    for key, meta in data.items():
+        if not isinstance(meta, dict):
+            meta = {}
+        registry.append(
+            {
+                "key": key,
+                "id": meta.get("id") or "",
+                "ip": meta.get("ip") or "",
+                "name_zh": meta.get("name_zh") or "",
+                "features_used": list(meta.get("features_used") or []),
+                "tags": list(meta.get("tags") or []),
+            }
+        )
+    return registry
+
+
 def check_model_file(file_path: str) -> bool:
     """检查模型文件是否存在且可读（必须是文件，目录不算）"""
     if not os.path.exists(file_path):

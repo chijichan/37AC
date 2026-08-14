@@ -770,6 +770,16 @@ require_once ROOT_PATH . '/views/layout.php';
             this.recognitionGroup.disabled = false;
             this.imageProcessingGroup.disabled = false;
 
+            // 手动裁剪模式下：图片更新后同步刷新裁剪器（replace 保留选框设置）
+            if (this.state.cropInstance) {
+                this.state.cropInstance.replace(this.state.originalImageURL);
+            } else if (this.enableCropCheckbox.checked && this.cropModeSelect.value === 'manual') {
+                this.initCropper();
+            }
+
+            // 图片加载完成后，将页面滚动到合适位置
+            this.scrollToPreview();
+
             // 更新提交按钮状态
             this.updateSubmitButton();
         }
@@ -940,6 +950,36 @@ require_once ROOT_PATH . '/views/layout.php';
             this.previewWrap.classList.add('active');
         }
 
+        /* 图片加载完成后，将页面滚动到合适位置（手动裁剪时滚动到裁剪器，否则滚动到预览） */
+        scrollToPreview() {
+            const target = (this.state.cropInstance ||
+                    (this.enableCropCheckbox.checked && this.cropModeSelect.value === 'manual'))
+                ? document.getElementById('cropperWrap')
+                : this.previewWrap;
+            const scroll = () => {
+                target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            };
+            // 等待图片真正加载完成再滚动，避免高度未定导致滚动位置偏移
+            if (this.previewImage.complete) {
+                scroll();
+            } else {
+                this.previewImage.onload = scroll;
+            }
+        }
+
+        /* 开始识别后，将页面平滑滚动到加载状态区域（已在视口内则不滚动，避免多次点击来回跳动） */
+        scrollToLoading() {
+            const rect = this.loadingWrap.getBoundingClientRect();
+            if (rect.top >= 0 && rect.bottom <= window.innerHeight) {
+                return; // 加载区已完整可见，无需滚动
+            }
+            // 只滚动到恰好露出加载区顶部，滚动距离最小，观感更柔和
+            window.scrollTo({
+                top: rect.top + window.scrollY - 16,
+                behavior: 'smooth',
+            });
+        }
+
         /* 更新进度状态文本 */
         updateProgressStatus(text) {
             const progressText = document.getElementById('progressStatusText');
@@ -963,6 +1003,9 @@ require_once ROOT_PATH . '/views/layout.php';
 
             this.showLoading(true);
             this.hideResult();
+
+            // 开始识别后平滑滚动到加载状态区域（已在视口内则不滚动，避免多次点击来回跳动）
+            this.scrollToLoading();
 
             try {
                 // 处理图片
@@ -1201,16 +1244,16 @@ require_once ROOT_PATH . '/views/layout.php';
             this.resultWrap.classList.add('active');
         }
 
-        /* 生成结果 HTML（统一结构：class_probs 按概率降序，第一项即最佳结果，不再依赖顶层 label/confidence） */
+        /* 生成结果 HTML（统一结构：class_probs 为 Candidate 列表，prob 0-100，第一项即最佳结果） */
         generateResultHTML(data) {
-            // 置信度：API 明确使用 0-100 表示百分数
+            // 置信度：统一使用 0-100 百分数（字段名 prob）
             const toPercent = (v) => Number(v) || 0;
 
-            const topCharacters = data.top_characters || (data.class_probs || []).map(p => ({
+            const candidates = (data.class_probs || []).map(p => ({
                 name: p.name,
-                probability: toPercent(Number(p.prob) || 0),
+                prob: toPercent(Number(p.prob) || 0),
             }));
-            const top = topCharacters[0] || { name: '', probability: 0 };
+            const top = candidates[0] || { name: '', prob: 0 };
             // 最佳结果格式为「作品名/角色名」（角色IP/角色名），拆分为 IP 与角色名分别展示
             const labelParts = (top.name || '').split('/').map(s => s.trim()).filter(Boolean);
             const characterIP = labelParts[0] || '未知作品';
@@ -1218,7 +1261,7 @@ require_once ROOT_PATH . '/views/layout.php';
             const from_source = (data.from_source !== undefined) ?
                 data.from_source :
                 (data.recognition_type === 'llm' ? 1 : 0);
-            const confidence = toPercent(top.probability).toFixed(2);
+            const confidence = top.prob.toFixed(2);
 
             let html = '<div class="card result-card">';
             html += '<div class="result-top">';
@@ -1234,9 +1277,9 @@ require_once ROOT_PATH . '/views/layout.php';
             html += `<div class="result-confidence">置信度 <span class="mono">${confidence}%</span></div>`;
 
             // 前 5 高概率角色
-            if (topCharacters.length > 0) {
+            if (candidates.length > 0) {
                 html += '<div class="prob-list">';
-                topCharacters.slice(0, 5).forEach((item) => {
+                candidates.slice(0, 5).forEach((item) => {
                     html += this.generateProbabilityItem(item);
                 });
                 html += '</div>';
@@ -1246,11 +1289,9 @@ require_once ROOT_PATH . '/views/layout.php';
             return html;
         }
 
-        /* 生成概率条目 HTML */
+        /* 生成概率条目 HTML（统一字段：{name, prob(0-100)}） */
         generateProbabilityItem(item) {
-            // 兼容 {name, probability(0-100)} 与节点 {name, prob(0-100)}，均按 0-100 处理
-            const raw = Number(item.probability ?? item.prob) || 0;
-            const percentage = raw.toFixed(2);
+            const percentage = (Number(item.prob) || 0).toFixed(2);
             return `
                 <div class="prob-item">
                     <span class="name">${escapeHtml(item.name)}</span>
@@ -1349,20 +1390,8 @@ require_once ROOT_PATH . '/views/layout.php';
                     type: blob.type
                 });
 
-                this.state.tempFile = file;
-                this.resetCropState();
-                this.state.hasBgRemovedImage = false;
-
-                // 显示预览，清空上次结果
-                this.updatePreview(file);
-                this.hideResult();
-
-                // 显示处理选项
-                this.recognitionGroup.disabled = false;
-                this.imageProcessingGroup.disabled = false;
-
-                // 更新提交按钮状态
-                this.updateSubmitButton();
+                // 复用统一的图片加载流程（预览 / 裁剪器刷新 / 滚动 / 选项启用）
+                this.handleFile(file);
                 Notify.success('图片加载完成');
             } catch (err) {
                 console.error('从链接加载图片失败:', err);

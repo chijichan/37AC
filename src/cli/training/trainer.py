@@ -8,7 +8,10 @@ from torchvision import transforms
 from PIL import Image
 from data.dataset import IPRoleImageFolder
 from models.character_model import CharacterRecognitionModel
-from utils.file_utils import save_classes_to_file, save_classes_to_json
+from utils.file_utils import (
+    save_classes_to_json,
+    parse_class_name,
+)
 from config.base import *
 from config.log_config import get_logger
 
@@ -36,13 +39,7 @@ def _backup_old_model(model_path, bak_dir):
     shutil.copy2(str(model_path), str(bak_path))
     logger.info("旧模型已备份 → %s", bak_path)
 
-    # 同时备份 classes.txt 与 classes.json
-    classes_txt = model_path.parent / "classes.txt"
-    if classes_txt.exists():
-        bak_classes = bak_dir / f"classes_bak_{timestamp}.txt"
-        shutil.copy2(str(classes_txt), str(bak_classes))
-        logger.info("旧 classes.txt 已备份 → %s", bak_classes)
-
+    # 同时备份 classes.json
     classes_json = model_path.parent / "classes.json"
     if classes_json.exists():
         bak_classes_json = bak_dir / f"classes_bak_{timestamp}.json"
@@ -112,6 +109,197 @@ class _ValSubset(Subset):
     def __getitems__(self, indices):
         """PyTorch 新版要求 Subset 子类重写 __getitem__ 时必须同时重写 __getitems__。"""
         return [self.__getitem__(idx) for idx in indices]
+
+
+# ==================== 训练结束后的分数据集测试 ====================
+
+def _cjk_display_width(text: str) -> int:
+    """计算字符串的显示宽度（中文等全角字符按 2 个宽度计算）。"""
+    width = 0
+    for ch in text:
+        width += 2 if ord(ch) > 0x2E7F else 1
+    return width
+
+
+def _pad_display(text: str, width: int) -> str:
+    """按显示宽度左对齐补齐空格（兼容中文全角字符）。"""
+    return text + " " * max(0, width - _cjk_display_width(text))
+
+
+def _build_ip_success_table(ip_stats: dict) -> str:
+    """将各 IP 的成功率统计构建成对齐的表格字符串。
+
+    Args:
+        ip_stats: {ip: {"total": int, "ip_ok": int, "role_ok": int}}
+
+    Returns:
+        多行表格文本
+    """
+    def _fmt_rate(ok: int, total: int) -> str:
+        return f"{100.0 * ok / total:.2f}%" if total > 0 else "N/A"
+
+    lines = []
+    lines.append("=" * 76)
+    lines.append("训练结束 · 各数据集测试结果（成功率，非置信度）")
+    lines.append("-" * 76)
+    lines.append(
+        _pad_display("数据集(IP)", 20)
+        + _pad_display("图片数", 7)
+        + _pad_display("IP识别", 10)
+        + _pad_display("IP成功率", 11)
+        + _pad_display("角色识别", 10)
+        + _pad_display("角色成功率", 13)
+    )
+    lines.append("-" * 76)
+
+    total_all = total_ip_ok = total_role_ok = 0
+    for ip_name in sorted(ip_stats.keys()):
+        stat = ip_stats[ip_name]
+        total_all += stat["total"]
+        total_ip_ok += stat["ip_ok"]
+        total_role_ok += stat["role_ok"]
+        display_name = ip_name if ip_name else "(未归类)"
+        lines.append(
+            _pad_display(display_name, 20)
+            + _pad_display(str(stat["total"]), 7)
+            + _pad_display(f"{stat['ip_ok']}/{stat['total']}", 10)
+            + _pad_display(_fmt_rate(stat["ip_ok"], stat["total"]), 11)
+            + _pad_display(f"{stat['role_ok']}/{stat['total']}", 10)
+            + _pad_display(_fmt_rate(stat["role_ok"], stat["total"]), 13)
+        )
+
+    lines.append("-" * 76)
+    if total_all > 0:
+        lines.append(
+            _pad_display("合计", 20)
+            + _pad_display(str(total_all), 7)
+            + _pad_display(f"{total_ip_ok}/{total_all}", 10)
+            + _pad_display(_fmt_rate(total_ip_ok, total_all), 11)
+            + _pad_display(f"{total_role_ok}/{total_all}", 10)
+            + _pad_display(_fmt_rate(total_role_ok, total_all), 13)
+        )
+    lines.append("=" * 76)
+    return "\n".join(lines)
+
+
+def _build_class_success_table(class_stats: dict) -> str:
+    """将各角色类别（"IP/角色"）的成功率统计构建成对齐的表格字符串。
+
+    Args:
+        class_stats: {class_name: {"total": int, "correct": int}}
+
+    Returns:
+        多行表格文本
+    """
+    def _fmt_rate(ok: int, total: int) -> str:
+        return f"{100.0 * ok / total:.2f}%" if total > 0 else "N/A"
+
+    lines = []
+    lines.append("=" * 76)
+    lines.append("训练结束 · 各角色类别测试结果（成功率，非置信度）")
+    lines.append("-" * 76)
+    lines.append(
+        _pad_display("类别(IP/角色)", 32)
+        + _pad_display("图片数", 8)
+        + _pad_display("识别正确", 10)
+        + _pad_display("成功率", 12)
+    )
+    lines.append("-" * 76)
+
+    total_all = total_ok = 0
+    for class_name in sorted(class_stats.keys()):
+        stat = class_stats[class_name]
+        total_all += stat["total"]
+        total_ok += stat["correct"]
+        display_name = class_name if class_name else "(未归类)"
+        lines.append(
+            _pad_display(display_name, 32)
+            + _pad_display(str(stat["total"]), 8)
+            + _pad_display(f"{stat['correct']}/{stat['total']}", 10)
+            + _pad_display(_fmt_rate(stat["correct"], stat["total"]), 12)
+        )
+
+    lines.append("-" * 76)
+    if total_all > 0:
+        lines.append(
+            _pad_display("合计", 32)
+            + _pad_display(str(total_all), 8)
+            + _pad_display(f"{total_ok}/{total_all}", 10)
+            + _pad_display(_fmt_rate(total_ok, total_all), 12)
+        )
+    lines.append("=" * 76)
+    return "\n".join(lines)
+
+
+def _evaluate_per_ip_success_rate(model, dataset, device, class_names):
+    """训练结束后，按 IP（作品）与角色类别两个维度统计识别成功率并打印表格。
+
+    成功率 = 识别正确的图片数 / 该维度图片总数，依据预测标签与真实标签的
+    比对结果计算（与模型输出的置信度无关）。统计两个维度：
+      - IP 成功率: 预测角色所属 IP 与真实 IP 一致（作品识别正确）
+      - 角色成功率: 预测角色与真实角色完全一致（角色识别正确）
+      并额外输出每个角色类别（"IP/角色"）的识别成功率。
+
+    Args:
+        model: 训练完成的模型（内部会切换为 eval 模式）
+        dataset: 全量数据集（IPRoleImageFolder，含 samples 属性）
+        device: 推理设备
+        class_names: 类别名列表（"IP/角色"）
+
+    Returns:
+        dict: {ip: {"total": int, "ip_ok": int, "role_ok": int}}
+    """
+    if dataset is None or len(dataset) == 0:
+        logger.warning("数据集为空，跳过训练后分数据集测试")
+        return {}
+
+    model.eval()
+    eval_loader = DataLoader(
+        _ValSubset(dataset, list(range(len(dataset)))),
+        batch_size=BATCH_SIZE,
+        shuffle=False,
+        num_workers=0,
+    )
+
+    ip_stats = {}
+    class_stats = {}
+    with torch.no_grad():
+        for inputs, labels in eval_loader:
+            inputs = inputs.to(device)
+            outputs = model(inputs)
+            _, preds = torch.max(outputs, 1)
+            for pred_idx, true_idx in zip(preds.tolist(), labels.tolist()):
+                true_class = class_names[true_idx]
+                pred_class = class_names[pred_idx]
+                true_ip, _ = parse_class_name(true_class)
+                pred_ip, _ = parse_class_name(pred_class)
+
+                # 按 IP（作品）分组统计
+                stat = ip_stats.setdefault(
+                    true_ip, {"total": 0, "ip_ok": 0, "role_ok": 0}
+                )
+                stat["total"] += 1
+                if pred_ip == true_ip:
+                    stat["ip_ok"] += 1
+                if pred_class == true_class:
+                    stat["role_ok"] += 1
+
+                # 按角色类别（IP/角色）分组统计
+                cstat = class_stats.setdefault(
+                    true_class, {"total": 0, "correct": 0}
+                )
+                cstat["total"] += 1
+                if pred_class == true_class:
+                    cstat["correct"] += 1
+
+    table = _build_ip_success_table(ip_stats)
+    print(table)
+    logger.info("\n%s", table)
+
+    class_table = _build_class_success_table(class_stats)
+    print(class_table)
+    logger.info("\n%s", class_table)
+    return ip_stats
 
 
 def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None):
@@ -322,7 +510,6 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None):
                     model_handler.save_model(MODEL_PATH)
                     epochs_no_improve = 0
                     logger.info("保存最佳模型 (正确率: %.2f%%) → %s", best_val_acc, str(MODEL_PATH))
-                    save_classes_to_file(CLASSES_TXT_PATH, class_names)
                     save_classes_to_json(CLASSES_JSON_PATH, class_names)
                 elif EARLY_STOP_PATIENCE > 0:
                     epochs_no_improve += 1
@@ -415,7 +602,6 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None):
                 model_handler.save_model(MODEL_PATH)
                 epochs_no_improve = 0
                 logger.info("保存最佳模型 (正确率: %.2f%%) → %s", best_val_acc, str(MODEL_PATH))
-                save_classes_to_file(CLASSES_TXT_PATH, class_names)
                 save_classes_to_json(CLASSES_JSON_PATH, class_names)
             elif EARLY_STOP_PATIENCE > 0:
                 epochs_no_improve += 1
@@ -427,7 +613,10 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None):
         logger.info("=" * 50)
         logger.info(f"训练完成！最佳验证正确率: {best_val_acc:.2f}%")
         logger.info(f"模型保存到: {str(MODEL_PATH)}")
-        logger.info(f"类别名称已保存到: {str(CLASSES_TXT_PATH)}")
+        logger.info(f"类别信息已保存到: {str(CLASSES_JSON_PATH)}")
+
+        # 训练结束后：对全量数据集按 IP 分组输出各数据集的识别成功率（非置信度）
+        _evaluate_per_ip_success_rate(model, full_dataset, device, class_names)
 
     except KeyboardInterrupt:
         logger.warning("\n" + "=" * 50)
@@ -435,7 +624,6 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None):
         try:
             if 'model_handler' in dir() and 'class_names' in dir() and class_names:
                 model_handler.save_model(MODEL_PATH)
-                save_classes_to_file(CLASSES_TXT_PATH, class_names)
                 save_classes_to_json(CLASSES_JSON_PATH, class_names)
                 logger.warning("已保存当前模型至: %s (正确率: %.2f%%)", str(MODEL_PATH), best_val_acc)
             else:

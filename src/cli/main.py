@@ -16,7 +16,7 @@ ImageFile.LOAD_TRUNCATED_IMAGES = True
 # 导入各个模块
 from training.trainer import train_model
 from prediction.predictor import predict_character
-from services.menu_service import verify_images_function, show_menu, ask_dataset_choice
+from services.menu_service import show_menu, ask_dataset_choice, run_dataset_settings
 from services.node_service import start_node_service
 
 
@@ -82,24 +82,24 @@ def _action_train(args):
 
 
 def _action_predict(_args=None):
-    logger.info("\n=== 2. 预测角色 ===")
+    logger.info("\n=== 2. 识别角色 ===")
     predict_character()
 
 
-def _action_verify(_args=None):
-    logger.info("\n=== 3. 验证图像文件 ===")
-    verify_images_function()
+def _action_dataset(_args=None):
+    logger.info("\n=== 3. 数据集管理 ===")
+    run_dataset_settings()
 
 
 def _action_node(_args=None):
-    logger.info("\n=== 4. 启动节点服务 ===")
+    logger.info("\n=== 4. 节点服务 ===")
     start_node_service()
 
 
 MENU_ACTIONS = {
     "1": _action_train,
     "2": _action_predict,
-    "3": _action_verify,
+    "3": _action_dataset,
     "4": _action_node,
 }
 
@@ -137,14 +137,14 @@ def main():
                "  python main.py --mode 1 --dataset ./data         # 指定数据集训练\n"
                "  python main.py --mode 1 --resume                 # 继续训练\n"
                "  python main.py --mode 1 --yolo-crop              # 使用 YOLO 裁剪后训练\n"
-               "  python main.py --mode 2                          # 预测角色\n"
-               "  python main.py --mode 3                          # 验证图像\n"
-               "  python main.py --mode 4                          # 启动节点服务\n"
+               "  python main.py --mode 2                          # 识别角色\n"
+               "  python main.py --mode 3                          # 数据集管理\n"
+               "  python main.py --mode 4                          # 节点服务\n"
                "  python main.py (无参数)                          # 进入交互菜单",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--mode", type=int, choices=[1, 2, 3, 4],
-                        help="运行模式: 1-训练模型, 2-预测角色, 3-验证图像, 4-启动节点服务", default=None)
+                        help="运行模式: 1-训练模型, 2-识别角色, 3-数据集管理, 4-节点服务", default=None)
     parser.add_argument("--gpu", type=bool, default=False, help="是否启用 GPU 加速 (默认: False)")
     parser.add_argument("--yolo-crop", action="store_true", help="训练前使用 YOLO 对原始数据集进行裁剪预处理")
     parser.add_argument("--dataset", type=str, default=None,
@@ -168,7 +168,7 @@ def main():
             show_menu()
             choice = input("请输入你的选择 (1/2/3/4/0): ").strip().strip("\x1a")
 
-            if choice == "0" or choice == "":
+            if choice == "0":
                 logger.info("退出程序，再见~")
                 break
 

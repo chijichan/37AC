@@ -84,3 +84,64 @@ class TestLogConfig:
         from common.log_config import get_log_level
 
         assert get_log_level(debug) == expected
+
+
+class TestThirdPartyNoiseFilter:
+    """测试第三方库 DEBUG 噪音过滤器"""
+
+    @pytest.mark.parametrize("name,expected", [
+        ("PIL.PngImagePlugin", True),
+        ("PIL.Image", True),
+        ("matplotlib.pyplot", True),
+        ("training.trainer", False),
+        ("config.base", False),
+        ("", False),
+    ])
+    def test_is_noise_logger(self, name, expected):
+        """测试噪音 logger 名称判定"""
+        from common.log_config import _is_noise_logger
+
+        assert _is_noise_logger(name) is expected
+
+    def test_filter_blocks_noise_debug(self):
+        """测试 DEBUG 级别的 PIL 消息被过滤"""
+        from common.log_config import ThirdPartyNoiseFilter
+
+        f = ThirdPartyNoiseFilter()
+        record = logging.LogRecord(
+            name="PIL.PngImagePlugin", level=logging.DEBUG,
+            pathname="PIL/PngImagePlugin.py", lineno=1, msg="STREAM b'IHDR'", args=(),
+        )
+        assert f.filter(record) is False
+
+    def test_filter_allows_own_debug(self):
+        """测试项目自身 logger 的 DEBUG 消息不被过滤"""
+        from common.log_config import ThirdPartyNoiseFilter
+
+        f = ThirdPartyNoiseFilter()
+        record = logging.LogRecord(
+            name="training.trainer", level=logging.DEBUG,
+            pathname="training/trainer.py", lineno=1, msg="debug msg", args=(),
+        )
+        assert f.filter(record) is True
+
+    @pytest.mark.parametrize("level", [logging.INFO, logging.WARNING, logging.ERROR])
+    def test_filter_allows_non_debug(self, level):
+        """测试非 DEBUG 级别的第三方库消息始终放行"""
+        from common.log_config import ThirdPartyNoiseFilter
+
+        f = ThirdPartyNoiseFilter()
+        record = logging.LogRecord(
+            name="PIL.PngImagePlugin", level=level,
+            pathname="PIL/PngImagePlugin.py", lineno=1, msg="some message", args=(),
+        )
+        assert f.filter(record) is True
+
+    def test_init_logging_installs_filter(self, tmp_path):
+        """测试初始化后根 logger 的 handler 均安装了噪音过滤器"""
+        from common.log_config import init_logging, ThirdPartyNoiseFilter
+
+        init_logging(tmp_path / "filter_test.log", debug=True, console=True)
+        root_logger = logging.getLogger()
+        for handler in root_logger.handlers:
+            assert any(isinstance(f, ThirdPartyNoiseFilter) for f in handler.filters)

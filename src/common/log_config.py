@@ -19,7 +19,36 @@ LOG_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 DEFAULT_MAX_BYTES = 10 * 1024 * 1024
 DEFAULT_BACKUP_COUNT = 5
 
+# DEBUG 模式下也应静默的第三方库前缀：这些库在 DEBUG 级别下会输出大量
+# 内部解析/调用日志（例如 PIL 每次读图时刷屏的 STREAM/iCCP 消息），
+# 对排查项目代码毫无帮助，统一在此过滤。不在此列的其他 DEBUG 日志保留。
+NOISE_LOGGER_PREFIXES = (
+    "PIL",
+    "matplotlib",
+)
+
 _initialized = False
+
+
+def _is_noise_logger(name: str) -> bool:
+    """判断 logger 名称是否为需要静默 DEBUG 消息的第三方库。"""
+    if not name:
+        return False
+    return any(name.startswith(prefix) for prefix in NOISE_LOGGER_PREFIXES)
+
+
+class ThirdPartyNoiseFilter(logging.Filter):
+    """过滤第三方库在 DEBUG 级别下的噪音消息。
+
+    仅当满足以下条件时才丢弃：
+      - 日志级别为 DEBUG（INFO 及以上正常放行）
+      - logger 名称以 NOISE_LOGGER_PREFIXES 中的前缀开头
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.levelno < logging.INFO and _is_noise_logger(record.name):
+            return False
+        return True
 
 
 def get_log_level(debug: bool = False) -> int:
@@ -63,6 +92,9 @@ def init_logging(
     log_path = Path(log_file)
     log_path.parent.mkdir(parents=True, exist_ok=True)
 
+    # 第三方库 DEBUG 噪音过滤器（根 logger 上安装一次即可，所有子 logger 随之生效）
+    noise_filter = ThirdPartyNoiseFilter()
+
     # 文件处理器（轮转）
     file_handler = RotatingFileHandler(
         log_path,
@@ -72,6 +104,7 @@ def init_logging(
     )
     file_handler.setLevel(get_log_level(debug))
     file_handler.setFormatter(_make_formatter())
+    file_handler.addFilter(noise_filter)
     root_logger.addHandler(file_handler)
 
     # 控制台处理器
@@ -79,6 +112,7 @@ def init_logging(
         console_handler = logging.StreamHandler(sys.stdout)
         console_handler.setLevel(get_log_level(debug))
         console_handler.setFormatter(_make_formatter())
+        console_handler.addFilter(noise_filter)
         root_logger.addHandler(console_handler)
 
     _initialized = True

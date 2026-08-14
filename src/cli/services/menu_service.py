@@ -62,6 +62,100 @@ def verify_images_function():
         )
 
 
+def crop_dataset_function():
+    """使用 YOLO 对原始数据集进行裁剪，输出到 saves/dataset（IP/角色 结构镜像）"""
+    from config.base import DATASET_DIR, CROPPED_DATASET_DIR, MAX_IMAGES_PER_ROLE
+
+    print()
+    print("=" * 50)
+    print("  裁剪数据集（YOLO）")
+    print("=" * 50)
+
+    if not os.path.exists(DATASET_DIR):
+        logger.error(f"数据集目录不存在: {DATASET_DIR}")
+        return
+
+    if not os.access(DATASET_DIR, os.R_OK):
+        logger.error(f"数据集目录不可读: {DATASET_DIR}")
+        return
+
+    try:
+        from detection.yolo_detector import crop_dataset
+    except ImportError:
+        logger.warning("YOLO 模块未安装 (ultralytics)，无法裁剪数据集")
+        return
+
+    logger.info("开始裁剪原始数据集: %s → %s", DATASET_DIR, CROPPED_DATASET_DIR)
+    result = crop_dataset(
+        str(DATASET_DIR),
+        str(CROPPED_DATASET_DIR),
+        max_images_per_role=MAX_IMAGES_PER_ROLE,
+    )
+    logger.info(
+        "裁剪完成: 处理 %d 张, 跳过 %d 张, 失败 %d 张",
+        result["processed"], result["skipped"], result["failed"],
+    )
+    print("=" * 50)
+
+
+def show_dataset_menu():
+    """显示数据集管理子菜单"""
+    print()
+    print("=" * 40)
+    print("  数据集管理")
+    print("=" * 40)
+    print("  [1] 验证图像（检查数据集目录与图片有效性）")
+    print("  [2] 裁剪数据集（YOLO 裁剪原始数据集）")
+    print("  [0] 返回主菜单")
+    print("-" * 40)
+
+
+def run_dataset_settings():
+    """数据集管理子菜单交互循环"""
+    while True:
+        show_dataset_menu()
+        try:
+            choice = input("请选择 (1/2/0): ").strip().strip("\x1a")
+        except (KeyboardInterrupt, EOFError):
+            print()
+            return
+        if choice == "0" or choice == "":
+            return
+        elif choice == "1":
+            verify_images_function()
+        elif choice == "2":
+            crop_dataset_function()
+        else:
+            print("无效选择，请输入 1、2 或 0")
+
+
+def _cjk_display_width(text: str) -> int:
+    """计算字符串的显示宽度（中文等全角字符按 2 个宽度计算）。"""
+    width = 0
+    for ch in text:
+        width += 2 if ord(ch) > 0x2E7F else 1
+    return width
+
+
+def _pad_display(text: str, width: int, align: str = "left") -> str:
+    """按显示宽度补齐空格（兼容中文全角字符），支持左对齐/居中。"""
+    pad = max(0, width - _cjk_display_width(text))
+    if align == "center":
+        left = pad // 2
+        return " " * left + text + " " * (pad - left)
+    return text + " " * pad
+
+
+# 主菜单项: (编号, 名称, 功能说明)
+_MENU_ITEMS = [
+    ("1", "训练模型", "训练或继续训练角色识别模型"),
+    ("2", "识别角色", "识别图片中的动漫角色"),
+    ("3", "数据集管理", "验证图像、YOLO 裁剪数据集"),
+    ("4", "节点服务", "启动分布式识别节点"),
+    ("0", "退出程序", "结束程序并退出"),
+]
+
+
 def show_menu():
     """显示主菜单"""
     print(
@@ -86,11 +180,13 @@ def show_menu():
                                                                             
                                                                              """
     )
-    print("[1] 训练模型")
-    print("[2] 预测角色")
-    print("[3] 验证图像")
-    print("[4] 启动节点")
-    print("[0] 退出程序")
+    print()
+    print("=" * 48)
+    print(_pad_display("AC 主菜单", 48, align="center"))
+    print("=" * 48)
+    for key, name, desc in _MENU_ITEMS:
+        print(_pad_display(f"  [{key}] {name}", 19) + desc)
+    print("=" * 48)
 
 
 def ask_dataset_choice():

@@ -83,9 +83,15 @@ def corrupted_image(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def classes_file(tmp_path: Path) -> Path:
-    """生成一个类别列表文件"""
-    path = tmp_path / "classes.txt"
-    path.write_text("原神/荧\n原神/空\n蔚蓝档案/白子\n", encoding="utf-8")
+    """生成一个规范结构的 classes.json 文件"""
+    import json
+    path = tmp_path / "classes.json"
+    data = {
+        "原神/荧": {"id": "荧", "ip": "原神", "name_zh": "荧"},
+        "原神/空": {"id": "空", "ip": "原神", "name_zh": "空"},
+        "蔚蓝档案/白子": {"id": "白子", "ip": "蔚蓝档案", "name_zh": "白子"},
+    }
+    path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
     return path
 
 
@@ -93,9 +99,9 @@ def classes_file(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def empty_classes_file(tmp_path: Path) -> Path:
-    """生成一个空类别文件"""
-    path = tmp_path / "empty_classes.txt"
-    path.write_text("", encoding="utf-8")
+    """生成一个空的 classes.json 文件"""
+    path = tmp_path / "empty_classes.json"
+    path.write_text("{}", encoding="utf-8")
     return path
 
 

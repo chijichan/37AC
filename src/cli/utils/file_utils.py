@@ -52,17 +52,6 @@ def parse_class_name(class_name: str) -> tuple:
     return "", class_name.strip()
 
 
-def _load_classes_from_txt(file_path: str) -> list:
-    """从纯文本文件按行加载类别名（兼容旧格式 classes.txt）"""
-    class_names = []
-    with open(file_path, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if line:  # 忽略空行
-                class_names.append(line)
-    return class_names
-
-
 def _load_classes_from_json(file_path: str) -> list:
     """从 JSON 文件加载类别名（兼容 classes.json 规范格式）。
 
@@ -100,13 +89,11 @@ def _load_classes_from_json(file_path: str) -> list:
 
 
 def load_classes_from_file(file_path: str) -> list:
-    """从文件加载类别列表（兼容 classes.txt 与 classes.json）。
+    """从 classes.json 加载类别列表。
 
-    按文件扩展名自动识别格式：
-      - `.json` → 结构化 JSON（详见 _load_classes_from_json）
-      - 其他（含 `.txt`）→ 每行一个类别名 "IP/角色"
-
-    返回的始终是类别名列表（"IP/角色"），供训练 / 预测使用。
+    仅支持 `.json` 格式（规范顶层对象或宽松数组结构），
+    详见 _load_classes_from_json。返回的始终是类别名列表（"IP/角色"），
+    供训练 / 预测使用。
     """
     try:
         if not os.path.exists(file_path):
@@ -117,11 +104,11 @@ def load_classes_from_file(file_path: str) -> list:
             logger.error(f"类别文件不可读: {file_path}")
             return []
 
-        suffix = os.path.splitext(file_path)[1].lower()
-        if suffix == ".json":
-            class_names = _load_classes_from_json(file_path)
-        else:
-            class_names = _load_classes_from_txt(file_path)
+        if os.path.splitext(file_path)[1].lower() != ".json":
+            logger.error(f"不支持的类别文件格式（仅支持 classes.json）: {file_path}")
+            return []
+
+        class_names = _load_classes_from_json(file_path)
 
         if not class_names:
             logger.error(f"类别文件为空或格式不正确: {file_path}")
@@ -149,20 +136,6 @@ def classes_to_json_dict(class_names: list) -> dict:
         # name_zh 作为备用展示名，默认与角色名一致，可由外部自行覆盖
         data[name] = {"id": role, "ip": ip, "name_zh": role}
     return data
-
-
-def save_classes_to_file(file_path: str, class_names: list) -> bool:
-    """保存类别列表到纯文本文件（每行一个 "IP/角色"，向后兼容）"""
-    try:
-        ensure_directory_exists(os.path.dirname(file_path))
-        with open(file_path, "w", encoding="utf-8") as f:
-            for name in class_names:
-                f.write(name + "\n")
-        logger.info(f"类别名称已保存到: {file_path}")
-        return True
-    except Exception as e:
-        logger.error(f"保存类别文件失败 {file_path}: {str(e)}")
-        return False
 
 
 def save_classes_to_json(file_path: str, class_names: list) -> bool:

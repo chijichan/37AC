@@ -14,7 +14,6 @@ from utils.file_utils import load_classes_from_file, check_model_file
 from models.character_model import CharacterRecognitionModel
 from config.base import (
     IMAGE_SIZE,
-    CLASSES_TXT_PATH,
     CLASSES_JSON_PATH,
     MODEL_LOAD_PATH,
     YOLO_ENABLED,
@@ -58,13 +57,8 @@ _cache_lock = threading.Lock()
 
 
 def _default_classes_file() -> str:
-    """返回默认类别文件路径：优先 classes.json，否则回退 classes.txt。"""
-    try:
-        if CLASSES_JSON_PATH.exists():
-            return str(CLASSES_JSON_PATH)
-    except Exception:
-        pass
-    return str(CLASSES_TXT_PATH)
+    """返回默认类别文件路径（classes.json）。"""
+    return str(CLASSES_JSON_PATH)
 
 
 def predict_character():

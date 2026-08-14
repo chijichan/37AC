@@ -122,20 +122,20 @@ class TestBackupOldModel:
         _backup_old_model(model_path, bak_dir)
 
     def test_backup_also_copies_classes(self, tmp_path: Path):
-        """测试备份同时备份 classes.txt"""
+        """测试备份同时备份 classes.json"""
         from training.trainer import _backup_old_model
 
         model_path = tmp_path / "model.pth"
         model_path.write_text("dummy", encoding="utf-8")
-        classes_txt = tmp_path / "classes.txt"
-        classes_txt.write_text("原神/荧", encoding="utf-8")
+        classes_json = tmp_path / "classes.json"
+        classes_json.write_text("{}", encoding="utf-8")
         bak_dir = tmp_path / "_bak"
 
         _backup_old_model(model_path, bak_dir)
-        # 应同时备份了 classes.txt
+        # 应同时备份了 classes.json
         bak_files = list(bak_dir.iterdir())
-        txt_backups = [f for f in bak_files if f.suffix == ".txt"]
-        assert len(txt_backups) >= 1
+        json_backups = [f for f in bak_files if f.suffix == ".json"]
+        assert len(json_backups) >= 1
 
 
 class TestTrainModel:
@@ -170,3 +170,170 @@ class TestTrainModel:
         assert "dataset_dir" in params
         assert "use_yolo_crop" in params
         assert "resume_model" in params
+
+
+class TestEvaluatePerIpSuccessRate:
+    """测试训练结束后的分 IP（数据集）成功率统计"""
+
+    @staticmethod
+    def _make_model(num_classes: int, pred_idx: int):
+        """构造一个固定输出指定类别索引的模拟模型。"""
+        import torch
+        import torch.nn as nn
+
+        class _FixedLogitsModel(nn.Module):
+            def __init__(self, n: int, idx: int):
+                super().__init__()
+                logits = torch.full((1, n), -10.0)
+                logits[0, idx] = 10.0
+                self.register_buffer("logits", logits)
+
+            def forward(self, x):
+                return self.logits.expand(x.size(0), -1)
+
+        return _FixedLogitsModel(num_classes, pred_idx)
+
+    def test_evaluate_mixed_ips(self, mock_dataset_dir: Path):
+        """测试按 IP 分组的成功率统计（部分识别正确）"""
+        import torch
+        from data.dataset import IPRoleImageFolder
+        from training.trainer import (
+            VAL_TRANSFORMS,
+            _evaluate_per_ip_success_rate,
+        )
+
+        # 类别按名称排序（中文 Unicode 顺序）: 原神/空, 原神/荧, 蔚蓝档案/白子
+        dataset = IPRoleImageFolder(root=str(mock_dataset_dir), transform=VAL_TRANSFORMS)
+        classes = dataset.classes
+
+        # 模型始终预测 "原神/荧"
+        model = self._make_model(len(classes), pred_idx=classes.index("原神/荧"))
+        stats = _evaluate_per_ip_success_rate(model, dataset, torch.device("cpu"), classes)
+
+        # 原神: 荧 2 张 + 空 1 张 = 3 张；IP 识别对 3 张（同属原神），角色完全匹配 2 张（荧）
+        assert stats["原神"]["total"] == 3
+        assert stats["原神"]["ip_ok"] == 3
+        assert stats["原神"]["role_ok"] == 2
+        # 蔚蓝档案: 白子 1 张；全部识别为原神，IP 与角色均不匹配
+        assert stats["蔚蓝档案"]["total"] == 1
+        assert stats["蔚蓝档案"]["ip_ok"] == 0
+        assert stats["蔚蓝档案"]["role_ok"] == 0
+
+    def test_evaluate_all_correct(self, mock_dataset_dir: Path):
+        """测试全部识别正确时各 IP 成功率为 100%"""
+        import torch
+        from data.dataset import IPRoleImageFolder
+        from training.trainer import (
+            VAL_TRANSFORMS,
+            _evaluate_per_ip_success_rate,
+        )
+
+        dataset = IPRoleImageFolder(root=str(mock_dataset_dir), transform=VAL_TRANSFORMS)
+        classes = dataset.classes
+        true_labels = [label for _, label in dataset.samples]
+
+        # 逐样本模拟：模型输出 = 真实标签（构造每个样本一行 logits）
+        import torch.nn as nn
+
+        class _OracleModel(nn.Module):
+            def __init__(self, labels):
+                super().__init__()
+                self.labels = labels
+
+            def forward(self, x):
+                # 每个输入样本对应一个固定 logits，使 argmax = 真实标签
+                rows = []
+                for i in range(x.size(0)):
+                    idx = self.labels[i % len(self.labels)]
+                    row = torch.full((1, len(classes)), -10.0)
+                    row[0, idx] = 10.0
+                    rows.append(row)
+                return torch.cat(rows, dim=0)
+
+        model = _OracleModel(true_labels)
+        stats = _evaluate_per_ip_success_rate(model, dataset, torch.device("cpu"), classes)
+
+        assert stats["原神"]["total"] == 3
+        assert stats["原神"]["ip_ok"] == 3
+        assert stats["原神"]["role_ok"] == 3
+        assert stats["蔚蓝档案"]["total"] == 1
+        assert stats["蔚蓝档案"]["ip_ok"] == 1
+        assert stats["蔚蓝档案"]["role_ok"] == 1
+
+    def test_evaluate_empty_dataset(self, tmp_path: Path):
+        """测试空数据集返回空统计"""
+        import torch
+        from training.trainer import _evaluate_per_ip_success_rate
+
+        class _EmptyDataset:
+            def __len__(self):
+                return 0
+
+        model = self._make_model(3, pred_idx=0)
+        stats = _evaluate_per_ip_success_rate(model, _EmptyDataset(), torch.device("cpu"), ["a/b"])
+        assert stats == {}
+
+
+class TestBuildIpSuccessTable:
+    """测试成功率表格构建"""
+
+    def test_table_contains_summary(self):
+        """测试表格包含合计与各 IP 行"""
+        from training.trainer import _build_ip_success_table
+
+        ip_stats = {
+            "原神": {"total": 3, "ip_ok": 2, "role_ok": 2},
+            "蔚蓝档案": {"total": 1, "ip_ok": 1, "role_ok": 1},
+        }
+        table = _build_ip_success_table(ip_stats)
+        assert "训练结束" in table
+        assert "原神" in table
+        assert "蔚蓝档案" in table
+        assert "合计" in table
+        assert "66.67%" in table  # 原神 IP 成功率 2/3
+        assert "100.00%" in table  # 蔚蓝档案 1/1
+
+    def test_table_with_unclassified_ip(self):
+        """测试无 IP 前缀的类别显示为未归类"""
+        from training.trainer import _build_ip_success_table
+
+        ip_stats = {
+            "": {"total": 2, "ip_ok": 1, "role_ok": 1},
+        }
+        table = _build_ip_success_table(ip_stats)
+        assert "(未归类)" in table
+        assert "50.00%" in table
+
+
+class TestBuildClassSuccessTable:
+    """测试角色类别成功率表格构建"""
+
+    def test_table_contains_classes_and_summary(self):
+        """测试表格包含各角色类别行与合计行"""
+        from training.trainer import _build_class_success_table
+
+        class_stats = {
+            "原神/荧": {"total": 2, "correct": 2},
+            "原神/空": {"total": 1, "correct": 0},
+            "蔚蓝档案/白子": {"total": 1, "correct": 1},
+        }
+        table = _build_class_success_table(class_stats)
+        assert "各角色类别测试结果" in table
+        assert "原神/荧" in table
+        assert "原神/空" in table
+        assert "蔚蓝档案/白子" in table
+        assert "合计" in table
+        assert "100.00%" in table  # 原神/荧 2/2 与 蔚蓝档案/白子 1/1
+        assert "0.00%" in table   # 原神/空 0/1
+        assert "75.00%" in table  # 合计 3/4
+
+    def test_table_with_unclassified_class(self):
+        """测试无 IP 前缀的类别显示为未归类"""
+        from training.trainer import _build_class_success_table
+
+        class_stats = {
+            "": {"total": 2, "correct": 1},
+        }
+        table = _build_class_success_table(class_stats)
+        assert "(未归类)" in table
+        assert "50.00%" in table

@@ -87,16 +87,16 @@ def start_node_service():
             real_path = Path(os.path.abspath(image_path))
             real_base = Path(os.path.abspath(IMAGE_PATH))
             if real_base not in real_path.parents and real_path != real_base:
-                logger.warning("[节点] 拒绝清理 IMAGE_PATH 外的文件: %s", image_path)
+                logger.warning("拒绝清理 IMAGE_PATH 外的文件: %s", image_path)
                 return
         except Exception as e:
-            logger.warning("[节点] 路径校验失败 %s: %s", image_path, e)
+            logger.warning("路径校验失败 %s: %s", image_path, e)
             return
         try:
             os.remove(image_path)
-            logger.debug("[节点] 已清理临时图片: %s", image_path)
+            logger.debug("已清理临时图片: %s", image_path)
         except Exception as e:
-            logger.warning("[节点] 清理临时图片失败 %s: %s", image_path, e)
+            logger.warning("清理临时图片失败 %s: %s", image_path, e)
 
     def _safe_image_extension(filename):
         """从文件名中提取安全的图片扩展名，非法扩展名返回空字符串。"""
@@ -114,7 +114,7 @@ def start_node_service():
     def connect_and_register():
         nonlocal s, reconnect_attempts
         try:
-            logger.info("[节点] 尝试连接服务器...")
+            logger.info("尝试连接服务器...")
 
             # 修改1：确保关闭之前的socket（_safe_close 快速释放端口）
             if s:
@@ -137,36 +137,37 @@ def start_node_service():
                     try:
                         s.bind(("", bind_port))
                         assigned_port = s.getsockname()[1]
-                        logger.info(f"[节点] 已绑定本地端口: {assigned_port}")
+                        logger.info("已绑定本地端口: %s", assigned_port)
                         break
                     except OSError as bind_err:
                         if getattr(bind_err, "winerror", None) == 10048 or getattr(bind_err, "errno", None) == errno.EADDRINUSE:
                             logger.warning(
-                                f"[节点] 本地端口 {bind_port} 被占用 (尝试 {attempt}/{max_bind_attempts})：{bind_err}"
+                                "本地端口 %s 被占用 (尝试 %s/%s)：%s",
+                                bind_port, attempt, max_bind_attempts, bind_err,
                             )
                             time.sleep(1)
                             continue
                         else:
-                            logger.warning(f"[节点] 本地端口绑定失败: {bind_err}（继续尝试连接）")
+                            logger.warning("本地端口绑定失败: %s（继续尝试连接）", bind_err)
                             break
                 else:
                     # 多次重试仍失败，回退到随机端口
                     try:
                         s.bind(("", 0))
                         assigned_port = s.getsockname()[1]
-                        logger.warning(f"[节点] 回退：绑定到随机本地端口 {assigned_port}")
+                        logger.warning("回退：绑定到随机本地端口 %s", assigned_port)
                     except Exception as e:
-                        logger.warning(f"[节点] 随机端口绑定也失败: {e}（继续尝试连接）")
+                        logger.warning("随机端口绑定也失败: %s（继续尝试连接）", e)
             else:
                 try:
                     s.bind(("", 0))
                     assigned_port = s.getsockname()[1]
-                    logger.info(f"[节点] 未配置 LOCAL_PORT，使用随机本地端口: {assigned_port}")
+                    logger.info("未配置 LOCAL_PORT，使用随机本地端口: %s", assigned_port)
                 except Exception as e:
-                    logger.warning(f"[节点] 随机端口绑定失败: {e}（继续尝试连接）")
+                    logger.warning("随机端口绑定失败: %s（继续尝试连接）", e)
 
             s.connect((TCP_HOST, TCP_PORT))
-            logger.info(f"[节点] 已连接到服务器 {TCP_HOST}:{TCP_PORT}")
+            logger.info("已连接到服务器 %s:%s", TCP_HOST, TCP_PORT)
 
             # 重置状态
             nonlocal heartbeat_missed_count, last_heartbeat_send_time, last_heartbeat_response_time, consecutive_none_count
@@ -196,11 +197,11 @@ def start_node_service():
                 },
             }
             json_protocol.send_json(s, register_msg)
-            logger.info(f"[节点] 已发送注册消息 {TCP_HOST}:{TCP_PORT}")
+            logger.info("已发送注册消息 %s:%s", TCP_HOST, TCP_PORT)
 
             return True
         except Exception as e:
-            logger.error(f"[节点] 连接或注册失败: {e}")
+            logger.error("连接或注册失败: %s", e)
             if s:
                 try:
                     _safe_close(s)
@@ -213,7 +214,7 @@ def start_node_service():
     while True:
         # 初始连接
         if not connect_and_register():
-            logger.error("[节点] 初始连接失败，程序退出")
+            logger.error("初始连接失败，程序退出")
             return
 
         # === 心跳线程 ===
@@ -235,9 +236,9 @@ def start_node_service():
                     json_protocol.send_json(s, hb_msg)
                     last_heartbeat_send_time = time.time()
                     last_heartbeat_response_time = 0  # 重置，标记等待响应
-                    logger.debug("[节点] 发送心跳")
+                    logger.debug("发送心跳")
                 except Exception as e:
-                    logger.error(f"[心跳线程] 发送心跳异常: {e}")
+                    logger.error("发送心跳异常: %s", e)
                     connection_alive = False
                     break
 
@@ -256,7 +257,7 @@ def start_node_service():
                     if "value" in info["store"]:
                         result = info["store"]["value"]
                     else:
-                        logger.warning("[节点] 推理任务 %s 等待超时 (%ds)", tid, timeout_sec)
+                        logger.warning("推理任务 %s 等待超时 (%ds)", tid, timeout_sec)
                         result = {"success": False, "class_probs": [], "error": f"inference timeout after {timeout_sec} seconds"}
                     result["recognition_type"] = info["effective_type"]
 
@@ -272,9 +273,9 @@ def start_node_service():
                     }
                     try:
                         json_protocol.send_json(s, response_msg)
-                        logger.info("[节点] 已返回推理任务 %s 的结果 (%s)", tid, info["effective_type"])
+                        logger.info("已返回推理任务 %s 的结果 (%s)", tid, info["effective_type"])
                     except Exception as send_err:
-                        logger.error("[节点] 发送推理任务结果失败: %s", send_err)
+                        logger.error("发送推理任务结果失败: %s", send_err)
                     with tasks_lock:
                         if tid in tasks:
                             tasks.remove(tid)
@@ -294,12 +295,13 @@ def start_node_service():
                     if heartbeat_missed_count < HEARTBEAT_MISS_LIMIT:
                         heartbeat_missed_count += 1
                         logger.warning(
-                            f"[节点] ⚠️ 心跳响应超时！({heartbeat_missed_count}/{HEARTBEAT_MISS_LIMIT}) "
-                            f"上次发送: {time_since_last_send:.1f}s 前"
+                            "⚠️ 心跳响应超时！(%s/%s) 上次发送: %.1fs 前",
+                            heartbeat_missed_count, HEARTBEAT_MISS_LIMIT, time_since_last_send,
                         )
                     if heartbeat_missed_count >= HEARTBEAT_MISS_LIMIT:
                         logger.error(
-                            f"[节点] ❗ 心跳连续丢失 {heartbeat_missed_count} 次，超过最大限制，准备断开并重连..."
+                            "❗ 心跳连续丢失 %s 次，超过最大限制，准备断开并重连...",
+                            heartbeat_missed_count,
                         )
                         connection_alive = False  # 标记连接失效
                         break  # 跳出主循环，触发重连逻辑
@@ -316,7 +318,8 @@ def start_node_service():
                     consecutive_none_count += 1
                     if consecutive_none_count >= 10:
                         logger.warning(
-                            f"[节点] recv_json 连续返回 None {consecutive_none_count} 次，判定连接异常，触发重连"
+                            "recv_json 连续返回 None %s 次，判定连接异常，触发重连",
+                            consecutive_none_count,
                         )
                         connection_alive = False
                         break
@@ -327,11 +330,11 @@ def start_node_service():
 
                 msg_type = msg.get("type")
                 msg_data = msg.get("data", {})
-                logger.debug(f"[节点] 收到消息类型: {msg_type}")
+                logger.debug("收到消息类型: %s", msg_type)
 
                 # === 心跳响应处理 ====
                 if msg_type == "heartbeat_ack":
-                    logger.debug(f"[节点] 收到心跳响应: {msg.get('message', '')}")
+                    logger.debug("收到心跳响应: %s", msg.get('message', ''))
                     heartbeat_missed_count = 0  # 重置丢失计数
                     last_heartbeat_response_time = time.time()  # 记录响应时间
                     last_heartbeat_send_time = 0  # 重置发送时间，准备下一次发送
@@ -340,14 +343,14 @@ def start_node_service():
                 elif msg_type == "register_ack":
                     status = msg.get("status")
                     message = msg.get("message")
-                    logger.info(f"[注册结果] {status}: {message}")
+                    logger.info("注册结果: %s: %s", status, message)
 
                 # === 任务状态响应 ===
                 elif msg_type == "status_update_ack":
                     status = msg.get("status")
                     message = msg.get("message")
                     task_id = msg_data.get("task_id")
-                    logger.info(f"[任务状态更新] 任务ID: {task_id}, 动作: {message}")
+                    logger.info("任务状态更新: 任务ID: %s, 动作: %s", task_id, message)
 
                 # === 任务处理 ===
                 elif msg_type == "task":
@@ -361,13 +364,12 @@ def start_node_service():
                         recognition_type = msg_data.get("recognition_type", "local")
 
                         if not all([task_id, image_filename, image_data_b64]):
-                            logger.warning("[节点] 任务数据不完整")
+                            logger.warning("任务数据不完整")
                             continue
 
                         logger.info(
-                            f"[节点] 收到带图片任务: {task_id}, 文件名: {image_filename}, "
-                            f"识别方式: {recognition_type}, "
-                            f"大小: {image_size} 字节, 时间戳: {timestamp}"
+                            "收到带图片任务: %s, 文件名: %s, 识别方式: %s, 大小: %s 字节, 时间戳: %s",
+                            task_id, image_filename, recognition_type, image_size, timestamp,
                         )
 
                         # 更新当前任务列表和计数
@@ -382,7 +384,8 @@ def start_node_service():
                             # 验证解码后的大小
                             if len(image_bytes) != image_size:
                                 logger.warning(
-                                    f"[节点] 图片大小不匹配: 期望={image_size}, 实际={len(image_bytes)}"
+                                    "图片大小不匹配: 期望=%s, 实际=%s",
+                                    image_size, len(image_bytes),
                                 )
 
                             # 保存图片（使用 UUID 作为磁盘文件名，防止路径遍历）
@@ -392,7 +395,7 @@ def start_node_service():
                             local_image_path = os.path.join(IMAGE_PATH, local_image_filename)
                             with open(local_image_path, "wb") as f:
                                 f.write(image_bytes)
-                            logger.info(f"[节点] 图片已保存到: {local_image_path}")
+                            logger.info("图片已保存到: %s", local_image_path)
 
                             # 根据 recognition_type 选择推理方式
                             # 优先使用节点配置的环境变量开关，兼容服务端指定类型
@@ -400,30 +403,32 @@ def start_node_service():
                             if recognition_type == "auto":
                                 effective_type = "llm" if LLM_RECOGNITION_ENABLED else "local"
                             elif recognition_type == "llm" and not LLM_RECOGNITION_ENABLED:
-                                logger.warning(
-                                    f"[节点] 任务要求 LLM 识别但节点未启用，回退到本地模型"
-                                )
+                                logger.warning("任务要求 LLM 识别但节点未启用，回退到本地模型")
                                 effective_type = "local"
 
-                            logger.info(f"[节点] 推理方式: {effective_type}")
+                            logger.info("推理方式: %s", effective_type)
 
                             # 统一将推理提交到后台线程执行（local / LLM 均异步），
                             # 主循环不阻塞，可继续接收新任务；完成结果由上方 pending_tasks 检查回传
                             store = {}
                             timeout_sec = LLM_TIMEOUT_SEC if effective_type == "llm" else LOCAL_TASK_TIMEOUT_SEC
 
-                            def _run_inference():
+                            def _run_inference(
+                                _store=store,
+                                _image_path=local_image_path,
+                                _effective_type=effective_type,
+                            ):
                                 try:
-                                    if effective_type == "llm":
-                                        store["value"] = predict_image_llm(local_image_path)
+                                    if _effective_type == "llm":
+                                        _store["value"] = predict_image_llm(_image_path)
                                     else:
-                                        store["value"] = predict_image(local_image_path)
+                                        _store["value"] = predict_image(_image_path)
                                 except Exception as exc:
-                                    logger.error("[节点] %s 推理失败: %s", effective_type, exc, exc_info=True)
-                                    store["value"] = {
+                                    logger.error("%s 推理失败: %s", _effective_type, exc, exc_info=True)
+                                    _store["value"] = {
                                         "success": False,
                                         "class_probs": [],
-                                        "error": f"{effective_type} inference failed: {exc}",
+                                        "error": f"{_effective_type} inference failed: {exc}",
                                     }
 
                             threading.Thread(target=_run_inference, daemon=True).start()
@@ -435,12 +440,12 @@ def start_node_service():
                                     "start_time": time.time(),
                                     "timeout_sec": timeout_sec,
                                 }
-                            logger.info("[节点] 推理任务 %s 已提交到后台 (%s)，主循环继续监听", task_id, effective_type)
+                            logger.info("推理任务 %s 已提交到后台 (%s)，主循环继续监听", task_id, effective_type)
                             # 不阻塞主循环，由 pending_tasks 检查处理结果
                             continue
 
                         except Exception as decode_error:
-                            logger.error(f"[节点] 图片数据解码失败: {decode_error}")
+                            logger.error("图片数据解码失败: %s", decode_error)
                             error_msg = {
                                 "type": "task_result",
                                 "timestamp": int(time.time()),
@@ -458,7 +463,7 @@ def start_node_service():
                             _cleanup_image(local_image_path)
 
                     except Exception as e:
-                        logger.error(f"[节点] 处理带图片任务出错: {e}")
+                        logger.error("处理带图片任务出错: %s", e)
                         error_msg = {
                             "type": "task_result",
                             "timestamp": int(time.time()),
@@ -475,25 +480,25 @@ def start_node_service():
                 elif msg_type in ["msg", "error"]:
                     status = msg.get("status")
                     message = msg.get("message")
-                    logger.info(f"[节点] 服务端消息: {status} - {message}")
+                    logger.info("服务端消息: %s - %s", status, message)
 
                 else:
-                    logger.warning(f"[节点] 未知消息类型: {msg_type}")
+                    logger.warning("未知消息类型: %s", msg_type)
 
             except socket.timeout:
                 # 接收超时是正常的，继续循环检查其他条件
                 continue
             except (ConnectionError, OSError, struct.error) as e:
-                logger.error("[节点] 主循环连接异常: %s", e)
+                logger.error("主循环连接异常: %s", e)
                 connection_alive = False
                 break
             except Exception as e:
-                logger.error("[节点] 主循环未预期异常: %s", e, exc_info=True)
+                logger.error("主循环未预期异常: %s", e, exc_info=True)
                 connection_alive = False
                 break
 
         # === 连接异常处理 ===
-        logger.info("[节点] 连接异常，准备重连...")
+        logger.info("连接异常，准备重连...")
         if s:
             try:
                 _safe_close(s)
@@ -504,7 +509,7 @@ def start_node_service():
         # 增加重连延迟和最大尝试次数
         reconnect_attempts += 1
         if reconnect_attempts > 5:  # 最多尝试5次
-            logger.error("[节点] 重连尝试次数过多，退出程序")
+            logger.error("重连尝试次数过多，退出程序")
             return
 
         time.sleep(RECONNECT_DELAY_SEC)

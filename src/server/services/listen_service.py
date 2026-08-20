@@ -27,6 +27,7 @@ logger = get_logger("listen_service")
 def handle_client(conn, addr):
     logger.info("新连接来自: %s:%s", addr[0], addr[1])
     node_id = None
+    authenticated = False
 
     try:
         while True:
@@ -37,19 +38,18 @@ def handle_client(conn, addr):
             msg_type = msg.get("type")
 
             if msg_type == "register":
-                node_id = msg["data"].get("node_id")
-                # 异步处理注册消息
-                message_processor.submit_message_task(
-                    "register", async_handle_register, conn, addr, msg
-                )
+                # 注册改为同步处理：只有认证成功后才允许后续消息
+                candidate_node_id = msg["data"].get("node_id")
+                if async_handle_register(conn, addr, msg):
+                    node_id = candidate_node_id
+                    authenticated = True
+                else:
+                    # 注册失败，async_handle_register 已发送错误 ACK，直接关闭连接
+                    break
 
             elif msg_type == "heartbeat":
                 # 异步处理心跳消息
-                if node_id:
-                    message_processor.submit_message_task(
-                        "heartbeat", async_handle_heartbeat, conn, addr, msg, node_id
-                    )
-                else:
+                if not authenticated or not node_id:
                     heartbeat_ack = {
                         "type": "heartbeat_ack",
                         "timestamp": int(time.time()),
@@ -57,8 +57,37 @@ def handle_client(conn, addr):
                         "message": "未注册的节点",
                     }
                     json_protocol.send_json(conn, heartbeat_ack)
+                else:
+                    message_processor.submit_message_task(
+                        "heartbeat", async_handle_heartbeat, conn, addr, msg, node_id
+                    )
 
             elif msg_type == "task_result":
+                # 只接受已认证连接且 node_id 与当前连接一致的任务结果
+                if not authenticated or not node_id:
+                    error_msg = {
+                        "type": "error",
+                        "timestamp": int(time.time()),
+                        "status": "error",
+                        "message": "未注册的节点",
+                    }
+                    json_protocol.send_json(conn, error_msg)
+                    break
+
+                msg_node_id = msg.get("data", {}).get("node_id")
+                if msg_node_id != node_id:
+                    logger.warning(
+                        "任务结果 node_id 不匹配: 连接=%s, 消息=%s", node_id, msg_node_id
+                    )
+                    error_msg = {
+                        "type": "error",
+                        "timestamp": int(time.time()),
+                        "status": "error",
+                        "message": "任务结果 node_id 与当前连接不匹配",
+                    }
+                    json_protocol.send_json(conn, error_msg)
+                    break
+
                 # 异步处理任务结果消息
                 message_processor.submit_message_task(
                     "task_result", async_handle_task_result, conn, addr, msg
@@ -75,11 +104,15 @@ def handle_client(conn, addr):
     except Exception as e:
         logger.error("handle_client 未预期异常 %s:%s: %s", addr[0], addr[1], e, exc_info=True)
     finally:
-        if node_id:
-            try:
-                node_manager.remove_node(node_id)
-            except Exception as e:
-                logger.warning("remove_node 异常 %s: %s", node_id, e)
+        if authenticated and node_id:
+            # 仅当当前连接仍是该节点在内存中的活动连接时才移除，
+            # 避免旧连接断开时误删已重连成功的新连接。
+            info = node_manager.nodes.get(node_id)
+            if info and info.get("socket") is conn:
+                try:
+                    node_manager.remove_node(node_id)
+                except Exception as e:
+                    logger.warning("remove_node 异常 %s: %s", node_id, e)
 
         try:
             conn.close()
@@ -89,6 +122,7 @@ def handle_client(conn, addr):
 
 
 # 启动 TCP 服务
+
 def start_tcp_server(host="0.0.0.0", port=TCP_PORT):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)

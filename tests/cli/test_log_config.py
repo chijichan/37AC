@@ -52,18 +52,48 @@ class TestLogConfig:
         assert any(isinstance(h, RotatingFileHandler) for h in handlers)
 
     def test_init_logging_writes_file(self, tmp_path):
-        """测试日志实际写入文件"""
+        """测试日志实际写入文件（debug 关闭时 WARNING 及以上会落盘）"""
         from common.log_config import init_logging, get_logger
 
         log_file = tmp_path / "test_write.log"
         init_logging(log_file, debug=False, console=False)
         logger = get_logger("test_write")
-        logger.info("hello-log-test")
+        logger.warning("hello-log-test")
         # 关闭 handler 确保 flush
         for handler in logging.getLogger().handlers:
             handler.flush()
         content = log_file.read_text(encoding="utf-8")
         assert "hello-log-test" in content
+
+    def test_file_only_warning_when_debug_off(self, tmp_path):
+        """debug 关闭时文件只保存 WARNING 及以上，INFO 不落盘"""
+        from common.log_config import init_logging, get_logger
+
+        log_file = tmp_path / "test_warning_only.log"
+        init_logging(log_file, debug=False, console=False)
+        logger = get_logger("test_warning_only")
+        logger.info("info-should-not-be-saved")
+        logger.warning("warning-should-be-saved")
+        for handler in logging.getLogger().handlers:
+            handler.flush()
+        content = log_file.read_text(encoding="utf-8")
+        assert "info-should-not-be-saved" not in content
+        assert "warning-should-be-saved" in content
+
+    def test_file_saves_all_when_debug_on(self, tmp_path):
+        """debug 开启时文件保存全部日志（DEBUG 及以上）"""
+        from common.log_config import init_logging, get_logger
+
+        log_file = tmp_path / "test_debug_all.log"
+        init_logging(log_file, debug=True, console=False)
+        logger = get_logger("test_debug_all")
+        logger.debug("debug-log")
+        logger.info("info-log")
+        for handler in logging.getLogger().handlers:
+            handler.flush()
+        content = log_file.read_text(encoding="utf-8")
+        assert "debug-log" in content
+        assert "info-log" in content
 
     def test_init_logging_idempotent(self, tmp_path):
         """测试重复初始化不会重复添加 handler"""
@@ -110,7 +140,7 @@ class TestThirdPartyNoiseFilter:
         f = ThirdPartyNoiseFilter()
         record = logging.LogRecord(
             name="PIL.PngImagePlugin", level=logging.DEBUG,
-            pathname="PIL/PngImagePlugin.py", lineno=1, msg="STREAM b'IHDR'", args=(),
+            pathname="PIL/PngImagePlugin.py", lineno=1, msg="STREAM b'IHDR'", args=(), exc_info=None,
         )
         assert f.filter(record) is False
 
@@ -121,7 +151,7 @@ class TestThirdPartyNoiseFilter:
         f = ThirdPartyNoiseFilter()
         record = logging.LogRecord(
             name="training.trainer", level=logging.DEBUG,
-            pathname="training/trainer.py", lineno=1, msg="debug msg", args=(),
+            pathname="training/trainer.py", lineno=1, msg="debug msg", args=(), exc_info=None,
         )
         assert f.filter(record) is True
 
@@ -133,7 +163,7 @@ class TestThirdPartyNoiseFilter:
         f = ThirdPartyNoiseFilter()
         record = logging.LogRecord(
             name="PIL.PngImagePlugin", level=level,
-            pathname="PIL/PngImagePlugin.py", lineno=1, msg="some message", args=(),
+            pathname="PIL/PngImagePlugin.py", lineno=1, msg="some message", args=(), exc_info=None,
         )
         assert f.filter(record) is True
 

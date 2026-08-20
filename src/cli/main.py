@@ -8,7 +8,7 @@ from PIL import Image, ImageFile
 
 from config.log_config import init_logging, get_logger
 
-logger = get_logger(__name__)
+logger = get_logger("main")
 
 # 允许PIL加载截断的图像文件，增强健壮性
 ImageFile.LOAD_TRUNCATED_IMAGES = True
@@ -28,7 +28,7 @@ from services.menu_service import (
 # 菜单操作映射：菜单编号 → (处理函数)
 def _action_train(args):
     """训练模型"""
-    logger.info("\n=== 1. 训练模型 ===")
+    logger.info("=== 1. 训练模型 ===")
 
     # 判断训练方式优先级：命令行 --resume > 交互选择
     from config.base import MODEL_PATH
@@ -103,7 +103,7 @@ def _action_predict(args=None):
     if method is None:
         return
 
-    logger.info("\n=== 2. 识别角色 ===")
+    logger.info("=== 2. 识别角色 ===")
     logger.info("正在加载识别模块（首次加载 PyTorch 较慢，请稍候）...")
     predict_character(
         recognition_method=method,
@@ -112,7 +112,7 @@ def _action_predict(args=None):
 
 
 def _action_dataset(args=None):
-    logger.info("\n=== 3. 数据集管理 ===")
+    logger.info("=== 3. 数据集管理 ===")
     if args is not None and getattr(args, "command", None) == "dataset":
         # dataset 子命令：verify / crop 直接执行；无操作参数时进入交互子菜单
         from services.menu_service import verify_images_function, crop_dataset_function
@@ -130,7 +130,7 @@ def _action_dataset(args=None):
 def _action_node(args=None):
     from services.node_service import start_node_service  # 延迟导入（内部会加载 predictor/torch）
 
-    logger.info("\n=== 4. 节点服务 ===")
+    logger.info("=== 4. 节点服务 ===")
     logger.info("正在加载节点服务模块（首次加载 PyTorch 较慢，请稍候）...")
     start_node_service()
 
@@ -265,14 +265,14 @@ def main():
                 logger.info("请输入 1、2、3、4 或 0 哦")
         except KeyboardInterrupt:
             print()  # 换行，避免 ^C 糊在输入行
-            logger.info("\n按 Ctrl+C 退出程序，再见~")
+            logger.info("按 Ctrl+C 退出程序，再见~")
             _force_exit(0)
         except EOFError:
             print()
             logger.info("收到 EOF，退出程序")
             _force_exit(0)
         except Exception as e:
-            logger.error(f"主程序出现错误: {str(e)}", exc_info=True)
+            logger.error("主程序出现错误: %s", e, exc_info=True)
             logger.info("程序出现未知错误，请重启程序")
 
 

@@ -4,7 +4,7 @@ from common.constants import IMAGE_EXTENSIONS_BASIC
 from .image_utils import validate_image_file
 from config.log_config import get_logger
 
-logger = get_logger(__name__)
+logger = get_logger("validation_utils")
 
 
 def validate_dataset_images(dataset_dir: str) -> tuple:
@@ -29,7 +29,7 @@ def validate_dataset_images(dataset_dir: str) -> tuple:
 
     # 检查数据集目录
     if not os.path.exists(dataset_dir):
-        logger.error(f"数据集目录不存在: {dataset_dir}")
+        logger.error("数据集目录不存在: %s", dataset_dir)
         return 0, 0, [], []
 
     # 遍历 IP 目录 → 角色目录 → 图片文件
@@ -56,7 +56,7 @@ def validate_dataset_images(dataset_dir: str) -> tuple:
             # 验证该角色目录下的所有图片文件
             for file in sorted(os.listdir(role_path)):
                 if not file.lower().endswith(IMAGE_EXTENSIONS_BASIC):
-                    logger.warning(f"跳过非图片文件: {role_path}/{file}")
+                    logger.warning("跳过非图片文件: %s/%s", role_path, file)
                     continue
                 total_samples += 1
                 file_path = os.path.join(role_path, file)
@@ -66,14 +66,14 @@ def validate_dataset_images(dataset_dir: str) -> tuple:
                     invalid_image_paths.append(file_path)
 
     # 输出验证结果
-    logger.info(f"发现 {len(class_names)} 个角色类别，来自 {len(ip_names)} 个作品")
+    logger.info("发现 %d 个角色类别，来自 %d 个作品", len(class_names), len(ip_names))
     for cls in class_names:
-        logger.info(f"  - {cls}")
+        logger.info("  - %s", cls)
 
     if invalid_image_paths:
-        logger.error(f"共发现 {len(invalid_image_paths)} 个无效图像文件")
+        logger.error("共发现 %d 个无效图像文件", len(invalid_image_paths))
         for path in invalid_image_paths:
-            logger.error(f"  - {path}")
+            logger.error("  - %s", path)
     else:
         logger.info("未发现无效图像文件，所有图片均有效")
 

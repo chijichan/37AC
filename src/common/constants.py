@@ -25,6 +25,8 @@ RECV_CHUNK_SIZE = 1024
 RECV_FULL_CHUNK_SIZE = 4096
 # 查找消息标记的最大迭代次数（防止垃圾数据导致无限循环）
 MAX_MARKER_ITERATIONS = 50
+# 单条 JSON 消息内容的最大长度（50MB，防止恶意声明超大长度耗尽内存）
+MAX_MESSAGE_CONTENT_LENGTH = 50 * 1024 * 1024
 
 # ── 节点服务 ──
 # 节点默认能力（JSON 数组字符串，与 DB 存储格式一致）

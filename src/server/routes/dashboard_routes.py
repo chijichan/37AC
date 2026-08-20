@@ -28,11 +28,12 @@ dashboard_bp = Blueprint("dashboard", __name__)
 @login_required
 def api_dashboard_summary():
     try:
+        user_id = None if g.get("user_role") == "admin" else g.user_id
         return jsonify(
             {
                 "type": "dashboard_summary",
                 "timestamp": int(datetime.now().timestamp()),
-                "data": get_overview_data(),
+                "data": get_overview_data(user_id=user_id),
             }
         )
     except Exception as e:
@@ -44,11 +45,12 @@ def api_dashboard_summary():
 @login_required
 def api_dashboard_stats():
     try:
+        user_id = None if g.get("user_role") == "admin" else g.user_id
         return jsonify(
             {
                 "type": "dashboard_stats",
                 "timestamp": int(datetime.now().timestamp()),
-                "data": get_dashboard_stats(),
+                "data": get_dashboard_stats(user_id=user_id),
             }
         )
     except Exception as e:
@@ -94,8 +96,10 @@ def api_dashboard_tasks():
         limit = max(1, min(100, limit))
         time_range = max(1, min(365, time_range))
 
+        user_id = None if g.get("user_role") == "admin" else g.user_id
         result = get_tasks_paginated(
-            limit=limit, page=page, time_range=time_range, status_filter=status
+            limit=limit, page=page, time_range=time_range, status_filter=status,
+            user_id=user_id,
         )
 
         return jsonify(

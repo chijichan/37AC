@@ -19,7 +19,7 @@ logger = get_logger("message_handlers")
 
 
 def async_handle_register(conn, addr, msg):
-    """异步处理注册消息"""
+    """处理注册消息；成功返回 True，失败返回 False。"""
     node_id = msg["data"].get("node_id")
     token = msg["data"].get("token")
     max_tasks = msg["data"].get("max_tasks", 5)
@@ -36,7 +36,7 @@ def async_handle_register(conn, addr, msg):
             "message": "node_id、token和max_tasks必须提供且有效",
         }
         json_protocol.send_json(conn, register_ack)
-        return
+        return False
 
     conn_db = get_db_connection()
     if not conn_db:
@@ -47,7 +47,7 @@ def async_handle_register(conn, addr, msg):
             "message": "数据库连接失败",
         }
         json_protocol.send_json(conn, register_ack)
-        return
+        return False
 
     try:
         cursor = conn_db.cursor(pymysql.cursors.DictCursor)
@@ -64,12 +64,18 @@ def async_handle_register(conn, addr, msg):
                 # 节点已注册（重复注册/重连场景）：
                 # 1) 重置任务计数与状态，防止上次会话残留计数导致节点被误判繁忙
                 # 2) 更新 socket 指向当前连接，避免任务发送到已失效的旧连接
-                node_manager.nodes[node_id]["current_tasks"] = 0
-                node_manager.nodes[node_id]["status"] = "idle"
-                node_manager.nodes[node_id]["socket"] = conn
-                node_manager.nodes[node_id]["capabilities"] = capabilities
-                node_manager.nodes[node_id]["llm_enabled"] = bool(llm_enabled)
-                node_manager.nodes[node_id]["llm_timeout_sec"] = int(llm_timeout_sec or 0)
+                # 3) 清理旧分配记录，旧任务不再允许从该连接回传
+                with node_manager.lock:
+                    node = node_manager.nodes[node_id]
+                    node["current_tasks"] = 0
+                    node["status"] = "idle"
+                    node["socket"] = conn
+                    if 0 < max_tasks <= 100:
+                        node["max_tasks"] = int(max_tasks)
+                    node["capabilities"] = capabilities
+                    node["llm_enabled"] = bool(llm_enabled)
+                    node["llm_timeout_sec"] = int(llm_timeout_sec or 0)
+                    node["assigned_tasks"] = set()
                 node_manager.update_db_node_capabilities(node_id, capabilities)
                 register_ack = {
                     "type": "register_ack",
@@ -79,7 +85,7 @@ def async_handle_register(conn, addr, msg):
                     "data": {"max_tasks": max_tasks, "capabilities": capabilities},
                 }
                 json_protocol.send_json(conn, register_ack)
-                return
+                return True
 
             if max_tasks <= 0 or max_tasks > 100:
                 max_tasks = 5
@@ -102,6 +108,7 @@ def async_handle_register(conn, addr, msg):
             json_protocol.send_json(conn, register_ack)
             logger.info("注册成功: node_id=%s, addr=%s, max_tasks=%s, capabilities=%s, llm_enabled=%s, llm_timeout=%s",
                         node_id, addr, max_tasks, capabilities, llm_enabled, llm_timeout_sec)
+            return True
         else:
             register_ack = {
                 "type": "register_ack",
@@ -110,6 +117,7 @@ def async_handle_register(conn, addr, msg):
                 "message": "节点未激活或凭证无效",
             }
             json_protocol.send_json(conn, register_ack)
+            return False
     except Exception as e:
         logger.error("处理注册时出错: %s", e)
         register_ack = {
@@ -118,7 +126,11 @@ def async_handle_register(conn, addr, msg):
             "status": "error",
             "message": "服务器内部错误",
         }
-        json_protocol.send_json(conn, register_ack)
+        try:
+            json_protocol.send_json(conn, register_ack)
+        except Exception:
+            pass
+        return False
     finally:
         if "cursor" in locals():
             try:
@@ -131,7 +143,15 @@ def async_handle_register(conn, addr, msg):
 
 def async_handle_heartbeat(conn, addr, msg, node_id):
     """异步处理心跳消息"""
-    node_manager.update_heartbeat(node_id)
+    if not node_manager.update_heartbeat(node_id):
+        heartbeat_ack = {
+            "type": "heartbeat_ack",
+            "timestamp": int(time.time()),
+            "status": "error",
+            "message": "节点未注册",
+        }
+        json_protocol.send_json(conn, heartbeat_ack)
+        return
     heartbeat_ack = {
         "type": "heartbeat_ack",
         "timestamp": int(time.time()),
@@ -142,10 +162,19 @@ def async_handle_heartbeat(conn, addr, msg, node_id):
 
 
 def async_handle_task_result(conn, addr, msg):
-    """异步处理任务结果消息"""
+    """异步处理任务结果消息（仅接受已分配给该节点的任务）。"""
     node_id = msg["data"].get("node_id")
     task_id = msg["data"].get("task_id")
     result = msg["data"].get("result")
+
+    if not node_id or not task_id:
+        logger.warning("任务结果缺少 node_id 或 task_id")
+        return
+    if not node_manager.is_task_assigned(node_id, task_id):
+        logger.warning(
+            "收到未授权/未知任务结果: node_id=%s, task_id=%s", node_id, task_id
+        )
+        return
 
     def process_task_result():
         try:
@@ -182,10 +211,11 @@ def async_handle_task_result(conn, addr, msg):
         finally:
             if "conn" in locals() and conn:
                 conn.close()
-            # 无论 DB 保存是否成功，节点任务计数都必须减少：
+            # 无论 DB 保存是否成功，节点任务计数和分配记录都必须清理：
             # 节点已完成该任务（结果已回传），否则计数泄漏会导致
             # current_tasks 虚高、节点被误判为繁忙而不再接收新任务
             if node_id:
+                node_manager.complete_task(node_id, task_id)
                 node_manager.decrement_task_count(node_id)
                 logger.info("节点 %s 任务计数已减少，task_id=%s", node_id, task_id)
 

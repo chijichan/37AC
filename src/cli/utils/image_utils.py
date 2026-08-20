@@ -3,7 +3,7 @@ import warnings
 from PIL import Image
 from config.log_config import get_logger
 
-logger = get_logger(__name__)
+logger = get_logger("image_utils")
 
 def validate_image_file(file_path: str) -> bool:
     """
@@ -28,7 +28,8 @@ def validate_image_file(file_path: str) -> bool:
                 width, height = img.size
                 if width <= 0 or height <= 0:
                     logger.warning(
-                        f"图片尺寸异常（宽或高 <= 0） {file_path}: {width}x{height}"
+                        "图片尺寸异常（宽或高 <= 0） %s: %sx%s",
+                        file_path, width, height,
                     )
                     return False
 
@@ -37,7 +38,8 @@ def validate_image_file(file_path: str) -> bool:
                     rgb_img = img.convert("RGB")
                 except Exception as e:
                     logger.warning(
-                        f"图片色彩模式异常，无法转为 RGB {file_path}: {str(e)}"
+                        "图片色彩模式异常，无法转为 RGB %s: %s",
+                        file_path, e,
                     )
                     return False
 
@@ -50,7 +52,7 @@ def validate_image_file(file_path: str) -> bool:
                 )
 
                 if exif_warning_detected:
-                    logger.warning(f"图片因 EXIF 异常视为无效: {file_path}")
+                    logger.warning("图片因 EXIF 异常视为无效: %s", file_path)
                     return False
 
                 # 如果没有 EXIF 警告，认为图片有效
@@ -64,8 +66,8 @@ def validate_image_file(file_path: str) -> bool:
         ValueError,
         IndexError,
     ) as e:
-        logger.warning(f"图片文件验证失败（数据/格式错误） {file_path}: {str(e)}")
+        logger.warning("图片文件验证失败（数据/格式错误） %s: %s", file_path, e)
         return False
     except Exception as e:
-        logger.warning(f"图片文件发生未知错误 {file_path}: {str(e)}")
+        logger.warning("图片文件发生未知错误 %s: %s", file_path, e)
         return False

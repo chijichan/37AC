@@ -52,16 +52,16 @@ REM --- Start PHP-CGI pool (9001..9004), hidden & detached ---
 for /L %%i in (1,1,%CGI_COUNT%) do (
     set /a PORT=%CGI_BASE_PORT% + %%i - 1
     if defined PHP_INI (
-        powershell -NoProfile -WindowStyle Hidden -Command "Start-Process -FilePath '%PHP_EXE%' -ArgumentList '-b','127.0.0.1:!PORT!','-c','%PHP_INI%'"
+        powershell -NoProfile -WindowStyle Hidden -Command "Start-Process -WindowStyle Hidden -FilePath '%PHP_EXE%' -ArgumentList '-b','127.0.0.1:!PORT!','-c','%PHP_INI%'"
     ) else (
-        powershell -NoProfile -WindowStyle Hidden -Command "Start-Process -FilePath '%PHP_EXE%' -ArgumentList '-b','127.0.0.1:!PORT!'"
+        powershell -NoProfile -WindowStyle Hidden -Command "Start-Process -WindowStyle Hidden -FilePath '%PHP_EXE%' -ArgumentList '-b','127.0.0.1:!PORT!'"
     )
     echo   [OK] php-cgi on port !PORT!
 )
 
 REM --- Start Nginx, hidden & detached ---
 REM NOTE: -p prefix must NOT end with a backslash.
-powershell -NoProfile -WindowStyle Hidden -Command "Start-Process -FilePath '%NGINX_EXE%' -ArgumentList '-p','%NGINX_PREFIX%'"
+powershell -NoProfile -WindowStyle Hidden -Command "Start-Process -WindowStyle Hidden -FilePath '%NGINX_EXE%' -ArgumentList '-p','%NGINX_PREFIX%'"
 echo   [OK] Nginx started
 
 echo.

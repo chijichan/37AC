@@ -126,6 +126,25 @@ def upload_and_predict():
 
         # 定义分发函数（两种模式共用）
         def dispatch():
+            # 先写入任务归属，确保 waiting/failed 也记录到对应用户/API Key
+            conn = None
+            try:
+                conn = get_db_connection()
+                if conn:
+                    with conn.cursor() as cursor:
+                        cursor.execute(
+                            "INSERT INTO task_results (task_id, user_id, api_key_id, status, result) "
+                            "VALUES (%s, %s, %s, 'pending', NULL) "
+                            "ON DUPLICATE KEY UPDATE user_id=VALUES(user_id), api_key_id=VALUES(api_key_id), status='pending'",
+                            (task_id, api_key_data["user_id"], api_key_data["key_id"]),
+                        )
+                        conn.commit()
+            except Exception as e:
+                logger.error("初始化任务归属失败: %s", e)
+            finally:
+                if conn:
+                    conn.close()
+
             result = dispatch_task(
                 None,
                 image_data,
@@ -270,6 +289,10 @@ def upload_and_predict():
 
 @upload_bp.route("/tasks/<task_id>", methods=["GET"])
 def get_task_result(task_id):
+    _api_key_data, error_response, status_code = _require_api_key()
+    if error_response:
+        return error_response, status_code
+
     json_response = {
         "type": "task_result",
         "timestamp": int(datetime.now().timestamp()),
@@ -335,6 +358,10 @@ def get_task_result(task_id):
 @upload_bp.route("/tasks/<task_id>/stream", methods=["GET"])
 def stream_task_result(task_id):
     """SSE 实时流端点 — 节点返回结果后即时推送到前端。"""
+    _api_key_data, error_response, status_code = _require_api_key()
+    if error_response:
+        return error_response, status_code
+
     def generate():
         q = sse_bus.subscribe(task_id)
         try:

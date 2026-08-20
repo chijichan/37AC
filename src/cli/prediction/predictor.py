@@ -32,7 +32,7 @@ from config.base import (
 )
 from config.log_config import get_logger
 
-logger = get_logger(__name__)
+logger = get_logger("predictor")
 
 # YOLO 人物检测（可选）
 try:
@@ -149,7 +149,7 @@ def predict_character(recognition_method: str = "local", image_path: str = None)
             logger.info("路径不能为空哦，再试一次吧~")
             continue
         if not os.path.exists(user_input):
-            logger.info(f"找不到图片: {user_input}，请检查路径是否正确~")
+            logger.info("找不到图片: %s，请检查路径是否正确~", user_input)
             continue
         if not user_input.lower().endswith(IMAGE_EXTENSIONS_BASIC):
             logger.info("请上传图片文件（如 .jpg / .png），当前格式可能不支持~")
@@ -159,7 +159,7 @@ def predict_character(recognition_method: str = "local", image_path: str = None)
 
         # 验证图像文件
         if not validate_image_file(TEST_IMAGE_PATH):
-            logger.info(f"图像文件可能已损坏或格式不正确: {TEST_IMAGE_PATH}")
+            logger.info("图像文件可能已损坏或格式不正确: %s", TEST_IMAGE_PATH)
             continue
 
         # 按识别方式调用对应引擎
@@ -382,19 +382,20 @@ def predict_image(image_path, model_path=None, classes_file=None, use_cache=True
                 )
 
                 logger.info(
-                    f"预测成功: {image_path} -> {label} ({confidence_value:.2f}%)"
-                    + (f" [YOLO定位]" if yolo_info else "")
+                    "预测成功: %s -> %s (%.2f%%)%s",
+                    image_path, label, confidence_value,
+                    " [YOLO定位]" if yolo_info else "",
                 )
                 return result
 
         except Exception as e:
             result["error"] = f"图像处理或预测失败: {str(e)}"
-            logger.error(f"预测过程中出现错误: {str(e)}", exc_info=True)
+            logger.error("预测过程中出现错误: %s", e, exc_info=True)
             return result
 
     except Exception as e:
         result["error"] = f"未知错误: {str(e)}"
-        logger.error(f"预测过程中出现未知错误: {str(e)}", exc_info=True)
+        logger.error("预测过程中出现未知错误: %s", e, exc_info=True)
         return result
 
 
@@ -458,7 +459,7 @@ def _build_db_prompt(base_prompt: str) -> str:
 
         data = load_classes_json_data(str(CLASSES_JSON_PATH))
     except Exception as e:
-        logger.warning("[LLM] 加载角色数据库失败，使用默认提示词: %s", e)
+        logger.warning("LLM 加载角色数据库失败，使用默认提示词: %s", e)
         return base_prompt
     if not data:
         return base_prompt
@@ -590,7 +591,7 @@ def predict_image_llm(image_path: str) -> dict:
 
     if not LLM_RECOGNITION_ENABLED:
         result["error"] = "LLM 识别未启用（LLM_RECOGNITION_ENABLED=False）"
-        logger.warning("[LLM] %s", result["error"])
+        logger.warning("LLM %s", result["error"])
         return result
 
     try:
@@ -614,7 +615,7 @@ def predict_image_llm(image_path: str) -> dict:
         image_b64 = base64.b64encode(image_bytes).decode("utf-8")
 
         logger.info(
-            "[LLM] 请求 API: %s, 模型: %s, 图片: %s (压缩后 %d 字节)",
+            "LLM 请求 API: %s, 模型: %s, 图片: %s (压缩后 %d 字节)",
             LLM_API_URL, LLM_MODEL_NAME, image_path, len(image_bytes)
         )
 
@@ -751,22 +752,22 @@ def predict_image_llm(image_path: str) -> dict:
                     )
                 except requests.ConnectionError as e:
                     logger.warning(
-                        "[LLM] 连接被断开 (第 %d/%d 次): %s", attempt, _retries, e
+                        "LLM 连接被断开 (第 %d/%d 次): %s", attempt, _retries, e
                     )
                     if attempt < _retries:
                         time.sleep(2 * attempt)  # 2s, 4s 递增等待
                         continue
                     result["error"] = f"LLM 连接失败: {e}"
-                    logger.error("[LLM] %s", result["error"])
+                    logger.error("LLM %s", result["error"])
                     return None, None, [], [], []
                 except requests.Timeout:
                     result["error"] = f"API 请求超时 ({LLM_TIMEOUT_SEC}秒)"
-                    logger.error("[LLM] %s", result["error"])
+                    logger.error("LLM %s", result["error"])
                     return None, None, [], [], []
                 break
             if resp.status_code != 200:
                 result["error"] = f"API 返回错误 ({resp.status_code}): {resp.text[:200]}"
-                logger.error("[LLM] %s", result["error"])
+                logger.error("LLM %s", result["error"])
                 return None, None, [], [], []
             resp_data = resp.json()
             return _parse_llm_response(resp_data)
@@ -781,7 +782,7 @@ def predict_image_llm(image_path: str) -> dict:
 
         if not label or label.lower() == "unknown":
             result["error"] = f"LLM 无法识别该角色: {label}"
-            logger.warning("[LLM] %s", result["error"])
+            logger.warning("LLM %s", result["error"])
             return result
 
         # 实验性（LLM_DB_RECOGNITION=True）：用 classes.json 中的角色档案
@@ -793,9 +794,9 @@ def predict_image_llm(image_path: str) -> dict:
                 confidence, _ = _cross_compute_confidence(
                     label, confidence, features_used, tags, profiles
                 )
-                logger.info("[LLM] 交叉计算置信度: %s -> %.2f%%", label, confidence)
+                logger.info("LLM 交叉计算置信度: %s -> %.2f%%", label, confidence)
             except Exception as e:
-                logger.warning("[LLM] 交叉计算置信度失败，使用 LLM 原始置信度: %s", e)
+                logger.warning("LLM 交叉计算置信度失败，使用 LLM 原始置信度: %s", e)
 
         # 统一结果结构：最佳结果在 class_probs[0]，不再返回顶层 label/confidence
         merged_probs = _merge_llm_class_probs(label, confidence, class_probs)
@@ -809,20 +810,20 @@ def predict_image_llm(image_path: str) -> dict:
                 "tags": tags,
             }
         )
-        logger.info("[LLM] 识别成功: %s -> %s", image_path, label)
+        logger.info("LLM 识别成功: %s -> %s", image_path, label)
         return result
 
     except ImportError:
         result["error"] = "缺少 requests 库，请执行: pip install requests"
-        logger.error("[LLM] %s", result["error"])
+        logger.error("LLM %s", result["error"])
         return result
     except requests.Timeout:
         result["error"] = f"API 请求超时 ({LLM_TIMEOUT_SEC}秒)"
-        logger.error("[LLM] %s", result["error"])
+        logger.error("LLM %s", result["error"])
         return result
     except Exception as e:
         result["error"] = f"LLM 识别异常: {str(e)}"
-        logger.error("[LLM] %s", result["error"], exc_info=True)
+        logger.error("LLM %s", result["error"], exc_info=True)
         return result
 
 
@@ -966,14 +967,14 @@ def _parse_llm_response(resp_data: dict) -> tuple:
             parsed = _extract_json(str(reasoning))
             if parsed and parsed.get("label"):
                 content = json.dumps(parsed, ensure_ascii=False)
-                logger.info("[LLM] 从 reasoning_content 提取到 JSON 结论")
+                logger.info("LLM 从 reasoning_content 提取到 JSON 结论")
             else:
                 logger.warning(
-                    "[LLM] content 为空且 reasoning 中无有效 JSON 结论，放弃识别"
+                    "LLM content 为空且 reasoning 中无有效 JSON 结论，放弃识别"
                 )
 
         if not content:
-            logger.error("[LLM] API 返回空内容: %s", resp_data)
+            logger.error("LLM API 返回空内容: %s", resp_data)
             return ("", 0.0, [], [], [])
 
         content = str(content).strip()
@@ -1022,7 +1023,7 @@ def _parse_llm_response(resp_data: dict) -> tuple:
 
             if not label:
                 reason = parsed.get("reason")
-                logger.info("[LLM] 模型判定特征不足: %s", reason or "无原因说明")
+                logger.info("LLM 模型判定特征不足: %s", reason or "无原因说明")
         else:
             # 降级：纯文本作为标签
             label = content
@@ -1033,13 +1034,13 @@ def _parse_llm_response(resp_data: dict) -> tuple:
 
         # 过滤非角色标签（安全审查、拒绝回答等）
         if _is_invalid_label(label):
-            logger.warning("[LLM] 过滤无效标签: %s", label)
+            logger.warning("LLM 过滤无效标签: %s", label)
             return ("", 0.0, [], [], [])
 
         return label, confidence, features_used, tags, class_probs
 
     except (KeyError, IndexError, ValueError, json.JSONDecodeError) as e:
-        logger.error("[LLM] 无法解析 API 响应: %s, 错误: %s", resp_data, e)
+        logger.error("LLM 无法解析 API 响应: %s, 错误: %s", resp_data, e)
         return ("", 0.0, [], [], [])
 
 

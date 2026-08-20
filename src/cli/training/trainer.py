@@ -47,7 +47,7 @@ def _backup_old_model(model_path, bak_dir):
         shutil.copy2(str(classes_json), str(bak_classes_json))
         logger.info("旧 classes.json 已备份 → %s", bak_classes_json)
 
-logger = get_logger(__name__)
+logger = get_logger("trainer")
 
 # ==================== 训练集 / 验证集数据增强 ====================
 
@@ -294,10 +294,10 @@ def _evaluate_per_ip_success_rate(model, dataset, device, class_names):
                     cstat["correct"] += 1
 
     table = _build_ip_success_table(ip_stats)
-    logger.info("\n%s", table)
+    logger.info("%s", table)
 
     class_table = _build_class_success_table(class_stats)
-    logger.info("\n%s", class_table)
+    logger.info("%s", class_table)
     return ip_stats
 
 
@@ -358,7 +358,7 @@ def _enrich_classes_with_llm_features(dataset, class_names):
             profiles[cls] = existing_profiles[cls]
             logger.info("[%d/%d] %s 已有 profile，跳过", idx, len(class_names), cls)
             continue
-        img = sample_by_label.get(idx)
+        img = sample_by_label.get(idx - 1)  # dataset.samples 的 label 是 0-based
         if not img:
             continue
         try:
@@ -407,7 +407,7 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None):
         return
 
     if not os.access(train_dir, os.R_OK):
-        logger.error(f"数据集目录不可读: {train_dir}")
+        logger.error("数据集目录不可读: %s", train_dir)
         return
 
     # ======================
@@ -444,7 +444,7 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None):
         full_dataset = IPRoleImageFolder(root=train_dir, transform=TRAIN_TRANSFORMS)
         class_names = full_dataset.classes
         NUM_CLASSES = len(class_names)
-        logger.info(f"使用 {NUM_CLASSES} 个角色类别进行训练")
+        logger.info("使用 %d 个角色类别进行训练", NUM_CLASSES)
 
         # 拆分训练/验证集
         use_val = 0 < VAL_SPLIT_RATIO < 1.0 and len(full_dataset) >= 20
@@ -693,9 +693,9 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None):
 
         # 训练完成
         logger.info("=" * 50)
-        logger.info(f"训练完成！最佳验证正确率: {best_val_acc:.2f}%")
-        logger.info(f"模型保存到: {str(MODEL_PATH)}")
-        logger.info(f"类别信息已保存到: {str(CLASSES_JSON_PATH)}")
+        logger.info("训练完成！最佳验证正确率: %.2f%%", best_val_acc)
+        logger.info("模型保存到: %s", MODEL_PATH)
+        logger.info("类别信息已保存到: %s", CLASSES_JSON_PATH)
 
         # 训练结束后：对全量数据集按 IP 分组输出各数据集的识别成功率（非置信度）
         _evaluate_per_ip_success_rate(model, full_dataset, device, class_names)
@@ -704,7 +704,7 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None):
         _enrich_classes_with_llm_features(full_dataset, class_names)
 
     except KeyboardInterrupt:
-        logger.warning("\n" + "=" * 50)
+        logger.warning("=" * 50)
         logger.warning("训练被用户中断，正在保存当前模型...")
         try:
             if 'model_handler' in dir() and 'class_names' in dir() and class_names:
@@ -717,4 +717,4 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None):
             logger.error("保存模型失败: %s", save_err)
         logger.warning("训练中断，当前模型已保存，下次可使用继续训练功能")
     except Exception as e:
-        logger.error(f"训练过程中出现严重错误: {str(e)}", exc_info=True)
+        logger.error("训练过程中出现严重错误: %s", e, exc_info=True)

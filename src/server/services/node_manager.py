@@ -11,7 +11,7 @@ import pymysql
 from config.base import DB_CONFIG
 from config.log_config import get_logger
 
-logger = get_logger("NodeManager")
+logger = get_logger("node_manager")
 
 
 def get_db_connection():
@@ -26,7 +26,7 @@ class NodeManager:
     def __init__(self):
         self.nodes = {}  # node_id -> dict
         self.lock = threading.Lock()
-        self._logger = get_logger("NodeManager")
+        self._logger = get_logger("node_manager")
 
     def register_node(self, node_id, addr, socket_obj=None, max_tasks=None,
                       capabilities=None, llm_enabled=False, llm_timeout_sec=0):
@@ -47,6 +47,7 @@ class NodeManager:
                 "capabilities": capabilities,
                 "llm_enabled": bool(llm_enabled),
                 "llm_timeout_sec": int(llm_timeout_sec or 0),
+                "assigned_tasks": set(),
             }
             self._logger.info(
                 "节点 %s (%s) 已注册，状态：空闲，最大任务数：%s，能力：%s，LLM: %s",
@@ -129,6 +130,28 @@ class NodeManager:
                     node["current_tasks"] -= 1
                     if node["status"] == "busy" and node["current_tasks"] < node["max_tasks"]:
                         node["status"] = "idle"
+                return True
+            return False
+
+    def assign_task(self, node_id, task_id):
+        """记录任务已分配给指定节点。"""
+        with self.lock:
+            if node_id in self.nodes:
+                self.nodes[node_id].setdefault("assigned_tasks", set()).add(task_id)
+                return True
+            return False
+
+    def is_task_assigned(self, node_id, task_id):
+        """判断任务是否已分配给指定节点。"""
+        with self.lock:
+            info = self.nodes.get(node_id)
+            return bool(info and task_id in info.get("assigned_tasks", set()))
+
+    def complete_task(self, node_id, task_id):
+        """节点完成任务后移除分配记录。"""
+        with self.lock:
+            if node_id in self.nodes:
+                self.nodes[node_id].get("assigned_tasks", set()).discard(task_id)
                 return True
             return False
 

@@ -12,6 +12,7 @@ import struct
 
 from common.constants import (
     MAX_MARKER_ITERATIONS,
+    MAX_MESSAGE_CONTENT_LENGTH,
     PROTOCOL_HEADER_NODE,
     PROTOCOL_HEADER_SERVER,
     RECV_CHUNK_SIZE,
@@ -111,12 +112,14 @@ class JsonProtocol:
                     found_header = marker[:-1].decode("utf-8")
                     return marker, found_header, buffer
 
-            # 缓冲区过大仍未找到标记，丢弃已接收数据重新搜索
+            # 缓冲区过大仍未找到标记，丢弃已接收数据重新搜索。
+            # 保留末尾可能存在的半截 marker，避免 header 跨 chunk 时被清掉。
             if len(buffer) > max_marker_len * 2:
                 logger.debug(
                     "未找到期望标记 %s，清空缓冲区重新搜索", self.expected_headers
                 )
-                buffer = b""
+                keep = max_marker_len - 1
+                buffer = buffer[-keep:] if keep > 0 else b""
 
         logger.warning(
             "连续 %s 次未找到期望标记 %s，放弃并返回 None",
@@ -153,6 +156,9 @@ class JsonProtocol:
 
     def _receive_full_content(self, sock, buffer, content_start, content_length):
         """接收完整内容，余留数据存入 _recv_buffer 供下次使用"""
+        if content_length > MAX_MESSAGE_CONTENT_LENGTH:
+            raise ValueError(f"消息内容长度过大: {content_length}")
+
         data = buffer[content_start:]
 
         while len(data) < content_length:

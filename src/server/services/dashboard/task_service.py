@@ -48,8 +48,11 @@ def _parse_task_result(result_json_str):
     }
 
 
-def get_tasks_paginated(limit=15, page=1, time_range=30, status_filter=""):
-    """分页获取任务记录（含全量统计），供仪表盘使用记录页使用"""
+def get_tasks_paginated(limit=15, page=1, time_range=30, status_filter="", user_id=None):
+    """分页获取任务记录（含全量统计），供仪表盘使用记录页使用。
+
+    user_id 非空时只返回该用户的任务；None 表示管理员查看全量。
+    """
     result = {
         "tasks": [],
         "total": 0,
@@ -74,6 +77,10 @@ def get_tasks_paginated(limit=15, page=1, time_range=30, status_filter=""):
         if time_range > 0:
             where_clauses.append("tr.created_at >= NOW() - INTERVAL %s DAY")
             params.append(time_range)
+
+        if user_id is not None:
+            where_clauses.append("tr.user_id = %s")
+            params.append(user_id)
 
         if status_filter:
             where_clauses.append("tr.status = %s")

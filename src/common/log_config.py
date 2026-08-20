@@ -12,7 +12,8 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 # 日志格式模板
-LOG_FORMAT = "%(asctime)s - %(levelname)-4s - %(name)-4s - %(message)s"
+# 统一终端/文件输出样式：[2026-08-16 00:51:17] [INFO] [crop_dataset] 消息
+LOG_FORMAT = "[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s"
 LOG_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 # 默认轮转配置：单文件 10MB，保留 5 个备份
@@ -102,7 +103,8 @@ def init_logging(
         backupCount=backup_count,
         encoding="utf-8",
     )
-    file_handler.setLevel(get_log_level(debug))
+    # 文件级别：debug 开启保存全部日志；关闭时仅保存 WARNING 及以上
+    file_handler.setLevel(logging.DEBUG if debug else logging.WARNING)
     file_handler.setFormatter(_make_formatter())
     file_handler.addFilter(noise_filter)
     root_logger.addHandler(file_handler)

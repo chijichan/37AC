@@ -96,7 +96,7 @@ def dispatch_task(image_path: str | None, image_data, task_id: str,
             },
         }
 
-        # 发送前先注册 pending 任务，确保节点断线或发送失败仍可重试
+        # 发送前先记录任务归属，确保节点断线或发送失败仍可重试
         if register_pending:
             task_manager.register_task(
                 task_id,
@@ -104,6 +104,9 @@ def dispatch_task(image_path: str | None, image_data, task_id: str,
                 image_data=image_bytes,
                 recognition_type=recognition_type,
             )
+
+        # 记录该任务已分配给此节点，用于回传结果时的归属校验
+        node_manager.assign_task(node_id, task_id)
 
         json_protocol.send_json(socket_obj, task_msg)
 
@@ -120,6 +123,7 @@ def dispatch_task(image_path: str | None, image_data, task_id: str,
 
     except Exception as e:
         logger.error("发送任务失败: %s", e)
+        node_manager.complete_task(node_id, task_id)
         node_manager.decrement_task_count(node_id)
         response["message"] = str(e)
         response["status"] = "failed"

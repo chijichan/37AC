@@ -1,12 +1,14 @@
 """任务管理器 - 管理待处理任务的注册、监控、重试和完成"""
 
+import json
 import time
 import threading
 from config.log_config import get_logger
 from config.base import TASK_RETRY_INTERVAL_LOCAL, TASK_RETRY_INTERVAL_LLM, TASK_MAX_RETRIES
 from services.node_manager import get_db_connection, node_manager
+from services.sse_bus import sse_bus
 
-logger = get_logger("TaskManager")
+logger = get_logger("task_manager")
 
 
 class TaskManager:
@@ -17,7 +19,7 @@ class TaskManager:
         self.lock = threading.Lock()
         self.check_interval = 2
         self.max_retries = TASK_MAX_RETRIES
-        self._logger = get_logger("TaskManager")
+        self._logger = get_logger("task_manager")
         threading.Thread(target=self._monitor_loop, daemon=True).start()
 
     def _get_retry_interval(self, recognition_type):
@@ -79,6 +81,36 @@ class TaskManager:
             if task_id in self.pending_tasks:
                 del self.pending_tasks[task_id]
 
+    def _mark_task_failed(self, task_id, message):
+        """将任务标记为失败并推送 SSE，避免前端一直等待。"""
+        try:
+            conn = get_db_connection()
+            if conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        """INSERT INTO task_results (task_id, result, status)
+                           VALUES (%s, %s, 'failed')
+                           ON DUPLICATE KEY UPDATE
+                               result = VALUES(result),
+                               status = 'failed',
+                               updated_at = CURRENT_TIMESTAMP""",
+                        (task_id, json.dumps({"error": message})),
+                    )
+                    conn.commit()
+        except Exception as e:
+            self._logger.error("标记任务失败失败: task_id=%s, error=%s", task_id, e)
+        finally:
+            if "conn" in locals() and conn:
+                conn.close()
+
+        sse_bus.publish(task_id, {
+            "status": "failed",
+            "message": message,
+            "task_id": task_id,
+            "error": message,
+            "result": [],
+        })
+
     def _monitor_loop(self):
         """后台监控循环，检查待处理任务状态并重试"""
         while True:
@@ -100,6 +132,10 @@ class TaskManager:
                     self._logger.warning(
                         "任务 %s 达到最大重试次数 (%s)，停止重试",
                         task_id, entry["max_retries"]
+                    )
+                    self._mark_task_failed(
+                        task_id,
+                        f"任务达到最大重试次数 {entry['max_retries']}",
                     )
                     self.mark_task_completed(task_id)
                     continue
@@ -140,11 +176,13 @@ class TaskManager:
                     image_data = f.read()
             except Exception as e:
                 self._logger.error("读取重试图片失败: %s", e)
+                self._mark_task_failed(task_id, f"读取重试图片失败: {e}")
                 self.mark_task_completed(task_id)
                 return
 
         if image_data is None:
             self._logger.error("无法重试任务 %s：缺少图片数据", task_id)
+            self._mark_task_failed(task_id, "任务缺少图片数据，无法重试")
             self.mark_task_completed(task_id)
             return
 

@@ -3,6 +3,10 @@ import os
 from PIL import ImageFile
 from torchvision import datasets
 
+from config.log_config import get_logger
+
+logger = get_logger("dataset")
+
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 # torchvision 支持的图片扩展名
@@ -32,10 +36,6 @@ class IPRoleImageFolder(datasets.ImageFolder):
         仅收录至少包含一张图片的角色文件夹，自动跳过空角色文件夹，
         避免 torchvision 因空类别目录抛出 FileNotFoundError。
         """
-        from config.log_config import get_logger
-
-        logger = get_logger(__name__)
-
         ip_names = sorted(
             [
                 d
@@ -71,5 +71,5 @@ class IPRoleImageFolder(datasets.ImageFolder):
                 "以下 %d 个角色文件夹无有效图片，已自动跳过: %s",
                 len(skipped), ", ".join(skipped),
             )
-        logger.info(f"自动生成 {len(class_names)} 个类别（格式: IP/角色）")
+        logger.info("自动生成 %d 个类别（格式: IP/角色）", len(class_names))
         return class_names, class_to_idx

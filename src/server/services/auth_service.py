@@ -228,7 +228,7 @@ def refresh_token(refresh_token_str: str) -> dict:
         try:
             with conn.cursor(pymysql.cursors.DictCursor) as cursor:
                 cursor.execute(
-                    "SELECT id, status, token_version FROM users WHERE id = %s",
+                    "SELECT id, role, status, token_version FROM users WHERE id = %s",
                     (user_id,),
                 )
                 user = cursor.fetchone()
@@ -239,6 +239,8 @@ def refresh_token(refresh_token_str: str) -> dict:
             # 单端登录：版本不一致则旧登录已失效，拒绝刷新
             if user["token_version"] != token_version:
                 return {"success": False, "message": "账号已在其他设备登录，请重新登录"}
+            # 以数据库最新角色为准，避免降权后旧 refresh token 继续拿到 admin token
+            role = user["role"]
         except Exception as e:
             return {"success": False, "message": f"验证失败: {str(e)}"}
         finally:

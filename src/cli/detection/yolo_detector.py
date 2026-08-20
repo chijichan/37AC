@@ -2,9 +2,10 @@
 
 import os
 import shutil
-import logging
 
-logger = logging.getLogger("yolo_detector")
+from config.log_config import get_logger
+
+logger = get_logger("yolo_detector")
 
 # 全局缓存
 _detector_instance = None
@@ -252,7 +253,7 @@ def crop_dataset(source_dir: str, output_dir: str, target_classes=None, max_imag
 
             if len(existing_files) >= max_images_per_role:
                 _logger.info(
-                    "角色 %s/%s 已有 %d 张图片（>= %d），跳过裁剪。",
+                    "角色 %s/%s 已有 %d 张图片（>= %d），跳过裁剪",
                     ip_name, role_name, len(existing_files), max_images_per_role
                 )
                 skipped += len(existing_files)

@@ -138,7 +138,7 @@ class TestAuthService:
 
         # Mock 数据库：用户存在、未禁用、token_version 与令牌一致
         mock_cursor = MagicMock()
-        mock_cursor.fetchone.return_value = {"id": 1, "status": 1, "token_version": 0}
+        mock_cursor.fetchone.return_value = {"id": 1, "role": "user", "status": 1, "token_version": 0}
         mock_conn = MagicMock()
         mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
         mock_get_conn.return_value = mock_conn

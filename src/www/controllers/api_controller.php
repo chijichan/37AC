@@ -67,7 +67,7 @@ class api_controller extends controller
         $this->requireApiKey();
 
         $ch = $this->buildBaseCurl(API_BASE_URL . '/tasks/' . rawurlencode($task_id) . '/stream');
-        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Accept: text/event-stream']);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Accept: text/event-stream', 'X-API-Key: ' . UPLOAD_API_KEY]);
         $this->passthroughStream($ch);
     }
 
@@ -80,6 +80,7 @@ class api_controller extends controller
         $this->requireApiKey();
 
         $ch = $this->buildBaseCurl(API_BASE_URL . '/tasks/' . rawurlencode($task_id));
+        curl_setopt($ch, CURLOPT_HTTPHEADER, ['X-API-Key: ' . UPLOAD_API_KEY]);
         $this->passthroughJson($ch);
     }
 

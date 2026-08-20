@@ -4,7 +4,7 @@ import json
 import hashlib
 from config.log_config import get_logger
 
-logger = get_logger(__name__)
+logger = get_logger("file_utils")
 
 
 def calculate_file_hash(
@@ -21,7 +21,7 @@ def calculate_file_hash(
                 hasher.update(data)
         return hasher.hexdigest()
     except Exception as e:
-        logger.error(f"计算文件哈希失败 {file_path}: {str(e)}")
+        logger.error("计算文件哈希失败 %s: %s", file_path, e)
         return ""
 
 
@@ -31,7 +31,7 @@ def ensure_directory_exists(dir_path: str) -> bool:
         os.makedirs(dir_path, exist_ok=True)
         return True
     except Exception as e:
-        logger.error(f"创建目录失败 {dir_path}: {str(e)}")
+        logger.error("创建目录失败 %s: %s", dir_path, e)
         return False
 
 
@@ -97,27 +97,27 @@ def load_classes_from_file(file_path: str) -> list:
     """
     try:
         if not os.path.exists(file_path):
-            logger.error(f"类别文件不存在: {file_path}")
+            logger.error("类别文件不存在: %s", file_path)
             return []
 
         if not os.access(file_path, os.R_OK):
-            logger.error(f"类别文件不可读: {file_path}")
+            logger.error("类别文件不可读: %s", file_path)
             return []
 
         if os.path.splitext(file_path)[1].lower() != ".json":
-            logger.error(f"不支持的类别文件格式（仅支持 classes.json）: {file_path}")
+            logger.error("不支持的类别文件格式（仅支持 classes.json）: %s", file_path)
             return []
 
         class_names = _load_classes_from_json(file_path)
 
         if not class_names:
-            logger.error(f"类别文件为空或格式不正确: {file_path}")
+            logger.error("类别文件为空或格式不正确: %s", file_path)
             return []
 
-        logger.info(f"从文件加载到 {len(class_names)} 个角色类别")
+        logger.info("从文件加载到 %d 个角色类别", len(class_names))
         return class_names
     except Exception as e:
-        logger.error(f"加载类别文件失败 {file_path}: {str(e)}")
+        logger.error("加载类别文件失败 %s: %s", file_path, e)
         return []
 
 
@@ -158,10 +158,10 @@ def save_classes_to_json(file_path: str, class_names: list, profiles: dict = Non
         data = classes_to_json_dict(class_names, profiles)
         with open(file_path, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
-        logger.info(f"类别信息已保存到: {file_path}")
+        logger.info("类别信息已保存到: %s", file_path)
         return True
     except Exception as e:
-        logger.error(f"保存类别 JSON 失败 {file_path}: {str(e)}")
+        logger.error("保存类别 JSON 失败 %s: %s", file_path, e)
         return False
 
 
@@ -193,7 +193,7 @@ def load_classes_json_data(file_path: str) -> dict:
                     result[item] = {"id": item, "ip": "", "name_zh": item}
         return result
     except Exception as e:
-        logger.error(f"加载类别元数据失败 {file_path}: {str(e)}")
+        logger.error("加载类别元数据失败 %s: %s", file_path, e)
         return {}
 
 

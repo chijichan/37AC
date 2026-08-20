@@ -6,7 +6,7 @@ from utils.validation_utils import validate_dataset_images
 from utils.image_utils import validate_image_file
 from config.log_config import get_logger
 
-logger = get_logger(__name__)
+logger = get_logger("menu_service")
 
 
 def drain_pending_input():
@@ -54,14 +54,14 @@ def verify_images_function():
 
     # 检查数据集目录
     if not os.path.exists(DATASET_DIR):
-        logger.error(f"数据集目录不存在: {DATASET_DIR}")
+        logger.error("数据集目录不存在: %s", DATASET_DIR)
         logger.error(
             "请先创建数据集目录，结构为: 作品文件夹/角色文件夹/图片"
         )
         return
 
     if not os.access(DATASET_DIR, os.R_OK):
-        logger.error(f"数据集目录不可读: {DATASET_DIR}")
+        logger.error("数据集目录不可读: %s", DATASET_DIR)
         return
 
     logger.info("数据集目录: %s", DATASET_DIR)
@@ -78,16 +78,16 @@ def verify_images_function():
         logger.error("数据集中没有找到任何图片文件 (jpg, jpeg, png)")
         return
 
-    logger.info(f"数据集总计: {total_samples} 个图像文件")
-    logger.info(f"有效图像: {valid_samples} 个")
-    logger.info(f"无效图像: {total_samples - valid_samples} 个")
+    logger.info("数据集总计: %d 个图像文件", total_samples)
+    logger.info("有效图像: %d 个", valid_samples)
+    logger.info("无效图像: %d 个", total_samples - valid_samples)
 
     if valid_samples == 0:
         logger.error("没有有效的图像文件")
         return
 
     valid_ratio = (valid_samples / total_samples) * 100
-    logger.info(f"有效图像比例: {valid_ratio:.2f}%")
+    logger.info("有效图像比例: %.2f%%", valid_ratio)
     print("=" * 50)
 
     if invalid_image_paths:
@@ -106,11 +106,11 @@ def crop_dataset_function():
     print("=" * 50)
 
     if not os.path.exists(DATASET_DIR):
-        logger.error(f"数据集目录不存在: {DATASET_DIR}")
+        logger.error("数据集目录不存在: %s", DATASET_DIR)
         return
 
     if not os.access(DATASET_DIR, os.R_OK):
-        logger.error(f"数据集目录不可读: {DATASET_DIR}")
+        logger.error("数据集目录不可读: %s", DATASET_DIR)
         return
 
     try:

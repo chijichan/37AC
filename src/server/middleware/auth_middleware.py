@@ -25,10 +25,14 @@ def _verify_access_token(token):
     if payload.get("type") == "refresh":
         return None, {"success": False, "message": "请使用访问令牌而非刷新令牌"}, 401
 
-    # 校验用户是否被禁用或删除
+    # 校验用户是否被禁用或删除，并以数据库中的最新角色覆盖 token 内角色
     result = verify_token(token)
     if not result.get("success"):
         return None, {"success": False, "message": result.get("message")}, 401
+
+    user_data = result.get("data") or {}
+    payload["user_id"] = user_data.get("user_id", payload.get("user_id"))
+    payload["role"] = user_data.get("role", payload.get("role"))
 
     return payload, None, None
 

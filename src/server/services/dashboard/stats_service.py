@@ -7,8 +7,8 @@ from services.dashboard.task_service import _parse_task_result
 from services.dashboard.system_service import _get_host_system_status
 
 
-def get_dashboard_stats():
-    """获取仪表盘统计数据"""
+def get_dashboard_stats(user_id=None):
+    """获取仪表盘统计数据（user_id 非空时仅统计该用户）"""
     stats = {
         "total_visits": 0,
         "total_uploads": 0,
@@ -18,18 +18,25 @@ def get_dashboard_stats():
         "idle_nodes": 0,
     }
 
+    where_clause = ""
+    params = []
+    if user_id is not None:
+        where_clause = "WHERE user_id = %s"
+        params = [user_id]
+
     conn = None
     try:
         conn = get_db_connection()
         if conn:
             with conn.cursor() as cursor:
-                cursor.execute("SELECT COUNT(*) FROM task_results")
+                cursor.execute(f"SELECT COUNT(*) FROM task_results {where_clause}", params)
                 row = cursor.fetchone()
                 stats["total_uploads"] = int(row[0] or 0) if row else 0
                 stats["total_visits"] = stats["total_uploads"] * 2
 
                 cursor.execute(
-                    "SELECT result FROM task_results ORDER BY task_id DESC LIMIT 100"
+                    f"SELECT result FROM task_results {where_clause} ORDER BY task_id DESC LIMIT 100",
+                    params,
                 )
                 rows = cursor.fetchall()
 
@@ -63,21 +70,27 @@ def get_dashboard_stats():
     return stats
 
 
-def get_recent_tasks(limit=10):
-    """获取最近的任务列表"""
+def get_recent_tasks(limit=10, user_id=None):
+    """获取最近的任务列表（user_id 非空时仅返回该用户任务）"""
     tasks = []
     conn = None
+    where_clause = ""
+    params = []
+    if user_id is not None:
+        where_clause = "WHERE tr.user_id = %s"
+        params = [user_id]
     try:
         conn = get_db_connection()
         if conn:
             with conn.cursor() as cursor:
                 cursor.execute(
-                    """SELECT tr.task_id, tr.result, tr.status, tr.created_at,
-                              tr.user_id, tr.api_key_id, ak.name as api_key_name
-                       FROM task_results tr
-                       LEFT JOIN api_keys ak ON tr.api_key_id = ak.id
-                       ORDER BY tr.created_at DESC LIMIT %s""",
-                    (limit,),
+                    f"""SELECT tr.task_id, tr.result, tr.status, tr.created_at,
+                               tr.user_id, tr.api_key_id, ak.name as api_key_name
+                        FROM task_results tr
+                        LEFT JOIN api_keys ak ON tr.api_key_id = ak.id
+                        {where_clause}
+                        ORDER BY tr.created_at DESC LIMIT %s""",
+                    params + [limit],
                 )
                 rows = cursor.fetchall()
 
@@ -109,11 +122,11 @@ def get_recent_tasks(limit=10):
     return tasks
 
 
-def get_overview_data():
-    """获取仪表盘概览数据"""
-    stats = get_dashboard_stats()
+def get_overview_data(user_id=None):
+    """获取仪表盘概览数据（user_id 非空时仅返回该用户相关数据）"""
+    stats = get_dashboard_stats(user_id)
     system_status = _get_host_system_status()
-    recent_tasks = get_recent_tasks(limit=5)
+    recent_tasks = get_recent_tasks(limit=5, user_id=user_id)
 
     if not recent_tasks:
         # 演示数据：识别结果统一为 class_probs 结构（label/confidence 由第一项推导）

@@ -39,7 +39,7 @@ if __name__ == "__main__":
         logger.info("reloader 父进程，TCP 服务将由子进程接管")
 
     # === 启动 Flask Web 服务 ===
-    logger.info("[启动] Flask Web 服务启动中...")
+    logger.info("Flask Web 服务启动中...")
     if in_debugger:
         logger.info("检测到调试器，已禁用 auto-reloader")
     # threaded=True：Werkzeug 开发服务器默认单线程，一个 SSE/长请求会阻塞

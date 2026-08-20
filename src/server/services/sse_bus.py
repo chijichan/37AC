@@ -18,9 +18,10 @@ import queue
 import threading
 import time
 import json
-import logging
 
-logger = logging.getLogger("SSEBus")
+from config.log_config import get_logger
+
+logger = get_logger("sse_bus")
 
 
 class SSEBus:
@@ -38,7 +39,7 @@ class SSEBus:
         q: queue.Queue = queue.Queue()
         with self._lock:
             self._subscribers.setdefault(task_id, []).append(q)
-        logger.debug("[SSE] 订阅: task_id=%s, 当前订阅数=%d", task_id,
+        logger.debug("订阅: task_id=%s, 当前订阅数=%d", task_id,
                      len(self._subscribers.get(task_id, [])))
         return q
 
@@ -48,7 +49,7 @@ class SSEBus:
             subs = self._subscribers.get(task_id)
             if subs and q in subs:
                 subs.remove(q)
-                logger.debug("[SSE] 取消订阅: task_id=%s", task_id)
+                logger.debug("取消订阅: task_id=%s", task_id)
             if subs is not None and len(subs) == 0:
                 del self._subscribers[task_id]
 
@@ -61,10 +62,10 @@ class SSEBus:
             try:
                 q.put_nowait(payload)
             except queue.Full:
-                logger.warning("[SSE] 队列已满，丢弃事件: task_id=%s", task_id)
+                logger.warning("队列已满，丢弃事件: task_id=%s", task_id)
             except Exception:
-                logger.warning("[SSE] 推送异常: task_id=%s", task_id, exc_info=True)
-        logger.info("[SSE] 推送: task_id=%s, 订阅数=%d", task_id, len(subs))
+                logger.warning("推送异常: task_id=%s", task_id, exc_info=True)
+        logger.info("推送: task_id=%s, 订阅数=%d", task_id, len(subs))
 
     def iter_events(self, task_id: str, q: queue.Queue, timeout: float = 60.0):
         """生成器：阻塞等待事件，超时则发送 heartbeat 并继续。
@@ -79,7 +80,7 @@ class SSEBus:
                 try:
                     parsed = json.loads(data)
                 except json.JSONDecodeError:
-                    logger.warning("[SSE] 收到非 JSON 数据: task_id=%s", task_id)
+                    logger.warning("收到非 JSON 数据: task_id=%s", task_id)
                     continue
                 # waiting 状态不结束流，继续等待最终结果
                 if parsed.get("status") == "waiting":

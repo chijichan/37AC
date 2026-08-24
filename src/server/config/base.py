@@ -24,6 +24,8 @@ DB_CONFIG = {
     "password": os.getenv("DB_PASSWORD"),
     "database": os.getenv("DB_NAME"),
     "charset": os.getenv("DB_CHARSET", "utf8mb4"),
+    # 连接超时：避免 MySQL 不可达时长时间阻塞节点注册/鉴权流程
+    "connect_timeout": int(os.getenv("DB_CONNECT_TIMEOUT", "5")),
 }
 
 # FLASK web服务器配置

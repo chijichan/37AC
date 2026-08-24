@@ -52,7 +52,7 @@ class TestLogConfig:
         assert any(isinstance(h, RotatingFileHandler) for h in handlers)
 
     def test_init_logging_writes_file(self, tmp_path):
-        """测试日志实际写入文件（debug 关闭时 WARNING 及以上会落盘）"""
+        """测试日志实际写入文件（debug 关闭时 INFO 及以上会落盘）"""
         from common.log_config import init_logging, get_logger
 
         log_file = tmp_path / "test_write.log"
@@ -65,19 +65,21 @@ class TestLogConfig:
         content = log_file.read_text(encoding="utf-8")
         assert "hello-log-test" in content
 
-    def test_file_only_warning_when_debug_off(self, tmp_path):
-        """debug 关闭时文件只保存 WARNING 及以上，INFO 不落盘"""
+    def test_file_keeps_info_when_debug_off(self, tmp_path):
+        """debug 关闭时文件保存 INFO 及以上（含 HTTP 访问日志），DEBUG 不落盘"""
         from common.log_config import init_logging, get_logger
 
-        log_file = tmp_path / "test_warning_only.log"
+        log_file = tmp_path / "test_info.log"
         init_logging(log_file, debug=False, console=False)
-        logger = get_logger("test_warning_only")
-        logger.info("info-should-not-be-saved")
+        logger = get_logger("test_info")
+        logger.debug("debug-should-not-be-saved")
+        logger.info("info-should-be-saved")
         logger.warning("warning-should-be-saved")
         for handler in logging.getLogger().handlers:
             handler.flush()
         content = log_file.read_text(encoding="utf-8")
-        assert "info-should-not-be-saved" not in content
+        assert "debug-should-not-be-saved" not in content
+        assert "info-should-be-saved" in content
         assert "warning-should-be-saved" in content
 
     def test_file_saves_all_when_debug_on(self, tmp_path):

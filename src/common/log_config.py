@@ -103,8 +103,9 @@ def init_logging(
         backupCount=backup_count,
         encoding="utf-8",
     )
-    # 文件级别：debug 开启保存全部日志；关闭时仅保存 WARNING 及以上
-    file_handler.setLevel(logging.DEBUG if debug else logging.WARNING)
+    # 文件级别：与根 logger 一致（debug 开启为 DEBUG，关闭为 INFO）。
+    # INFO 级别会写入文件，保证 Werkzeug 的 HTTP 访问日志（INFO）正常落盘。
+    file_handler.setLevel(get_log_level(debug))
     file_handler.setFormatter(_make_formatter())
     file_handler.addFilter(noise_filter)
     root_logger.addHandler(file_handler)

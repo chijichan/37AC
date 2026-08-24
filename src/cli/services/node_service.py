@@ -220,8 +220,13 @@ def start_node_service():
         # === 心跳线程 ===
         def heartbeat_loop():
             nonlocal last_heartbeat_send_time, connection_alive
-            while connection_alive and s:
+            while connection_alive:
                 time.sleep(HEARTBEAT_INTERVAL_SEC)
+                # 每次发送前捕获当前 socket，避免主线程重连置空 s 后
+                # 心跳线程仍用 None 调用 sendall（NoneType 报错）。
+                sock = s
+                if sock is None or not connection_alive:
+                    break
                 try:
                     with tasks_lock:
                         current_tasks = list(tasks)
@@ -233,7 +238,7 @@ def start_node_service():
                             "tasks": current_tasks,
                         },
                     }
-                    json_protocol.send_json(s, hb_msg)
+                    json_protocol.send_json(sock, hb_msg)
                     last_heartbeat_send_time = time.time()
                     last_heartbeat_response_time = 0  # 重置，标记等待响应
                     logger.debug("发送心跳")
@@ -344,6 +349,12 @@ def start_node_service():
                     status = msg.get("status")
                     message = msg.get("message")
                     logger.info("注册结果: %s: %s", status, message)
+                    if status != "success":
+                        # 注册失败（如服务端数据库不可用）时立即触发重连，
+                        # 而不是继续 recv 空数据直到累计 10 次 None。
+                        logger.warning("注册未成功（%s），准备重连...", message)
+                        connection_alive = False
+                        break
 
                 # === 任务状态响应 ===
                 elif msg_type == "status_update_ack":

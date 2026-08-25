@@ -1,3 +1,4 @@
+# utils/db_utils.py
 """数据库连接工具模块 - 提供统一的数据库连接管理和查询辅助"""
 
 import threading
@@ -8,7 +9,7 @@ import pymysql
 from config.base import DB_CONFIG
 from config.log_config import get_logger
 
-logger = get_logger("db")
+logger = get_logger("db_utils")
 
 
 class _PooledConnection:

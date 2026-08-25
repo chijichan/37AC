@@ -1,3 +1,4 @@
+# services/user_service.py
 """用户服务 - 提供用户 CRUD 操作和用户列表查询（含管理员功能）"""
 
 import pymysql
@@ -13,7 +14,7 @@ logger = get_logger("user_service")
 
 def _get_connection():
     """获取数据库连接（线程本地连接池，复用连接避免对远程 MySQL 反复握手）"""
-    from services.db import get_connection
+    from utils.db_utils import get_connection
     return get_connection()
 
 

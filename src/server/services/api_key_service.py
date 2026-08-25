@@ -1,3 +1,4 @@
+# services/api_key_service.py
 """API密钥管理服务 - 提供API密钥的生成、验证和管理功能"""
 
 import secrets
@@ -13,7 +14,7 @@ from config.base import DB_CONFIG
 
 def _get_connection():
     """获取数据库连接（线程本地连接池，复用连接避免对远程 MySQL 反复握手）"""
-    from services.db import get_connection
+    from utils.db_utils import get_connection
     return get_connection()
 
 

@@ -1,3 +1,4 @@
+# services/sse_bus.py
 """SSE 事件总线 - 支持任务结果的实时推送（Server-Sent Events）
 
 用法：

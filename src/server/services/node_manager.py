@@ -1,3 +1,4 @@
+# services/node_manager.py
 """节点管理器 - 管理 TCP 节点的注册、心跳、状态和负载"""
 
 import json
@@ -16,7 +17,7 @@ logger = get_logger("node_manager")
 
 def get_db_connection():
     """获取数据库连接（线程本地连接池，复用连接避免对远程 MySQL 反复握手）"""
-    from services.db import get_connection as _get_pooled_connection
+    from utils.db_utils import get_connection as _get_pooled_connection
     return _get_pooled_connection()
 
 

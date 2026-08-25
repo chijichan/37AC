@@ -82,10 +82,12 @@
 │   │   │   ├── user_service.py    # 用户CRUD
 │   │   │   ├── api_key_service.py # API密钥验证
 │   │   │   ├── email_service.py   # 邮件服务
-│   │   │   ├── file_service.py    # 文件上传
 │   │   │   ├── protocol/          # JSON协议（兼容层 → src/common/protocol.py）
 │   │   │   ├── auth/              # 认证工具
 │   │   │   └── dashboard/         # 仪表盘服务
+│   │   ├── utils/                 # 服务端通用工具模块
+│   │   │   ├── db_utils.py        # 数据库连接池/查询工具
+│   │   │   └── file_utils.py      # 文件上传工具
 │   │   ├── runserver.py           # 服务端启动脚本
 │   │   └── saves/                 # 服务端保存目录
 │   └── www/                       # PHP Web应用（完整MVC架构）

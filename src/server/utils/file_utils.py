@@ -1,5 +1,5 @@
-# services/file_service.py
-"""文件上传服务 - 提供文件上传相关的工具函数"""
+# utils/file_utils.py
+"""文件管理工具 - 提供文件管理相关的工具函数"""
 
 
 def save_uploaded_file(file):

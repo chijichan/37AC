@@ -10,7 +10,7 @@ import pymysql
 from config.base import FRONTEND_URL
 from config.email_config import RESET_RATE_LIMIT
 from config.log_config import get_logger
-from services.db import get_connection
+from utils.db_utils import get_connection
 from services.email_service import is_configured as smtp_is_configured, send_password_reset_email
 from .validators import validate_password
 

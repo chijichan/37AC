@@ -1,3 +1,4 @@
+# services/auth_service.py
 """用户认证服务 - 提供用户注册、登录、JWT令牌管理等功能"""
 
 import secrets
@@ -16,7 +17,7 @@ from config.base import (
 from config.log_config import get_logger
 from services.auth.password_service import hash_password, verify_password
 from services.auth.validators import validate_email, validate_username, validate_password
-from services.db import get_connection
+from utils.db_utils import get_connection
 
 logger = get_logger("auth_service")
 

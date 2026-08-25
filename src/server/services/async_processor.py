@@ -1,3 +1,4 @@
+# services/async_processor.py
 """异步处理器 - 提供通用异步任务处理和按消息类型分类的异步处理器"""
 
 from concurrent.futures import ThreadPoolExecutor

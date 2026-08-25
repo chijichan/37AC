@@ -124,9 +124,16 @@
 │               ├── img/           # 图片资源
 │               └── scripts/       # JavaScript脚本
 ├── docs/                          # 文档目录
-│   ├─ 项目结构总结.md
-│   ├─ 前端规范.md
-│   └─ 测试文档.md
+│   ├─ project-structure.md
+│   ├─ installation.md
+│   ├─ usage.md
+│   ├─ protocol.md
+│   ├─ features.md
+│   ├─ dataset.md
+│   ├─ stack.md
+│   ├─ deployment.md
+│   ├─ testing.md
+│   └─ frontend.md
 ├─ requirements/                  # 依赖管理
 ├─ scripts/                       # 脚本目录
 │   ├─ install.sql                # 数据库安装 SQL（全新安装，仅表结构 + 随机密码 admin）
@@ -396,7 +403,7 @@ MySQL (通过PHP PDO连接)
 |------|------|------|
 | 安装脚本 | 新增完整数据库安装脚本（表结构 DDL + 随机密码的默认 admin，规避真实敏感信息泄露） | `scripts/install.sql` |
 | 安装脚本 | 新增交互式数据库安装脚本（用户输入管理员用户名/密码/邮箱，bcrypt 入库，不回显密码） | `scripts/install_db.py` |
-| 文档 | 部署指南新增「数据库安装」章节与「Linux 部署方式」（Nginx + PHP-FPM + systemd） | `docs/部署指南.md` |
+| 文档 | 部署指南新增「数据库安装」章节与「Linux 部署方式」（Nginx + PHP-FPM + systemd） | `docs/deployment.md` |
 | 单端登录 | `users` 表新增 `token_version` 字段，每次登录自增写入 JWT，版本不匹配即旧登录失效 | `scripts/alter_tables.sql`、`auth_service.py` |
 | 单端登录 | `login` 自增版本、`verify_token`/`refresh_token` 校验版本（旧设备被踢下线） | `services/auth_service.py` |
 | 单端登录测试 | 新增 token_version 相关测试（自增/匹配/不匹配/刷新拒绝） | `tests/server/test_auth_service.py` |
@@ -529,7 +536,7 @@ MySQL (通过PHP PDO连接)
 
 ### 开发环境配置
 1. **Python环境**: 配置Python虚拟环境，安装完整依赖
-2. **PHP环境**: 配置 PHP 8.x（含 php-cgi.exe），部署 Nginx + PHP-CGI（详见 `docs/部署指南.md`）
+2. **PHP环境**: 配置 PHP 8.x（含 php-cgi.exe），部署 Nginx + PHP-CGI（详见 `docs/deployment.md`）
 3. **数据库**: 安装MySQL数据库，创建相应表结构
 
 ### 部署顺序

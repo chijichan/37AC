@@ -1107,5 +1107,3 @@ def _is_invalid_label(label: str) -> bool:
             return True
 
     return False
-
-

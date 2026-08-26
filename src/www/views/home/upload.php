@@ -953,11 +953,14 @@ require_once ROOT_PATH . '/views/layout.php';
         /* 图片加载完成后，将页面滚动到合适位置（手动裁剪时滚动到裁剪器，否则滚动到预览） */
         scrollToPreview() {
             const target = (this.state.cropInstance ||
-                    (this.enableCropCheckbox.checked && this.cropModeSelect.value === 'manual'))
-                ? document.getElementById('cropperWrap')
-                : this.previewWrap;
+                    (this.enableCropCheckbox.checked && this.cropModeSelect.value === 'manual')) ?
+                document.getElementById('cropperWrap') :
+                this.previewWrap;
             const scroll = () => {
-                target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                target.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'center'
+                });
             };
             // 等待图片真正加载完成再滚动，避免高度未定导致滚动位置偏移
             if (this.previewImage.complete) {
@@ -965,19 +968,6 @@ require_once ROOT_PATH . '/views/layout.php';
             } else {
                 this.previewImage.onload = scroll;
             }
-        }
-
-        /* 开始识别后，将页面平滑滚动到加载状态区域（已在视口内则不滚动，避免多次点击来回跳动） */
-        scrollToLoading() {
-            const rect = this.loadingWrap.getBoundingClientRect();
-            if (rect.top >= 0 && rect.bottom <= window.innerHeight) {
-                return; // 加载区已完整可见，无需滚动
-            }
-            // 只滚动到恰好露出加载区顶部，滚动距离最小，观感更柔和
-            window.scrollTo({
-                top: rect.top + window.scrollY - 16,
-                behavior: 'smooth',
-            });
         }
 
         /* 更新进度状态文本 */
@@ -1003,9 +993,6 @@ require_once ROOT_PATH . '/views/layout.php';
 
             this.showLoading(true);
             this.hideResult();
-
-            // 开始识别后平滑滚动到加载状态区域（已在视口内则不滚动，避免多次点击来回跳动）
-            this.scrollToLoading();
 
             try {
                 // 处理图片
@@ -1253,7 +1240,10 @@ require_once ROOT_PATH . '/views/layout.php';
                 name: p.name,
                 prob: toPercent(Number(p.prob) || 0),
             }));
-            const top = candidates[0] || { name: '', prob: 0 };
+            const top = candidates[0] || {
+                name: '',
+                prob: 0
+            };
             // 最佳结果格式为「作品名/角色名」（角色IP/角色名），拆分为 IP 与角色名分别展示
             const labelParts = (top.name || '').split('/').map(s => s.trim()).filter(Boolean);
             const characterIP = labelParts[0] || '未知作品';

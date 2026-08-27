@@ -497,11 +497,9 @@ require_once ROOT_PATH . '/views/layout.php';
             <div class="field">
                 <label for="recognitionType">推理模型</label>
                 <select id="recognitionType" class="select">
-                    <option value="auto" selected>自动选择（推荐）</option>
-                    <option value="local">37ac模型（快速识别）</option>
-                    <option value="llm">大体量多模态模型（精度更高）</option>
+                    <option value="37ac" selected>37ac 本地模型</option>
                 </select>
-                <span class="hint">37ac模型速度快；大体量多模态模型精度更高；自动模式由节点根据配置选择。</span>
+                <span class="hint">自动模式由节点根据配置选择。</span>
             </div>
         </div>
     </fieldset>
@@ -606,6 +604,7 @@ require_once ROOT_PATH . '/views/layout.php';
         constructor() {
             this.initElements();
             this.bindEvents();
+            this.loadModels();
             this.state = {
                 tempFile: null, // 原始临时文件
                 cropInstance: null, // Cropper.js 实例
@@ -690,6 +689,30 @@ require_once ROOT_PATH . '/views/layout.php';
 
             // 取消识别按钮
             document.getElementById('btnCancelRequest').addEventListener('click', () => this.cancelRequest());
+        }
+
+        /* 从服务端拉取识别模型列表并填充下拉框 */
+        async loadModels() {
+            try {
+                const resp = await fetch(`${window.API_BASE_URL}/models`);
+                if (!resp.ok) return;
+                const data = await resp.json();
+                const models = Array.isArray(data.models) ? data.models : [];
+                if (models.length === 0) return;
+                const select = this.recognitionTypeSelect;
+                select.innerHTML = '';
+                let hasDefault = false;
+                models.forEach((m) => {
+                    const opt = document.createElement('option');
+                    opt.value = m.id;
+                    opt.textContent = m.name || m.id;
+                    select.appendChild(opt);
+                    if (m.id === '37ac') hasDefault = true;
+                });
+                select.value = hasDefault ? '37ac' : models[0].id;
+            } catch (e) {
+                console.error('拉取模型列表失败:', e);
+            }
         }
 
         /* 链接加载 */
@@ -1008,8 +1031,8 @@ require_once ROOT_PATH . '/views/layout.php';
                 // 构造 FormData（字段名 file 与后端约定一致）
                 const formData = new FormData();
                 formData.append('file', processedFile);
-                // 推理模型选择：local / llm / auto
-                formData.append('recognition_type', this.recognitionTypeSelect.value);
+                // 推理模型选择：37ac / llm（来自 GET /models）
+                formData.append('model', this.recognitionTypeSelect.value);
 
                 this.updateProgressStatus('正在上传图片');
 

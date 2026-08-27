@@ -25,6 +25,17 @@ def async_handle_register(conn, addr, msg):
     token = msg["data"].get("token")
     max_tasks = msg["data"].get("max_tasks", 5)
     capabilities = msg["data"].get("capabilities", '["local"]')
+    # 节点上报的识别模型列表（默认 37ac 本地模型）
+    raw_models = msg["data"].get("models") or ["37ac"]
+    if isinstance(raw_models, str):
+        try:
+            models = json.loads(raw_models)
+        except Exception:
+            models = ["37ac"]
+    else:
+        models = list(raw_models)
+    if not models:
+        models = ["37ac"]
     # 节点上报的 LLM 配置（用于任务重试间隔决策）
     llm_enabled = msg["data"].get("llm_enabled", False)
     llm_timeout_sec = msg["data"].get("llm_timeout_sec", 0)
@@ -74,6 +85,7 @@ def async_handle_register(conn, addr, msg):
                     if 0 < max_tasks <= 100:
                         node["max_tasks"] = int(max_tasks)
                     node["capabilities"] = capabilities
+                    node["models"] = models
                     node["llm_enabled"] = bool(llm_enabled)
                     node["llm_timeout_sec"] = int(llm_timeout_sec or 0)
                     node["assigned_tasks"] = set()
@@ -93,7 +105,7 @@ def async_handle_register(conn, addr, msg):
 
             node_manager.register_node(
                 node_id, addr, conn, max_tasks, capabilities,
-                llm_enabled=llm_enabled, llm_timeout_sec=llm_timeout_sec,
+                models=models, llm_enabled=llm_enabled, llm_timeout_sec=llm_timeout_sec,
             )
             node_manager.update_db_node_status(node_id, "online", addr=addr)
             node_manager.update_db_node_capabilities(node_id, capabilities)

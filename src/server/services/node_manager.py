@@ -14,6 +14,10 @@ from config.log_config import get_logger
 
 logger = get_logger("node_manager")
 
+# 识别模型标识
+MODEL_37AC = "37ac"
+MODEL_LLM = "llm"
+
 
 def get_db_connection():
     """获取数据库连接（线程本地连接池，复用连接避免对远程 MySQL 反复握手）"""
@@ -30,13 +34,15 @@ class NodeManager:
         self._logger = get_logger("node_manager")
 
     def register_node(self, node_id, addr, socket_obj=None, max_tasks=None,
-                      capabilities=None, llm_enabled=False, llm_timeout_sec=0):
+                      capabilities=None, models=None, llm_enabled=False, llm_timeout_sec=0):
         """注册节点"""
         with self.lock:
             if max_tasks is None:
                 max_tasks = 5
             if capabilities is None:
                 capabilities = '["local"]'  # 默认仅支持本地 YOLO+ResNet 模型
+            if models is None:
+                models = [MODEL_37AC]  # 默认仅支持 37ac 本地模型
 
             self.nodes[node_id] = {
                 "addr": addr,
@@ -46,6 +52,7 @@ class NodeManager:
                 "max_tasks": max_tasks,
                 "current_tasks": 0,
                 "capabilities": capabilities,
+                "models": list(models),
                 "llm_enabled": bool(llm_enabled),
                 "llm_timeout_sec": int(llm_timeout_sec or 0),
                 "assigned_tasks": set(),
@@ -70,6 +77,28 @@ class NodeManager:
                 if info.get("llm_enabled")
             ]
             return max(timeouts) if timeouts else 0
+
+    def get_model_list(self):
+        """返回当前可用的识别模型列表（供 GET /models 拉取）。
+
+        - `37ac` 为本地模型，任何节点默认支持
+        - `llm` 取决于是否有启用 LLM 的在线节点（看节点配置）
+        """
+        models = [{"id": MODEL_37AC, "type": "local", "name": "37ac 本地模型"}]
+        if self.has_llm_enabled_nodes():
+            models.append({"id": MODEL_LLM, "type": "llm", "name": "LLM 大模型"})
+        return models
+
+    def resolve_model_to_recognition_type(self, model):
+        """把模型 id 映射为内部识别类型（local / llm）。
+
+        当前是过渡方案（后续接入模型管理器）：37ac → local，llm → llm。
+        """
+        if model == MODEL_37AC:
+            return "local"
+        if model == MODEL_LLM:
+            return "llm"
+        return None
 
     def has_llm_enabled_nodes(self):
         """是否存在启用 LLM 的在线节点。

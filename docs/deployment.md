@@ -85,7 +85,7 @@ src\www\stop-nginx.bat
 ```powershell
 curl.exe -s -o NUL -w "%{http_code} (%{time_total}s)`n" http://localhost:8000/upload   # 期望 200 (<1s)
 curl.exe -s -N --max-time 480 -H "X-Stream-Response: true" -H "X-Requested-With: XMLHttpRequest" `
-  -F "file=@test.png" -F "recognition_type=local" http://localhost:8000/api/upload     # 期望 queued→…→completed
+  -F "file=@test.png" -F "model=37ac" http://localhost:8000/api/upload                 # 期望 queued→…→completed
 ```
 
 ### 5. 故障排查
@@ -167,7 +167,7 @@ sudo systemctl daemon-reload && sudo systemctl enable --now 37ac-server
 sudo systemctl enable --now nginx php8.2-fpm 37ac-server
 curl -s -o /dev/null -w "%{http_code} (%{time_total}s)\n" http://localhost/upload        # 期望 200
 curl -s -N --max-time 480 -H "X-Stream-Response: true" -H "X-Requested-With: XMLHttpRequest" \
-  -F "file=@test.png" -F "recognition_type=local" http://localhost/api/upload            # 期望 queued→…→completed
+  -F "file=@test.png" -F "model=37ac" http://localhost/api/upload                        # 期望 queued→…→completed
 ```
 
 | 现象 | 原因 | 解决 |

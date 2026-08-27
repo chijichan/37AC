@@ -180,6 +180,16 @@ def start_node_service():
             # 注册节点
             with tasks_lock:
                 current_tasks = list(tasks)
+
+            # 节点上报的识别模型列表：默认支持 37ac 本地模型，LLM 看配置
+            node_models = []
+            if "local" in CAPABILITIES:
+                node_models.append("37ac")
+            if "llm" in CAPABILITIES:
+                node_models.append("llm")
+            if not node_models:
+                node_models = ["37ac"]
+
             register_msg = {
                 "type": "register",
                 "timestamp": int(time.time()),
@@ -191,6 +201,7 @@ def start_node_service():
                     "max_tasks": MAX_TASKS,
                     "local_port": assigned_port,
                     "capabilities": CAPABILITIES,
+                    "models": node_models,
                     # 附带 LLM 配置信息，供服务端决策任务重试间隔
                     "llm_enabled": LLM_RECOGNITION_ENABLED,
                     "llm_timeout_sec": LLM_TIMEOUT_SEC,

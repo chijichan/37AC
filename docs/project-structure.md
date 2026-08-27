@@ -240,17 +240,17 @@
 
 ### 节点管理流程
 1. 边缘节点启动 `node_service.py`
-2. 连接中心服务器并注册（携带 `capabilities` JSON 数组 + `llm_enabled`/`llm_timeout_sec`）
-3. 服务端 `NodeManager.register_node()` 存储节点能力，同步写入数据库 `nodes.capabilities` 字段
+2. 连接中心服务器并注册（携带 `capabilities` JSON 数组 + `models` 模型列表 + `llm_enabled`/`llm_timeout_sec`）
+3. 服务端 `NodeManager.register_node()` 存储节点能力与模型列表，同步写入数据库 `nodes.capabilities` 字段
 4. 节点 Token 以 **SHA-256 哈希**形式存入数据库（创建时可自定义或自动生成，仅返回一次）
 5. 节点发送心跳检测
-6. 服务端接收推理任务 → `task_dispatcher.dispatch_task()` 调用 `allocate_node_for_task(recognition_type)` 按能力匹配节点
+6. 服务端接收推理任务 → 按 `model`（37ac/llm）映射内部 `recognition_type`，调用 `allocate_node_for_task(recognition_type)` 按能力匹配节点
 7. 匹配的空闲节点接收任务并进行推理
 8. 返回推理结果
 
 ### 能力感知分发机制
-- 节点注册时通过 `capabilities` 字段（JSON 数组字符串，如 `["local","llm"]`）声明支持的能力
-- 任务下发携带 `recognition_type`（local / llm / auto），服务端据此筛选具备相应能力的空闲节点
+- 节点注册时通过 `capabilities` 字段（JSON 数组字符串，如 `["local","llm"]`）声明支持的能力，并通过 `models` 字段上报识别模型（默认 `["37ac"]`，LLM 看配置）
+- HTTP 上传接口用 `model=37ac|llm` 选择模型；内部 TCP 任务下发仍携带 `recognition_type`（local/llm）
 - 无匹配节点时降级到任意空闲节点并记录警告日志
 
 ### 节点归属权限（2026-08）
@@ -475,7 +475,7 @@ MySQL (通过PHP PDO连接)
 ## 🔄 系统工作流程
 
 ### 推理流程（当前，含SSE实时推送 + 异步LLM + 流式上传）
-1. 用户通过PHP前端上传图片（默认快速模式：`recognition_type=auto`；高级模式可自定义识别方式和去背景）
+1. 用户通过PHP前端上传图片（默认模型 `model=37ac`；高级模式可自定义模型、裁剪和去背景）
 2. **流式上传**（首选）：前端携带 `X-Stream-Response: true` 发 POST `/upload`，服务端直接返回 SSE 流，包含 queued → completed 全流程事件
 3. **传统方式**（降级）：前端收到 JSON `{task_id}` 后连接 `EventSource /tasks/<task_id>/stream` 订阅实时结果，SSE 失败则回退到轮询
 4. Flask后端接收图片、生成task_id、根据节点能力 dispatch 到空闲节点

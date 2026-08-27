@@ -1,6 +1,7 @@
 # routes/upload_routes.py
 """上传和任务查询路由"""
 
+import base64
 import uuid
 import json
 import threading
@@ -56,6 +57,36 @@ def _detect_image_format(data):
     return ""
 
 
+def _decode_base64_image(b64):
+    """从 base64 字符串解码图片二进制，返回 (bytes, ext)。
+
+    兼容带 data URL 前缀的写法，如：
+      data:image/png;base64,xxxx
+      image_base64=xxxx
+    """
+    if not b64:
+        return None, ""
+    b64 = str(b64).strip()
+    ext = ""
+    payload = b64
+    if "," in b64 and b64.split(",", 1)[0].startswith("data:"):
+        prefix, payload = b64.split(",", 1)
+        mime = prefix.split(";")[0].split(":", 1)[-1]
+        if "png" in mime:
+            ext = ".png"
+        elif "jpeg" in mime or "jpg" in mime:
+            ext = ".jpg"
+        elif "webp" in mime:
+            ext = ".webp"
+    try:
+        data = base64.b64decode(payload, validate=False)
+    except Exception:
+        return None, ""
+    if not data:
+        return None, ""
+    return data, ext
+
+
 def _require_api_key():
     """验证 API Key 中间件"""
     api_key = request.headers.get("X-API-Key", "")
@@ -87,36 +118,53 @@ def upload_and_predict():
         if error_response:
             return error_response, status_code
 
-        # 兼容 file / image 两种字段名（前端上传页使用 image，API 文档约定 file）
+        # 从请求中获取识别模型（默认 37ac 本地模型）
+        model = (request.form.get("model") or "").strip().lower()
+        if request.is_json:
+            body = request.get_json(silent=True) or {}
+            model = (body.get("model") or model or "").strip().lower()
+        if model not in ("37ac", "llm"):
+            model = "37ac"
+        recognition_type = node_manager.resolve_model_to_recognition_type(model) or "local"
+
+        # 图片来源：优先 multipart 文件（file / image），其次 image_base64
+        image_data = None
+        image_filename = None
+        detected_ext = ""
         uploaded_file = request.files.get("file") or request.files.get("image")
-        if uploaded_file is None:
-            return jsonify({"success": False, "message": "没有选择文件"}), 400
 
-        file = uploaded_file
-        if file.filename == "":
-            return jsonify({"success": False, "message": "没有选择文件"}), 400
+        if uploaded_file is not None:
+            file = uploaded_file
+            if file.filename == "":
+                return jsonify({"success": False, "message": "没有选择文件"}), 400
 
-        # 校验文件名与扩展名白名单
-        safe_name = _safe_image_filename(file.filename)
-        if not safe_name:
-            return jsonify({"success": False, "message": "请上传 png/jpg/jpeg/webp 格式的图片"}), 400
+            # 校验文件名与扩展名白名单
+            safe_name = _safe_image_filename(file.filename)
+            if not safe_name:
+                return jsonify({"success": False, "message": "请上传 png/jpg/jpeg/webp 格式的图片"}), 400
 
-        image_data = file.read()
-
-        # 校验文件魔数（真实格式）
-        detected_ext = _detect_image_format(image_data)
-        if detected_ext not in (".png", ".jpg", ".jpeg", ".webp"):
-            return jsonify({"success": False, "message": "文件内容不是有效的图片格式"}), 400
-
-        image_filename = safe_name
+            image_data = file.read()
+            detected_ext = _detect_image_format(image_data)
+            if detected_ext not in (".png", ".jpg", ".jpeg", ".webp"):
+                return jsonify({"success": False, "message": "文件内容不是有效的图片格式"}), 400
+            image_filename = safe_name
+        else:
+            # base64：兼容 JSON 体或表单字段 image_base64
+            if request.is_json:
+                body = request.get_json(silent=True) or {}
+            else:
+                body = {}
+            b64 = request.form.get("image_base64") or body.get("image_base64") or ""
+            image_data, detected_ext = _decode_base64_image(b64)
+            if not image_data or detected_ext not in (".png", ".jpg", ".jpeg", ".webp"):
+                return jsonify({
+                    "success": False,
+                    "message": "缺少图片：请上传文件（file/image）或提供 image_base64",
+                }), 400
+            image_filename = f"base64_upload_{uuid.uuid4().hex[:8]}{detected_ext}"
 
         # 生成任务ID
         task_id = str(uuid.uuid4())
-
-        # 从请求中获取识别方式（前端传入，默认 local）
-        recognition_type = request.form.get("recognition_type", "local")
-        if recognition_type not in ("local", "llm", "auto"):
-            recognition_type = "local"
 
         # 判断客户端是否期望流式响应
         wants_stream = (
@@ -223,16 +271,13 @@ def upload_and_predict():
             # 重试间隔 × 最大重试次数 + 推理缓冲
             # 推理缓冲与 task_manager 决策一致：local 快路径 60s，llm 路径 180s
             retry_interval = task_manager.get_retry_interval(recognition_type)
-            is_llm_path = (
-                recognition_type == "llm"
-                or (recognition_type == "auto" and node_manager.has_llm_enabled_nodes())
-            )
+            is_llm_path = recognition_type == "llm"
             inference_buffer = 180 if is_llm_path else 60
             sse_timeout = retry_interval * 3 + inference_buffer
 
             def generate():
                 # 先发一个 queued 事件
-                yield f"data: {json.dumps({'status': 'queued', 'message': '任务已提交，等待推理...', 'task_id': task_id, 'recognition_type': recognition_type, 'timeout': sse_timeout}, ensure_ascii=False)}\n\n"
+                yield f"data: {json.dumps({'status': 'queued', 'message': '任务已提交，等待推理...', 'task_id': task_id, 'model': model, 'timeout': sse_timeout}, ensure_ascii=False)}\n\n"
 
                 try:
                     for event in sse_bus.iter_events(task_id, q, timeout=sse_timeout):
@@ -260,7 +305,7 @@ def upload_and_predict():
                     "status": "queued",
                     "message": "图片已上传，等待推理...",
                     "task_id": task_id,
-                    "recognition_type": recognition_type,
+                    "model": model,
                 }
             )
 
@@ -270,7 +315,7 @@ def upload_and_predict():
             "status": "queued",
             "message": "图片已上传，等待推理...",
             "task_id": task_id,
-            "recognition_type": recognition_type,
+            "model": model,
         })
 
     # GET 请求：返回 API 说明
@@ -281,10 +326,21 @@ def upload_and_predict():
             "method": "POST",
             "url": "/upload",
             "headers": {"X-API-Key": "your_api_key", "Accept": "text/event-stream"},
-            "body": {"file": "image_file"},
+            "body": {
+                "file": "image_file (multipart)",
+                "image_base64": "可选，JSON/表单里的 base64 图片（multipart 优先）",
+                "model": "37ac | llm",
+            },
+            "models_endpoint": "GET /models（无鉴权，拉取可选识别模型）",
             "streaming": "设置 Accept: text/event-stream 或 X-Stream-Response: true 获取流式响应",
         },
     }), 200
+
+
+@upload_bp.route("/models", methods=["GET"])
+def list_models():
+    """拉取当前可用的识别模型列表（无需鉴权）。"""
+    return jsonify({"models": node_manager.get_model_list()}), 200
 
 
 @upload_bp.route("/tasks/<task_id>", methods=["GET"])

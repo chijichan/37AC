@@ -8,6 +8,19 @@
 - 图片：Base64 或原始二进制
 - 边界：长度前缀模式
 
+### HTTP 识别 API（模型）
+
+- `GET /models`（无鉴权）→ 拉取当前可用的识别模型列表：
+  ```json
+  { "models": [ { "id": "37ac", "type": "local", "name": "37ac 本地模型" },
+                { "id": "llm",   "type": "llm",   "name": "LLM 大模型" } ] }
+  ```
+  - `37ac` 为本地模型，任何节点默认支持
+  - `llm` 是否出现取决于是否有启用 LLM 的在线节点
+- `POST /upload` 使用 `model=37ac|llm` 字段选择模型（替代旧的 `recognition_type=local|llm|auto`）
+- 支持 `multipart`（`file`/`image`）或 `image_base64`（JSON/表单字段）
+- 内部 TCP 任务消息仍用 `recognition_type`（local/llm）表示推理路径
+
 ### 核心消息类型
 
 | 类型 | 方向 | 说明 |
@@ -58,10 +71,9 @@
 }
 ```
 
-- `recognition_type`：由服务端根据节点能力自动选择后下发
-  - `local` — 使用本地 ResNet 模型
-  - `llm` — 使用第三方多模态大模型 API
-  - `auto` — 由节点根据自身配置决定
+- `recognition_type`：内部推理路径（HTTP 层已由 `model=37ac|llm` 取代，此处为 TCP 内部字段）
+  - `local` — 对应 `model=37ac`，使用本地 ResNet 模型
+  - `llm` — 对应 `model=llm`，使用第三方多模态大模型 API
 
 ### 任务重试机制
 

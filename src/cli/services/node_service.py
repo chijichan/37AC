@@ -2,6 +2,8 @@
 
 import base64
 import errno
+import hashlib
+import json
 import os
 import re
 import socket
@@ -10,6 +12,7 @@ import threading
 import time
 import uuid
 from pathlib import Path
+from urllib.parse import urljoin
 from prediction.predictor import predict_image, predict_image_llm
 from common.constants import ALLOWED_IMAGE_EXTENSIONS as _ALLOWED_IMAGE_EXTENSIONS
 from common.protocol import node_json_protocol
@@ -18,6 +21,11 @@ from config.base import (
     LOCAL_PORT,
     TCP_HOST,
     TCP_PORT,
+    MODEL_PATH,
+    MODEL_INFO_PATH,
+    CLASSES_JSON_PATH,
+    SERVER_HTTP_URL,
+    MODEL_ID,
     NODE_ID,
     TOKEN,
     HEARTBEAT_INTERVAL_SEC,
@@ -40,6 +48,138 @@ json_protocol = node_json_protocol
 # 全局任务数据字典和锁，用于异步处理LLM任务
 task_data = {}
 task_data_lock = threading.Lock()
+
+
+def _download_and_verify(url, dst, expected_hash=None, label="文件"):
+    """下载文件到临时路径，可选校验 SHA-256；成功返回 True。"""
+    import requests
+    tmp_path = dst.with_suffix(dst.suffix + ".tmp")
+    with requests.get(url, stream=True, timeout=30) as r:
+        r.raise_for_status()
+        with open(tmp_path, "wb") as f:
+            for chunk in r.iter_content(chunk_size=8192):
+                if chunk:
+                    f.write(chunk)
+    if expected_hash:
+        h = hashlib.sha256()
+        with open(tmp_path, "rb") as f:
+            for chunk in iter(lambda: f.read(8192), b""):
+                h.update(chunk)
+        if h.hexdigest().lower() != expected_hash.lower():
+            tmp_path.unlink(missing_ok=True)
+            logger.error("%s SHA-256 校验失败，已丢弃下载文件", label)
+            return False
+    tmp_path.replace(dst)
+    return True
+
+
+def _sync_local_model(models):
+    """根据 register_ack.data.models 同步本地模型（config_url 方案）。
+
+    流程：
+      1. 从 models 列表里挑出 MODEL_ID（默认 37ac）对应的模型 → 拿到 config_url
+      2. 下载 config.json（可选校验 config_hash）
+      3. config.json 里声明 weights/classes 的下载 URL 与 SHA-256
+      4. 版本不一致或文件缺失时下载权重、类别并校验替换
+    本地版本记录在 MODEL_INFO_PATH（saves/models/config.json）。
+    """
+    try:
+        import requests
+        if not models:
+            logger.debug("register_ack 未携带 models，跳过模型同步")
+            return
+        target = next((m for m in models if m.get("id") == MODEL_ID), None)
+        if not target:
+            target = next((m for m in models if m.get("id") == "37ac"), None)
+        if not target:
+            logger.warning("模型列表中没有 %s / 37ac，跳过模型同步", MODEL_ID)
+            return
+        config_url = str(target.get("config_url") or "").strip()
+        config_hash = str(target.get("config_hash") or "").strip().lower()
+        if not config_url:
+            logger.warning("模型 %s 缺少 config_url，跳过模型同步", target.get("id"))
+            return
+
+        # 1) 下载并解析 config.json
+        MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
+        r_cfg = requests.get(config_url, timeout=30)
+        r_cfg.raise_for_status()
+        cfg_bytes = r_cfg.content
+        if config_hash:
+            h = hashlib.sha256(cfg_bytes).hexdigest().lower()
+            if h != config_hash:
+                logger.error("config.json SHA-256 校验失败，跳过模型同步")
+                return
+        try:
+            remote_cfg = json.loads(cfg_bytes.decode("utf-8"))
+        except Exception:
+            logger.error("config.json 解析失败，跳过模型同步")
+            return
+
+        remote_version = str(remote_cfg.get("version") or "").strip()
+
+        # 新结构：model = {file, sha256} / classes = {file, sha256}
+        model_info = remote_cfg.get("model") or {}
+        classes_info = remote_cfg.get("classes") or {}
+
+        model_file = str(model_info.get("file") or "").strip()
+        model_sha = str(model_info.get("sha256") or "").strip().lower()
+        # 直接用 config.json 的下载地址推导同目录下的权重/类别地址
+        weights_url = urljoin(config_url, model_file)
+
+        classes_file = str(classes_info.get("file") or "").strip()
+        classes_sha = str(classes_info.get("sha256") or "").strip().lower()
+        classes_url = urljoin(config_url, classes_file) if classes_file else ""
+
+        if not remote_version or not weights_url or not model_sha:
+            logger.warning("config.json 缺少 version/model，跳过模型同步")
+            return
+
+        # 2) 比对本地版本
+        local_info = {}
+        if MODEL_INFO_PATH.exists():
+            try:
+                local_info = json.loads(MODEL_INFO_PATH.read_text(encoding="utf-8"))
+            except Exception:
+                local_info = {}
+        weights_ok = MODEL_PATH.exists()
+        classes_ok = (not classes_url) or CLASSES_JSON_PATH.exists()
+        if local_info.get("version") == remote_version and weights_ok and classes_ok:
+            logger.debug("模型 %s 已是最新版本 %s", MODEL_ID, remote_version)
+            return
+
+        logger.info("检测到新模型版本 %s（%s），开始下载...", remote_version, MODEL_ID)
+
+        # 3) 下载权重
+        if not _download_and_verify(weights_url, MODEL_PATH, model_sha, f"{MODEL_ID} 权重文件"):
+            return
+
+        # 4) 下载类别（可选）
+        if classes_url:
+            if not _download_and_verify(classes_url, CLASSES_JSON_PATH, classes_sha or None, "classes.json"):
+                return
+
+        # 5) 合并写入本地 config.json
+        merged = local_info if isinstance(local_info, dict) else {}
+        merged.update({
+            "version": remote_version,
+            "model_id": MODEL_ID,
+            "config_url": config_url,
+            "model": {"file": model_file, "sha256": model_sha},
+            "classes": {"file": classes_file, "sha256": classes_sha},
+        })
+        MODEL_INFO_PATH.write_text(
+            json.dumps(merged, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        try:
+            from prediction.predictor import invalidate_model_cache
+            invalidate_model_cache()
+        except Exception:
+            pass
+        logger.info("模型 %s 已更新到 %s（权重 + 类别）", MODEL_ID, remote_version)
+    except Exception as e:
+        logger.warning("模型同步失败: %s", e)
 
 
 # === TCP 客户端主逻辑 ===
@@ -366,6 +506,12 @@ def start_node_service():
                         logger.warning("注册未成功（%s），准备重连...", message)
                         connection_alive = False
                         break
+
+                    # 注册成功：按 register_ack.data.models 后台同步所选模型
+                    models_list = msg.get("data", {}).get("models") or []
+                    threading.Thread(
+                        target=_sync_local_model, args=(models_list,), daemon=True
+                    ).start()
 
                 # === 任务状态响应 ===
                 elif msg_type == "status_update_ack":

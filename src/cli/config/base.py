@@ -32,6 +32,8 @@ DATASET_DIR = Path(os.getenv("DATASET_DIR", "W:/Img"))
 MODEL_DIR = ROOT_PATH / "saves" / "models"
 MODEL_PATH = MODEL_DIR / os.getenv("MODEL_FILENAME", "37ac-v0.0.1.pth")
 CLASSES_JSON_PATH = MODEL_DIR / "classes.json"
+# 模型配置/版本信息（训练时自动生成，供模型管理器同步比对）
+MODEL_INFO_PATH = MODEL_DIR / "config.json"
 # 已有模型权重备份目录
 MODEL_BAK_DIR = MODEL_DIR / "_bak"
 
@@ -79,6 +81,10 @@ CROPPED_DATASET_DIR = ROOT_PATH / "saves" / "dataset"
 # ==================== 节点服务配置 ====================
 TCP_HOST = os.getenv("TCP_HOST", "127.0.0.1")
 TCP_PORT = int(os.getenv("TCP_PORT", "13137"))
+# 服务端 HTTP 地址（保留备用；模型同步改走 TCP register_ack）
+SERVER_HTTP_URL = os.getenv("SERVER_HTTP_URL", "http://127.0.0.1:13138").rstrip("/")
+# 节点选择的识别模型（注册后按 register_ack.data.models 里的该模型同步）
+MODEL_ID = os.getenv("MODEL_ID", "37ac")
 LOCAL_PORT = os.getenv("LOCAL_PORT")
 if LOCAL_PORT:
     LOCAL_PORT = int(LOCAL_PORT)

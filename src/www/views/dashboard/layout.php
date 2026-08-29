@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 // 仪表盘布局：包含全局 layout + 二级导航 + SPA 内容容器
 require_once ROOT_PATH . '/views/layout.php';
 ?>
@@ -152,6 +152,7 @@ require_once ROOT_PATH . '/views/layout.php';
     <nav class="dash-nav-desktop" aria-label="仪表盘导航">
         <a href="/dashboard" data-page="overview" class="active"><i class="ph ph-gauge"></i>总览</a>
         <a href="/dashboard/nodes" data-page="nodes"><i class="ph ph-share-network"></i>节点管理</a>
+        <a href="/dashboard/models" data-page="models"><i class="ph ph-cube"></i>模型管理</a>
         <a href="/dashboard/apikeys" data-page="apikeys"><i class="ph ph-key"></i>API 密钥</a>
         <a href="/dashboard/history" data-page="history"><i class="ph ph-clock-counter-clockwise"></i>使用记录</a>
         <a href="/dashboard/settings" data-page="settings"><i class="ph ph-gear"></i>设置</a>
@@ -168,6 +169,7 @@ require_once ROOT_PATH . '/views/layout.php';
         <div class="dash-nav-dropdown" id="dashboardNavDropdown">
             <a href="/dashboard" data-page="overview" class="active"><i class="ph ph-gauge"></i>总览</a>
             <a href="/dashboard/nodes" data-page="nodes"><i class="ph ph-share-network"></i>节点管理</a>
+            <a href="/dashboard/models" data-page="models"><i class="ph ph-cube"></i>模型管理</a>
             <a href="/dashboard/apikeys" data-page="apikeys"><i class="ph ph-key"></i>API 密钥</a>
             <a href="/dashboard/history" data-page="history"><i class="ph ph-clock-counter-clockwise"></i>使用记录</a>
             <a href="/dashboard/settings" data-page="settings"><i class="ph ph-gear"></i>设置</a>
@@ -236,6 +238,7 @@ require_once ROOT_PATH . '/views/layout.php';
         $dashboardTemplates = [
             'overview' => capture_dashboard_fragment(ROOT_PATH . '/views/dashboard/overview.php'),
             'nodes' => capture_dashboard_fragment(ROOT_PATH . '/views/dashboard/nodes.php'),
+            'models' => capture_dashboard_fragment(ROOT_PATH . '/views/dashboard/models.php'),
             'apikeys' => capture_dashboard_fragment(ROOT_PATH . '/views/dashboard/apikeys.php'),
             'history' => capture_dashboard_fragment(ROOT_PATH . '/views/dashboard/history.php'),
             'settings' => capture_dashboard_fragment(ROOT_PATH . '/views/dashboard/settings.php'),
@@ -245,6 +248,7 @@ require_once ROOT_PATH . '/views/layout.php';
         const pageTemplates = {
             'overview': <?php echo json_encode($dashboardTemplates['overview']); ?>,
             'nodes': <?php echo json_encode($dashboardTemplates['nodes']); ?>,
+            'models': <?php echo json_encode($dashboardTemplates['models']); ?>,
             'apikeys': <?php echo json_encode($dashboardTemplates['apikeys']); ?>,
             'history': <?php echo json_encode($dashboardTemplates['history']); ?>,
             'settings': <?php echo json_encode($dashboardTemplates['settings']); ?>,
@@ -260,6 +264,11 @@ require_once ROOT_PATH . '/views/layout.php';
                 icon: '<i class="ph ph-share-network"></i>',
                 text: '节点管理',
                 title: '节点管理'
+            },
+            'models': {
+                icon: '<i class="ph ph-cube"></i>',
+                text: '模型管理',
+                title: '模型管理'
             },
             'apikeys': {
                 icon: '<i class="ph ph-key"></i>',

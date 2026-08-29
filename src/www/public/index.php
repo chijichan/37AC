@@ -179,6 +179,11 @@ $router->get('/dashboard/nodes', function () {
     $controller = new dashboard_controller();
     $controller->nodes();
 });
+$router->get('/dashboard/models', function () {
+    require_auth();
+    $controller = new dashboard_controller();
+    $controller->models();
+});
 $router->get('/dashboard/apikeys', function () {
     require_auth();
     $controller = new dashboard_controller();

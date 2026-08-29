@@ -62,3 +62,21 @@ CREATE TABLE IF NOT EXISTS password_reset_tokens (
     INDEX idx_token (token),
     INDEX idx_expires_at (expires_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='密码重置令牌表';
+
+-- 7. 创建 models 表（泛化识别模型管理）
+CREATE TABLE IF NOT EXISTS models (
+    id INT(11) NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    model_id VARCHAR(50) NOT NULL COMMENT '模型标识（如 37ac）',
+    display_name VARCHAR(100) NOT NULL DEFAULT '' COMMENT '展示名称',
+    type ENUM('local','llm') NOT NULL DEFAULT 'local' COMMENT '模型类型：local/llm',
+    version VARCHAR(64) NOT NULL COMMENT '版本号',
+    config_url VARCHAR(1024) NOT NULL COMMENT '配置文件(config.json)下载地址',
+    config_hash VARCHAR(64) NULL COMMENT '配置文件 SHA-256（可选）',
+    notes TEXT COMMENT '模型说明/更新日志',
+    status ENUM('active','inactive') NOT NULL DEFAULT 'inactive' COMMENT '是否当前激活',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_name_version (name, version),
+    KEY idx_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='识别模型表';

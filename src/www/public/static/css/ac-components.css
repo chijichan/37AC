@@ -276,10 +276,13 @@
 
 /* ---------- 模态框（dialog） ---------- */
 .ac-modal {
+    display: flex;
+    flex-direction: column;
     border-radius: var(--ac-radius-modal);
     background: var(--ac-surface);
     box-shadow: var(--ac-shadow-float);
     width: min(440px, calc(100vw - 2.5rem));
+    max-height: 85vh;
     padding: 1.6rem;
     margin: auto;
     animation: modal-pop .28s var(--ac-ease-spring);
@@ -298,6 +301,7 @@
 }
 
 .ac-modal .modal-title {
+    flex: 0 0 auto;
     font-family: var(--ac-font-display);
     font-size: 1.15rem;
     font-weight: 800;
@@ -305,15 +309,27 @@
 }
 
 .ac-modal .modal-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
     color: var(--ac-ink-700);
     font-size: .95rem;
 }
 
+.ac-modal .modal-body::-webkit-scrollbar {
+    display: none;
+}
+
 .ac-modal .modal-actions {
+    flex: 0 0 auto;
     display: flex;
     justify-content: flex-end;
     gap: .7rem;
-    margin-top: 1.4rem;
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--ac-surface-2);
 }
 
 /* ---------- Toast 通知 ---------- */

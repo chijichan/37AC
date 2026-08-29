@@ -95,7 +95,11 @@ def async_handle_register(conn, addr, msg):
                     "timestamp": int(time.time()),
                     "status": "success",
                     "message": f"节点已注册，最大任务数: {node_manager.get_node_max_tasks(node_id)}",
-                    "data": {"max_tasks": max_tasks, "capabilities": capabilities},
+                    "data": {
+                        "max_tasks": max_tasks,
+                        "capabilities": capabilities,
+                        "models": node_manager.get_model_list(),
+                    },
                 }
                 json_protocol.send_json(conn, register_ack)
                 return True
@@ -116,7 +120,11 @@ def async_handle_register(conn, addr, msg):
                 "timestamp": int(time.time()),
                 "status": "success",
                 "message": f"节点注册成功，最大任务数: {max_tasks}，能力: {capabilities}",
-                "data": {"max_tasks": max_tasks, "capabilities": capabilities},
+                "data": {
+                    "max_tasks": max_tasks,
+                    "capabilities": capabilities,
+                    "models": node_manager.get_model_list(),
+                },
             }
             json_protocol.send_json(conn, register_ack)
             logger.info("注册成功: node_id=%s, addr=%s, max_tasks=%s, capabilities=%s, llm_enabled=%s, llm_timeout=%s",

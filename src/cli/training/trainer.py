@@ -49,6 +49,75 @@ def _backup_old_model(model_path, bak_dir):
 
 logger = get_logger("trainer")
 
+
+def _load_model_config() -> dict:
+    """读取模型配置文件 config.json（不存在或损坏时返回空 dict）。"""
+    if MODEL_INFO_PATH.exists():
+        try:
+            return json.loads(MODEL_INFO_PATH.read_text(encoding="utf-8"))
+        except Exception:
+            logger.warning("读取模型配置失败，将重建: %s", MODEL_INFO_PATH)
+            return {}
+    return {}
+
+
+def _next_model_version() -> str:
+    """自动生成模型版本号：无记录时 0.0.1，否则在现有版本上递增 patch。"""
+    cfg = _load_model_config()
+    existing = cfg.get("version")
+    if not existing:
+        return "0.0.1"
+    try:
+        parts = [int(x) for x in str(existing).split(".")]
+    except Exception:
+        return "0.0.2"
+    while len(parts) < 3:
+        parts.append(0)
+    parts[-1] += 1
+    return ".".join(str(p) for p in parts)
+
+
+def _file_sha256(path) -> str:
+    """计算文件的 SHA-256（不存在返回空串）。"""
+    import hashlib
+    try:
+        h = hashlib.sha256()
+        with open(path, "rb") as f:
+            for chunk in iter(lambda: f.read(8192), b""):
+                h.update(chunk)
+        return h.hexdigest()
+    except Exception:
+        return ""
+
+
+def _write_model_config(version: str):
+    """把模型信息（含 model/classes 的 file + SHA-256）写入 saves/models/config.json。
+
+    结构：
+      "model":   { "file": "37ac-v0.0.1.pth", "sha256": "..." },
+      "classes": { "file": "classes.json",   "sha256": "..." }
+    下载 URL 不在配置里，由节点用 config.json 的下载地址（urljoin）推导同目录文件。
+    """
+    from datetime import datetime
+
+    weights_sha = _file_sha256(MODEL_PATH)
+    classes_sha = _file_sha256(CLASSES_JSON_PATH)
+
+    cfg = _load_model_config()
+    cfg.update({
+        "model_id": "37ac",
+        "version": version,
+        "model": {"file": MODEL_PATH.name, "sha256": weights_sha},
+        "classes": {"file": CLASSES_JSON_PATH.name, "sha256": classes_sha},
+        "trained_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    })
+    MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
+    MODEL_INFO_PATH.write_text(
+        json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    logger.info("模型配置已写入: %s (version=%s)", MODEL_INFO_PATH, version)
+
+
 # ==================== 训练集 / 验证集数据增强 ====================
 
 TRAIN_TRANSFORMS = transforms.Compose([
@@ -394,6 +463,9 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None):
     """
     # 中断标记：首次 Ctrl+C 安全保存，再次强制退出
     training_interrupted = False
+    # 本次训练的模型版本（训练保存时自动写入 config.json）
+    training_version = _next_model_version()
+    logger.info("本次训练模型版本: %s", training_version)
 
     # 确定训练用数据集目录
     train_dir = dataset_dir or str(DATASET_DIR)
@@ -593,6 +665,7 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None):
                     epochs_no_improve = 0
                     logger.info("保存最佳模型 (正确率: %.2f%%) → %s", best_val_acc, str(MODEL_PATH))
                     save_classes_to_json(CLASSES_JSON_PATH, class_names)
+                    _write_model_config(training_version)
                 elif EARLY_STOP_PATIENCE > 0:
                     epochs_no_improve += 1
         else:
@@ -710,6 +783,7 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None):
             if 'model_handler' in dir() and 'class_names' in dir() and class_names:
                 model_handler.save_model(MODEL_PATH)
                 save_classes_to_json(CLASSES_JSON_PATH, class_names)
+                _write_model_config(training_version)
                 logger.warning("已保存当前模型至: %s (正确率: %.2f%%)", str(MODEL_PATH), best_val_acc)
             else:
                 logger.warning("模型尚未初始化，无需保存")

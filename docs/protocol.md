@@ -12,14 +12,20 @@
 
 - `GET /models`（无鉴权）→ 拉取当前可用的识别模型列表：
   ```json
-  { "models": [ { "id": "37ac", "type": "local", "name": "37ac 本地模型" },
-                { "id": "llm",   "type": "llm",   "name": "LLM 大模型" } ] }
+  { "models": [ { "id": "37ac", "type": "local", "name": "37ac 本地模型", "version": "...",
+                  "config_url": "...", "config_hash": "..." },
+                { "id": "llm",   "type": "llm",   "name": "LLM 大模型" },
+                { "id": "auto",  "type": "auto",  "name": "自动分流（55% 37ac / 45% LLM）" } ] }
   ```
-  - `37ac` 为本地模型，任何节点默认支持
+  - 已激活的本地模型（如 `37ac`）来自模型管理器（`models` 表），含版本与 `config_url`
+  - **节点不通过 HTTP 拉取**：注册时服务端把最新模型列表放到 `register_ack.data.models`，节点 CLI 按 `.env` 的 `MODEL_ID`（默认 37ac）挑选模型
+  - 节点下载流程：取该模型的 `config_url` 下载 config.json，config.json 内用 `model.file`/`classes.file` 声明文件名与 SHA-256，节点用 `config_url` 所在目录（`urljoin`）推导权重/类别的下载地址（可托管在 HuggingFace）
   - `llm` 是否出现取决于是否有启用 LLM 的在线节点
-- `POST /upload` 使用 `model=37ac|llm` 字段选择模型（替代旧的 `recognition_type=local|llm|auto`）
+  - `auto` 自动分流：55% 走 37ac、45% 走 llm；无 LLM 节点时全走 37ac
+- `POST /upload` 使用 `model=37ac|llm|auto` 字段选择模型（替代旧的 `recognition_type=local|llm|auto`）
 - 支持 `multipart`（`file`/`image`）或 `image_base64`（JSON/表单字段）
 - 内部 TCP 任务消息仍用 `recognition_type`（local/llm）表示推理路径
+- 模型版本管理（管理员）：`POST/PUT/DELETE /models`、`POST /models/<id>/activate`、`GET /models/admin`
 
 ### 核心消息类型
 

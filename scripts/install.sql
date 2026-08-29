@@ -116,6 +116,26 @@ CREATE TABLE IF NOT EXISTS `users` (
   KEY `idx_role` (`role`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户表';
 
+-- ------------------------------------------------------------
+-- 表：models  识别模型表（泛化模型管理，如 37ac / LLM 等）
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `models` (
+  `id` int(11) NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `model_id` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '模型标识（如 37ac）',
+  `display_name` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '' COMMENT '展示名称',
+  `type` enum('local','llm') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'local' COMMENT '模型类型：local/llm',
+  `version` varchar(64) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '版本号',
+  `config_url` varchar(1024) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '配置文件(config.json)下载地址',
+  `config_hash` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '配置文件 SHA-256（可选）',
+  `notes` text COLLATE utf8mb4_unicode_ci COMMENT '模型说明/更新日志',
+  `status` enum('active','inactive') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'inactive' COMMENT '是否当前激活',
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_name_version` (`name`,`version`),
+  KEY `idx_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='识别模型表';
+
 -- ============================================================
 -- 初始化管理员账号
 -- ------------------------------------------------------------

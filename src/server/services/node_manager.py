@@ -81,23 +81,44 @@ class NodeManager:
     def get_model_list(self):
         """返回当前可用的识别模型列表（供 GET /models 拉取）。
 
-        - `37ac` 为本地模型，任何节点默认支持
-        - `llm` 取决于是否有启用 LLM 的在线节点（看节点配置）
+        - `models` 表里所有激活的模型（含下载地址/SHA-256）
+        - `llm`：取决于是否有启用 LLM 的在线节点（看节点配置）
+        - `auto`：自动分流（55% 37ac / 45% LLM，无 LLM 节点时全走 37ac）
         """
-        models = [{"id": MODEL_37AC, "type": "local", "name": "37ac 本地模型"}]
-        if self.has_llm_enabled_nodes():
+        models = []
+        from services import model_manager
+
+        for m in model_manager.get_active_models():
+            models.append({
+                "id": m["model_id"],
+                "type": m.get("type") or "local",
+                "name": m.get("display_name") or m["model_id"],
+                "version": m.get("version"),
+                "config_url": m.get("config_url"),
+                "config_hash": m.get("config_hash"),
+            })
+
+        # 兜底：没有任何 37ac 记录时仍提供一个本地模型入口
+        if not any(x["id"] == MODEL_37AC for x in models):
+            models.append({"id": MODEL_37AC, "type": "local", "name": "37ac 本地模型"})
+
+        if self.has_llm_enabled_nodes() and not any(x["id"] == MODEL_LLM for x in models):
             models.append({"id": MODEL_LLM, "type": "llm", "name": "LLM 大模型"})
+
+        models.append({"id": "auto", "type": "auto", "name": "自动分流（55% 37ac / 45% LLM）"})
         return models
 
     def resolve_model_to_recognition_type(self, model):
-        """把模型 id 映射为内部识别类型（local / llm）。
+        """把模型 id 映射为内部识别类型（local / llm / auto）。
 
-        当前是过渡方案（后续接入模型管理器）：37ac → local，llm → llm。
+        当前是过渡方案（后续接入模型管理器）：37ac → local，llm → llm，auto → auto。
         """
         if model == MODEL_37AC:
             return "local"
         if model == MODEL_LLM:
             return "llm"
+        if model == "auto":
+            return "auto"
         return None
 
     def has_llm_enabled_nodes(self):

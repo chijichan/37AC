@@ -30,6 +30,18 @@ class Dashboard_Controller extends Controller
         $this->view('dashboard/nodes', $data);
     }
 
+    public function models()
+    {
+        $data = [
+            'title' => '模型管理',
+            'description' => '管理 37AC 本地模型的版本与下载地址，节点会自动同步最新版本。',
+            'keywords' => '37AC模型管理,模型版本,模型下载',
+            'canonical_url' => '/dashboard/models'
+        ];
+
+        $this->view('dashboard/models', $data);
+    }
+
     public function apikeys()
     {
         $data = [

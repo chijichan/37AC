@@ -38,6 +38,7 @@ from routes.auth_routes import auth_bp
 from routes.user_routes import user_bp
 from routes.admin_routes import admin_bp
 from routes.api_key_routes import api_key_bp
+from routes.model_routes import model_bp
 
 app.register_blueprint(upload_bp)
 app.register_blueprint(dashboard_bp)
@@ -46,3 +47,4 @@ app.register_blueprint(auth_bp)
 app.register_blueprint(user_bp)
 app.register_blueprint(admin_bp)
 app.register_blueprint(api_key_bp)
+app.register_blueprint(model_bp)

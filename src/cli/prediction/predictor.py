@@ -59,6 +59,15 @@ _registry_cache = None
 _cache_lock = threading.Lock()
 
 
+def invalidate_model_cache():
+    """清空模型/类别/注册表缓存（节点下载新模型后调用）。"""
+    global _model_cache, _classes_cache, _registry_cache
+    with _cache_lock:
+        _model_cache = None
+        _classes_cache = None
+        _registry_cache = None
+
+
 def _load_class_registry() -> dict:
     """加载 classes.json 角色注册表（{类别键: 类别对象}），带进程内缓存。
 

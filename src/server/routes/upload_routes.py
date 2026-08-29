@@ -2,6 +2,7 @@
 """上传和任务查询路由"""
 
 import base64
+import random
 import uuid
 import json
 import threading
@@ -123,9 +124,17 @@ def upload_and_predict():
         if request.is_json:
             body = request.get_json(silent=True) or {}
             model = (body.get("model") or model or "").strip().lower()
-        if model not in ("37ac", "llm"):
+        if model not in ("37ac", "llm", "auto"):
             model = "37ac"
-        recognition_type = node_manager.resolve_model_to_recognition_type(model) or "local"
+
+        # auto：暂用 55/45 分流（55% 37ac / 45% llm），无 LLM 节点时全走 37ac
+        if model == "auto":
+            if node_manager.has_llm_enabled_nodes() and random.random() < 0.45:
+                recognition_type = "llm"
+            else:
+                recognition_type = "local"
+        else:
+            recognition_type = node_manager.resolve_model_to_recognition_type(model) or "local"
 
         # 图片来源：优先 multipart 文件（file / image），其次 image_base64
         image_data = None
@@ -329,18 +338,12 @@ def upload_and_predict():
             "body": {
                 "file": "image_file (multipart)",
                 "image_base64": "可选，JSON/表单里的 base64 图片（multipart 优先）",
-                "model": "37ac | llm",
+                "model": "37ac | llm | auto",
             },
             "models_endpoint": "GET /models（无鉴权，拉取可选识别模型）",
             "streaming": "设置 Accept: text/event-stream 或 X-Stream-Response: true 获取流式响应",
         },
     }), 200
-
-
-@upload_bp.route("/models", methods=["GET"])
-def list_models():
-    """拉取当前可用的识别模型列表（无需鉴权）。"""
-    return jsonify({"models": node_manager.get_model_list()}), 200
 
 
 @upload_bp.route("/tasks/<task_id>", methods=["GET"])

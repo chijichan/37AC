@@ -132,6 +132,46 @@ def crop_dataset_function():
     print("=" * 50)
 
 
+def compress_dataset_function():
+    """压缩已裁剪数据集（最长边压到 DATASET_COMPRESS_SIZE 以内）"""
+    from config.base import (
+        CROPPED_DATASET_DIR,
+        DATASET_COMPRESS_SIZE,
+        DATASET_COMPRESS_QUALITY,
+        DATASET_COMPRESS_WORKERS,
+    )
+
+    print()
+    print("=" * 50)
+    print("  压缩数据集")
+    print("=" * 50)
+
+    if DATASET_COMPRESS_SIZE <= 0:
+        logger.warning("数据集压缩已禁用（DATASET_COMPRESS_SIZE=0），请先在 .env 配置")
+        return
+
+    if not os.path.isdir(CROPPED_DATASET_DIR):
+        logger.error("已裁剪数据集不存在: %s", CROPPED_DATASET_DIR)
+        return
+
+    from utils.image_utils import compress_dataset_images
+    logger.info(
+        "开始压缩: %s（最长边 %d, 并发 %d）",
+        CROPPED_DATASET_DIR, DATASET_COMPRESS_SIZE, DATASET_COMPRESS_WORKERS,
+    )
+    result = compress_dataset_images(
+        str(CROPPED_DATASET_DIR),
+        max_size=DATASET_COMPRESS_SIZE,
+        quality=DATASET_COMPRESS_QUALITY,
+        workers=DATASET_COMPRESS_WORKERS,
+    )
+    logger.info(
+        "压缩完成: 总计 %d, 已压缩 %d, 跳过 %d, 失败 %d",
+        result["total"], result["compressed"], result["skipped"], result["failed"],
+    )
+    print("=" * 50)
+
+
 def show_dataset_menu():
     """显示数据集管理子菜单"""
     print()
@@ -139,7 +179,8 @@ def show_dataset_menu():
     print("  数据集管理")
     print("=" * 40)
     print("  [1] 验证图像（检查数据集目录与图片有效性）")
-    print("  [2] 裁剪数据集（YOLO 裁剪原始数据集）")
+    print("  [2] 裁剪数据集（YOLO 裁剪原始数据集，自动压缩）")
+    print("  [3] 压缩数据集（压缩 saves/dataset 内图片）")
     print("  [0] 返回主菜单")
     print("-" * 40)
 
@@ -150,7 +191,7 @@ def run_dataset_settings():
         drain_pending_input()
         show_dataset_menu()
         try:
-            choice = input("请选择 (1/2/0): ").strip().strip("\x1a")
+            choice = input("请选择 (1/2/3/0): ").strip().strip("\x1a")
         except (KeyboardInterrupt, EOFError):
             print()
             return
@@ -160,8 +201,10 @@ def run_dataset_settings():
             verify_images_function()
         elif choice == "2":
             crop_dataset_function()
+        elif choice == "3":
+            compress_dataset_function()
         else:
-            print("无效选择，请输入 1、2 或 0")
+            print("无效选择，请输入 1、2、3 或 0")
 
 
 def _cjk_display_width(text: str) -> int:
@@ -181,7 +224,7 @@ def _pad_display(text: str, width: int) -> str:
 _MENU_ITEMS = [
     ("1", "训练模型", "训练或继续训练角色识别模型"),
     ("2", "识别角色", "识别图片中的动漫角色"),
-    ("3", "数据集管理", "验证图像、YOLO 裁剪数据集"),
+    ("3", "数据集管理", "验证图像、YOLO 裁剪、压缩数据集"),
     ("4", "节点服务", "启动分布式识别节点"),
     ("0", "退出程序", "结束程序并退出"),
 ]
@@ -258,7 +301,7 @@ def ask_dataset_choice():
     print("  选择训练数据集")
     print("=" * 40)
     print(f"  [1] 原始数据集: {DATASET_DIR}")
-    print(f"  [2] 已裁剪数据集: {CROPPED_DATASET_DIR}（使用已存在的 _yolo 裁剪结果）")
+    print(f"  [2] 已裁剪数据集: {CROPPED_DATASET_DIR}（使用已存在的 _37ac 裁剪结果）")
     print(f"  [3] 使用 YOLO 裁剪原始数据集后训练（从头裁剪，保存到 saves/dataset/）")
     print("  [0] 返回主菜单")
     print("-" * 40)

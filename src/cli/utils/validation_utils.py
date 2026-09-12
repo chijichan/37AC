@@ -85,9 +85,9 @@ def filter_missing_or_corrupt_images(dataset_dir: str) -> dict:
 
     策略（避免每次全量校验拖慢训练）：
       - 所有图片：只做廉价检查（存在 + 非空）
-      - 只对“新裁剪（_yolo）”或“可疑（空文件）”做完整 PIL 校验
+      - 只对“新裁剪（_37ac/_yolo）”或“可疑（空文件）”做完整 PIL 校验
       - 通过数据集根目录的 `.37ac_image_filter_marker` 记录上次过滤时间，
-        之后再出现的非 _yolo 新文件也会被完整校验
+        之后再出现的非裁剪新文件也会被完整校验
 
     Returns:
         dict: {"removed": int, "missing": int, "corrupt": int, "empty_dirs": int}
@@ -136,7 +136,9 @@ def filter_missing_or_corrupt_images(dataset_dir: str) -> dict:
 
         size = os.path.getsize(file_path)
         ext = os.path.splitext(file_path)[1].lower()
-        is_yolo = os.path.basename(file_path).lower().endswith("_yolo" + ext)
+        base = os.path.basename(file_path).lower()
+        # 新裁剪后缀 _37ac（兼容旧的 _yolo）
+        is_yolo = base.endswith("_37ac" + ext) or base.endswith("_yolo" + ext)
         is_new = os.path.getmtime(file_path) > last_filter
         suspicious = size == 0
 
@@ -150,7 +152,7 @@ def filter_missing_or_corrupt_images(dataset_dir: str) -> dict:
                 pass
             continue
 
-        # 只对“新出现 / 首次运行的 _yolo / 可疑”文件做完整校验
+        # 只对“新出现 / 首次运行的新裁剪 / 可疑”文件做完整校验
         need_full = is_new or (first_run and is_yolo)
         if need_full:
             if not validate_image_file(file_path):

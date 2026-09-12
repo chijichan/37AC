@@ -57,6 +57,14 @@ PHASE2_LR = float(os.getenv("PHASE2_LR", "1e-4") or "1e-4")
 PHASE2_MIN_LR = float(os.getenv("PHASE2_MIN_LR", "1e-6") or "1e-6")
 # 单个角色最大训练样本数（YOLO 裁剪保存时生效）
 MAX_IMAGES_PER_ROLE = int(os.getenv("MAX_IMAGES_PER_ROLE", "100") or "100")
+# 裁剪前压缩：先把图片最长边压到该值以内再做 YOLO 检测/裁剪（0=禁用）
+DATASET_COMPRESS_SIZE = int(os.getenv("DATASET_COMPRESS_SIZE", "512") or "0")
+# JPEG 压缩质量（1-100）
+DATASET_COMPRESS_QUALITY = int(os.getenv("DATASET_COMPRESS_QUALITY", "90") or "90")
+# 压缩并发线程数
+DATASET_COMPRESS_WORKERS = int(os.getenv("DATASET_COMPRESS_WORKERS", "4") or "4")
+# YOLO 裁剪并发线程数（按角色并行，每线程独立加载一个 YOLO 模型）
+YOLO_CROP_WORKERS = int(os.getenv("YOLO_CROP_WORKERS", "2") or "2")
 # 验证集比例（0 表示不使用验证集）
 VAL_SPLIT_RATIO = float(os.getenv("VAL_SPLIT_RATIO", "0.2") or "0.2")
 # 权重衰减（L2 正则化）

@@ -1,9 +1,13 @@
 # utils/image_utils.py
+import os
 import warnings
 from PIL import Image
 from config.log_config import get_logger
 
 logger = get_logger("image_utils")
+
+# 数据集压缩支持的图片扩展名
+_COMPRESS_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp")
 
 def validate_image_file(file_path: str) -> bool:
     """
@@ -71,3 +75,100 @@ def validate_image_file(file_path: str) -> bool:
     except Exception as e:
         logger.warning("图片文件发生未知错误 %s: %s", file_path, e)
         return False
+
+
+def compress_image_file(file_path: str, max_size: int = 512, quality: int = 90) -> bool:
+    """把图片最长边压到 max_size 以内（保持宽高比）。
+
+    Returns:
+        bool: True=实际压缩并保存；False=无需压缩或失败
+    """
+    if max_size <= 0:
+        return False
+    try:
+        with Image.open(file_path) as img:
+            img.load()
+            fmt = (img.format or "").upper()
+            width, height = img.size
+            if max(width, height) <= max_size:
+                return False
+            ratio = max_size / float(max(width, height))
+            new_size = (max(1, int(width * ratio)), max(1, int(height * ratio)))
+            resized = img.resize(new_size, Image.LANCZOS)
+
+        save_kwargs = {}
+        if fmt in ("JPEG", "JPG", "MPO"):
+            if resized.mode not in ("RGB", "L"):
+                resized = resized.convert("RGB")
+            save_kwargs = {"quality": quality, "optimize": True}
+            fmt = "JPEG"
+        elif fmt == "PNG":
+            save_kwargs = {"optimize": True}
+        elif fmt == "WEBP":
+            save_kwargs = {"quality": quality}
+        else:
+            return False
+
+        tmp_path = f"{file_path}.37ac_tmp"
+        resized.save(tmp_path, format=fmt, **save_kwargs)
+        resized.close()
+        os.replace(tmp_path, file_path)
+        return True
+    except Exception as e:
+        logger.debug("压缩图片失败 %s: %s", file_path, e)
+        return False
+
+
+def compress_dataset_images(dataset_dir: str, max_size: int = 512,
+                            quality: int = 90, workers: int = 4) -> dict:
+    """并发压缩数据集图片（最长边 <= max_size），带 tqdm 进度条。
+
+    Returns:
+        dict: {"total", "compressed", "skipped", "failed"}
+    """
+    result = {"total": 0, "compressed": 0, "skipped": 0, "failed": 0}
+    if max_size <= 0:
+        logger.info("数据集压缩已禁用（DATASET_COMPRESS_SIZE=0）")
+        return result
+    if not os.path.isdir(dataset_dir):
+        logger.error("数据集目录不存在，无法压缩: %s", dataset_dir)
+        return result
+
+    targets = []
+    for root, dirs, files in os.walk(dataset_dir):
+        dirs[:] = [d for d in dirs if not d.startswith(".")]
+        for name in files:
+            if name.lower().endswith(_COMPRESS_EXTENSIONS):
+                targets.append(os.path.join(root, name))
+
+    result["total"] = len(targets)
+    if not targets:
+        logger.warning("数据集中没有可压缩的图片: %s", dataset_dir)
+        return result
+
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    from tqdm import tqdm
+
+    max_workers = max(1, int(workers or 1))
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(compress_image_file, path, max_size, quality): path
+            for path in targets
+        }
+        for future in tqdm(
+            as_completed(futures), total=len(futures),
+            desc=f"压缩数据集(最长边{max_size})", unit="张", ncols=100,
+        ):
+            try:
+                if future.result():
+                    result["compressed"] += 1
+                else:
+                    result["skipped"] += 1
+            except Exception:
+                result["failed"] += 1
+
+    logger.info(
+        "数据集压缩完成: 总计 %d, 已压缩 %d, 跳过 %d, 失败 %d",
+        result["total"], result["compressed"], result["skipped"], result["failed"],
+    )
+    return result

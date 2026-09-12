@@ -509,6 +509,12 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None):
     else:
         logger.info("使用数据集: %s", train_dir)
 
+    # ======================
+    # === 训练前过滤缺失/损坏图片（裁剪原始数据集后、加载数据集前）===
+    # ======================
+    from utils.validation_utils import filter_missing_or_corrupt_images
+    filter_missing_or_corrupt_images(train_dir)
+
     device = get_device()
 
     try:

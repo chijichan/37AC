@@ -159,6 +159,47 @@ function require_auth()
     exit;
 }
 
+/**
+ * 管理员权限检查
+ * 先确保已登录，再校验 role=admin；非管理员返回 403
+ */
+function require_admin()
+{
+    require_auth();
+
+    if (($_SESSION['role'] ?? '') === 'admin') {
+        return;
+    }
+
+    // Session 角色缺失时，用令牌再校验一次
+    $token = get_access_token();
+    if ($token) {
+        $userData = verify_jwt_token($token);
+        if ($userData && ($userData['role'] ?? '') === 'admin') {
+            $_SESSION['role'] = 'admin';
+            return;
+        }
+    }
+
+    if (
+        !empty($_SERVER['HTTP_X_REQUESTED_WITH']) &&
+        strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest'
+    ) {
+        http_response_code(403);
+        header('Content-Type: application/json');
+        echo json_encode(['success' => false, 'message' => '需要管理员权限']);
+        exit;
+    }
+
+    http_response_code(403);
+    echo '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">'
+        . '<title>403 - 需要管理员权限</title></head>'
+        . '<body style="font-family:sans-serif;padding:3rem;text-align:center;">'
+        . '<h1 style="color:#e05a7a;">403</h1><p>该页面仅管理员可访问。</p>'
+        . '<p><a href="/dashboard">返回控制台</a></p></body></html>';
+    exit;
+}
+
 // 路由
 $router = new Router();
 
@@ -199,6 +240,15 @@ $router->get('/dashboard/settings', function () {
     $controller = new dashboard_controller();
     $controller->settings();
 });
+
+// 后台管理路由（仅管理员，共用 admin SPA 壳）
+foreach (['/admin', '/admin/overview', '/admin/users', '/admin/nodes', '/admin/tasks', '/admin/settings'] as $_admin_path) {
+    $router->get($_admin_path, function () {
+        require_admin();
+        $controller = new admin_controller();
+        $controller->index();
+    });
+}
 
 // 认证路由
 $router->get('/auth/login', 'auth_controller@login');

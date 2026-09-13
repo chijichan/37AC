@@ -48,3 +48,46 @@ app.register_blueprint(user_bp)
 app.register_blueprint(admin_bp)
 app.register_blueprint(api_key_bp)
 app.register_blueprint(model_bp)
+
+
+# 维护模式下始终放行的路径前缀（登录/刷新令牌、后台管理、静态资源）
+_MAINTENANCE_ALLOWED_PREFIXES = ("/auth", "/admin", "/static")
+
+
+@app.before_request
+def _maintenance_gate():
+    """维护模式（后台「系统设置」maintenance_mode=1）下拒绝普通请求。
+
+    - CORS 预检、登录接口、后台管理接口始终放行，保证管理员能进去关掉开关；
+    - 携带有效管理员令牌的请求也放行，便于后台页面继续调用接口；
+    - 读取设置失败时按「非维护模式」处理，避免数据库抖动导致整站 503。
+    """
+    from flask import request, jsonify
+
+    if request.method == "OPTIONS":
+        return None
+
+    path = request.path or "/"
+    if path.startswith(_MAINTENANCE_ALLOWED_PREFIXES):
+        return None
+
+    try:
+        from services import settings_service
+        if settings_service.get_setting("maintenance_mode", "0") != "1":
+            return None
+    except Exception:
+        return None
+
+    try:
+        from middleware.auth_middleware import _extract_token, _verify_access_token
+        payload, _error, _status = _verify_access_token(_extract_token())
+        if payload and payload.get("role") == "admin":
+            return None
+    except Exception:
+        pass
+
+    return jsonify({
+        "success": False,
+        "message": "系统维护中，请稍后再试",
+        "maintenance": True,
+    }), 503

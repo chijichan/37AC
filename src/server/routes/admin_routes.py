@@ -13,6 +13,7 @@ from services.auth_service import (
     update_user_status,
 )
 from middleware.auth_middleware import admin_required
+from services import settings_service
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -110,4 +111,21 @@ def change_status(user_id):
 
     result = update_user_status(user_id, status)
     status_code = 200 if result["success"] else 400
+    return jsonify(result), status_code
+
+
+@admin_bp.route("/settings", methods=["GET"])
+@admin_required
+def get_admin_settings():
+    """获取系统设置"""
+    return jsonify({"success": True, "data": settings_service.get_settings()}), 200
+
+
+@admin_bp.route("/settings", methods=["PUT"])
+@admin_required
+def update_admin_settings():
+    """更新系统设置"""
+    data = request.get_json(silent=True) or {}
+    result = settings_service.update_settings(data)
+    status_code = 200 if result.get("success") else 400
     return jsonify(result), status_code

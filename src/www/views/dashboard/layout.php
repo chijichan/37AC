@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 // 仪表盘布局：包含全局 layout + 二级导航 + SPA 内容容器
 require_once ROOT_PATH . '/views/layout.php';
 ?>
@@ -156,6 +156,9 @@ require_once ROOT_PATH . '/views/layout.php';
         <a href="/dashboard/apikeys" data-page="apikeys"><i class="ph ph-key"></i>API 密钥</a>
         <a href="/dashboard/history" data-page="history"><i class="ph ph-clock-counter-clockwise"></i>使用记录</a>
         <a href="/dashboard/settings" data-page="settings"><i class="ph ph-gear"></i>设置</a>
+        <?php if (isset($_SESSION['role']) && $_SESSION['role'] === 'admin'): ?>
+            <a href="/admin"><i class="ph ph-lock"></i>后台管理</a>
+        <?php endif; ?>
     </nav>
 
     <div class="dash-nav-mobile">
@@ -173,6 +176,9 @@ require_once ROOT_PATH . '/views/layout.php';
             <a href="/dashboard/apikeys" data-page="apikeys"><i class="ph ph-key"></i>API 密钥</a>
             <a href="/dashboard/history" data-page="history"><i class="ph ph-clock-counter-clockwise"></i>使用记录</a>
             <a href="/dashboard/settings" data-page="settings"><i class="ph ph-gear"></i>设置</a>
+            <?php if (isset($_SESSION['role']) && $_SESSION['role'] === 'admin'): ?>
+                <a href="/admin"><i class="ph ph-lock"></i>后台管理</a>
+            <?php endif; ?>
         </div>
     </div>
 </div>

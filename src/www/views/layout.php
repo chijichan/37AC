@@ -110,6 +110,9 @@ if (strpos($page_canonical, 'http') !== 0) {
                                 <small id="ud-role">访客</small>
                             </div>
                             <a href="/dashboard" class="ud-item" data-auth="user" role="menuitem">控制台</a>
+                            <?php if (isset($_SESSION['role']) && $_SESSION['role'] === 'admin'): ?>
+                                <a href="/admin" class="ud-item" data-auth="user" role="menuitem">后台管理</a>
+                            <?php endif; ?>
                             <a href="/dashboard/settings" class="ud-item" data-auth="user" role="menuitem">账号设置</a>
                             <a href="/auth/login" class="ud-item" data-auth="guest" role="menuitem">登录 / 注册</a>
                             <button type="button" class="ud-item danger" data-auth="user" id="ud-logout" role="menuitem">退出登录</button>

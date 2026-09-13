@@ -20,6 +20,7 @@ from services.task_dispatcher import dispatch_task
 from services.api_key_service import verify_api_key
 from services.sse_bus import sse_bus
 from services.task_manager import task_manager
+from services import settings_service
 from middleware.rate_limiter import rate_limit
 from common.constants import ALLOWED_IMAGE_EXTENSIONS as _ALLOWED_IMAGE_EXTENSIONS
 from config.log_config import get_logger
@@ -127,9 +128,15 @@ def upload_and_predict():
         if model not in ("37ac", "llm", "auto"):
             model = "37ac"
 
-        # auto：暂用 55/45 分流（55% 37ac / 45% llm），无 LLM 节点时全走 37ac
+        # auto：按系统设置 auto_split_ratio 分流（默认 55% 37ac / 45% llm）
+        # 无启用 LLM 的在线节点时全走 37ac
         if model == "auto":
-            if node_manager.has_llm_enabled_nodes() and random.random() < 0.45:
+            try:
+                split_ratio = int(settings_service.get_settings().get("auto_split_ratio", "55"))
+            except Exception:
+                split_ratio = 55
+            split_ratio = max(0, min(100, split_ratio))
+            if node_manager.has_llm_enabled_nodes() and random.random() * 100 >= split_ratio:
                 recognition_type = "llm"
             else:
                 recognition_type = "local"

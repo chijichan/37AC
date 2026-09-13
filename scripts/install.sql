@@ -132,9 +132,21 @@ CREATE TABLE IF NOT EXISTS `models` (
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_name_version` (`name`,`version`),
+  UNIQUE KEY `uk_model_version` (`model_id`,`version`),
   KEY `idx_status` (`status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='识别模型表';
+
+-- ------------------------------------------------------------
+-- 表：settings  系统设置表（后台管理可编辑）
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `settings` (
+  `id` int(11) NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `key` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '设置键',
+  `value` varchar(1024) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '设置值',
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_key` (`key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='系统设置表';
 
 -- ============================================================
 -- 初始化管理员账号

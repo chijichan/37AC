@@ -48,10 +48,20 @@ class TaskManager:
         """公共接口：返回指定识别方式的预计重试间隔（秒），供任务分发方提示等待时间。"""
         return self._get_retry_interval(recognition_type)
 
+    def _resolve_max_retries(self) -> int:
+        """优先读后台「系统设置」的 task_max_retries，读不到时回退配置默认值。"""
+        try:
+            from services.settings_service import get_int
+            value = get_int("task_max_retries", self.max_retries)
+            return value if value > 0 else self.max_retries
+        except Exception as e:
+            self._logger.debug("读取任务重试设置失败，使用默认值 %s: %s", self.max_retries, e)
+            return self.max_retries
+
     def register_task(self, task_id, image_path=None, image_data=None, max_retries=None, recognition_type="local"):
         """注册一个待处理任务"""
         if max_retries is None:
-            max_retries = self.max_retries
+            max_retries = self._resolve_max_retries()
 
         retry_interval = self._get_retry_interval(recognition_type)
         now = time.time()

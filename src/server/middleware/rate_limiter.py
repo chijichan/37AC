@@ -13,6 +13,16 @@ from config.base import RATE_LIMIT_ENABLED, RATE_LIMIT_REQUESTS, RATE_LIMIT_WIND
 logger = get_logger("rate_limiter")
 
 
+def _db_rate_limit_enabled() -> bool:
+    """后台「系统设置」里的限流开关（读库异常时按开启处理，保持原行为）。"""
+    try:
+        from services import settings_service
+        return settings_service.get_setting("rate_limit_enabled", "1") != "0"
+    except Exception as e:  # 循环导入 / 数据库不可用都不应打断请求
+        logger.debug("读取限流设置失败，按默认开启处理: %s", e)
+        return True
+
+
 class SlidingWindowRateLimiter:
     """滑动窗口限流器（内存实现，无外部依赖）"""
 
@@ -61,7 +71,7 @@ class SlidingWindowRateLimiter:
 
     def is_allowed(self) -> bool:
         """检查当前请求是否允许通过"""
-        if not RATE_LIMIT_ENABLED:
+        if not RATE_LIMIT_ENABLED or not _db_rate_limit_enabled():
             return True
 
         client_key = self._get_client_key()

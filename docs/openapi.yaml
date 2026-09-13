@@ -1,0 +1,801 @@
+openapi: 3.0.3
+
+info:
+  title: 37AC 识别服务 API
+  version: 0.0.1
+  description: |
+    37AC 角色识别服务的 HTTP 接口定义（Flask 应用 AC_web，源码在 src/server）。
+    由源码 + 实测抓包整理，可直接导入 Apifox（导入数据 -> OpenAPI/Swagger）。
+
+    约定与注意事项：
+    - 响应信封有 THREE 种：{success,message,data}（绝大多数）、{type,timestamp,data...}（dashboard/nodes/upload/tasks）、{error}（dashboard 异常分支）。
+    - 鉴权分两类：Bearer JWT（用户态接口）与 X-API-Key（识别任务接口）。
+    - POST /upload 受滑动窗口限流（默认 5 次/秒/IP），超限 429。
+    - 维护模式开启时（settings.maintenance_mode=1），/auth、/admin、/static 之外一律 503。
+    - 已知问题详见 docs/api-inventory.md 第 3 节（例如 /tasks/<id> 未校验任务归属）。
+
+servers:
+  - url: http://127.0.0.1:13138
+    description: 本地/默认（Flask 直连；nginx 8000 只服务 PHP 站点，未反代 API）
+
+tags:
+  - name: 认证
+  - name: 用户
+  - name: API密钥
+  - name: 节点
+  - name: 仪表盘
+  - name: 模型
+  - name: 后台管理
+  - name: 识别任务
+
+security: []
+
+paths:
+
+  /auth/register:
+    post:
+      tags: [认证]
+      summary: 用户注册
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password, email]
+              properties:
+                username: {type: string, example: newuser}
+                password: {type: string, format: password, example: "Passw0rd!"}
+                email: {type: string, format: email, example: user@example.com}
+      responses:
+        "201":
+          description: 注册成功
+          content: {application/json: {schema: {$ref: "#/components/schemas/SuccessEnvelope"}, example: {success: true, message: 注册成功, data: {id: 3, username: newuser}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+
+  /auth/login:
+    post:
+      tags: [认证]
+      summary: 用户登录
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: {type: string, example: admin}
+                password: {type: string, format: password, example: "******"}
+      responses:
+        "200":
+          description: 登录成功
+          content: {application/json: {schema: {$ref: "#/components/schemas/SuccessEnvelope"}, example: {success: true, message: 登录成功, data: {user_id: 1, username: admin, role: admin, access_token: "eyJ...", refresh_token: "eyJ...", expires_in: 7200}}}}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+
+  /auth/refresh:
+    post:
+      tags: [认证]
+      summary: 刷新访问令牌
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token: {type: string}
+      responses:
+        "200": {description: 成功, content: {application/json: {schema: {$ref: "#/components/schemas/SuccessEnvelope"}}}}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+
+  /auth/verify:
+    get:
+      tags: [认证]
+      summary: 校验 JWT 令牌
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: 令牌有效
+          content: {application/json: {example: {success: true, message: 令牌有效, data: {user_id: 1, username: admin, role: admin}}}}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+
+  /auth/logout:
+    post:
+      tags: [认证]
+      summary: 注销（服务端无状态，客户端丢弃令牌即可）
+      security:
+        - bearerAuth: []
+      responses:
+        "200": {description: 成功, content: {application/json: {example: {success: true, message: 注销成功}}}}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+
+  /auth/forgot-password:
+    post:
+      tags: [认证]
+      summary: 发送密码重置邮件
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, required: [email], properties: {email: {type: string, format: email}}}
+      responses:
+        "200": {description: 已发送, content: {application/json: {schema: {$ref: "#/components/schemas/SuccessEnvelope"}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+
+  /auth/reset-password:
+    post:
+      tags: [认证]
+      summary: 用重置令牌设置新密码
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, password, confirm_password]
+              properties:
+                token: {type: string}
+                password: {type: string, format: password}
+                confirm_password: {type: string, format: password}
+      responses:
+        "200": {description: 成功, content: {application/json: {schema: {$ref: "#/components/schemas/SuccessEnvelope"}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+
+  /auth/verify-reset-token:
+    post:
+      tags: [认证]
+      summary: 校验密码重置令牌是否有效
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, required: [token], properties: {token: {type: string}}}
+      responses:
+        "200": {description: 有效, content: {application/json: {schema: {$ref: "#/components/schemas/SuccessEnvelope"}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+
+  /auth/verify-email:
+    post:
+      tags: [认证]
+      summary: 邮箱验证（预留，未实现）
+      description: 恒返回 501 功能开发中；建议不要生成 Apifox 用例。
+      responses:
+        "501": {description: 功能开发中, content: {application/json: {example: {success: false, message: 功能开发中}}}}
+
+  /users/profile:
+    get:
+      tags: [用户]
+      summary: 获取当前用户资料
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: 成功
+          content: {application/json: {example: {success: true, data: {id: 1, username: admin, email: user@example.com, role: admin, status: 1, last_login_at: "2026-09-13 08:36:33", last_login_ip: 127.0.0.1, created_at: "2026-04-25 15:58:54", updated_at: "2026-09-13 08:36:33"}}}}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+    put:
+      tags: [用户]
+      summary: 更新当前用户资料（部分字段）
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object, properties: {email: {type: string}, username: {type: string}}}
+      responses:
+        "200": {description: 成功, content: {application/json: {schema: {$ref: "#/components/schemas/SuccessEnvelope"}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+
+  /users/change-password:
+    put:
+      tags: [用户]
+      summary: 修改当前用户密码
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [old_password, new_password]
+              properties:
+                old_password: {type: string, format: password}
+                new_password: {type: string, format: password}
+      responses:
+        "200": {description: 成功, content: {application/json: {schema: {$ref: "#/components/schemas/SuccessEnvelope"}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+
+  /users/sessions:
+    get:
+      tags: [用户]
+      summary: 登录会话列表（预留，返回硬编码的当前会话）
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: 成功
+          content: {application/json: {example: {success: true, data: {sessions: [{id: current, ip: 127.0.0.1, user_agent: "Mozilla/5.0", created_at: 当前会话, is_current: true}]}}}}
+
+  /users/sessions/{session_id}:
+    delete:
+      tags: [用户]
+      summary: 登出指定会话（预留，空实现）
+      security:
+        - bearerAuth: []
+      parameters:
+        - {name: session_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200": {description: 成功（未真正实现）, content: {application/json: {example: {success: true, message: 会话已登出}}}}
+
+  /api-keys:
+    get:
+      tags: [API密钥]
+      summary: 当前用户的 API 密钥列表
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: 成功
+          content: {application/json: {example: {success: true, data: [{id: 16, name: 主用api, permission: admin, status: active, max_usage: 10000, usage_count: 1234, last_used_at: "2026-09-06 02:30:52", created_at: "2026-04-25 19:10:35", updated_at: "2026-09-06 02:30:52"}]}}}
+    post:
+      tags: [API密钥]
+      summary: 创建 API 密钥（明文 key 仅返回一次）
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: {type: string, example: apifox}
+                permission: {type: string, enum: [read, write, admin], default: read}
+                max_usage: {type: integer, default: 10000, minimum: 1, maximum: 100000000}
+      responses:
+        "201":
+          description: 创建成功
+          content: {application/json: {example: {success: true, message: API密钥创建成功, data: {id: 17, key: 37ac_xxxxxxxxxxxxxxxxxxxxxxxxxxxx, name: apifox, permission: read, max_usage: 100}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+
+  /api-keys/{key_id}:
+    put:
+      tags: [API密钥]
+      summary: 更新 API 密钥信息
+      security:
+        - bearerAuth: []
+      parameters:
+        - {name: key_id, in: path, required: true, schema: {type: integer}}
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object, properties: {name: {type: string}, permission: {type: string, enum: [read, write, admin]}, max_usage: {type: integer}}}
+      responses:
+        "200": {description: 成功, content: {application/json: {schema: {$ref: "#/components/schemas/SuccessEnvelope"}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+    delete:
+      tags: [API密钥]
+      summary: 删除 API 密钥
+      security:
+        - bearerAuth: []
+      parameters:
+        - {name: key_id, in: path, required: true, schema: {type: integer}}
+      responses:
+        "200": {description: 成功, content: {application/json: {example: {success: true, message: 密钥已删除}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+
+  /api-keys/{key_id}/revoke:
+    post:
+      tags: [API密钥]
+      summary: 撤销 API 密钥（与 DELETE 语义重叠，注意区分）
+      security:
+        - bearerAuth: []
+      parameters:
+        - {name: key_id, in: path, required: true, schema: {type: integer}}
+      responses:
+        "200": {description: 成功, content: {application/json: {schema: {$ref: "#/components/schemas/SuccessEnvelope"}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+
+  /api-keys/verify:
+    post:
+      tags: [API密钥]
+      summary: 校验 API 密钥（内部服务调用，密钥可放 body 或 X-API-Key 头）
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object, properties: {api_key: {type: string}}}
+      responses:
+        "200":
+          description: 有效
+          content: {application/json: {example: {success: true, data: {key_id: 17, key_name: apifox, user_id: 1, username: admin, role: admin, permission: read}}}}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+
+  /nodes:
+    get:
+      tags: [节点]
+      summary: 节点列表（管理员返回全量，普通用户仅自己名下）
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: 成功
+          content: {application/json: {example: {type: nodes_list, timestamp: 1789267716, data: [{id: 5, name: n-001, addr: "47.254.232.51:36067", status: online, is_active: true, capabilities: "[\"local\", \"llm\"]", user_id: 1, username: admin, created_at: "2026-08-07 14:40:13", updated_at: "2026-09-11 01:07:45"}]}}}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+    post:
+      tags: [节点]
+      summary: 新增节点（归属当前登录用户）
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: {type: string, example: n-002}
+                addr: {type: string, example: "127.0.0.1:36067", description: 可选，节点地址}
+                token: {type: string, description: 可选，自定义节点令牌；不传则服务端生成}
+                capabilities: {type: string, example: "local,llm", description: 逗号分隔的推理能力}
+      responses:
+        "201":
+          description: 创建成功
+          content: {application/json: {example: {success: true, message: 节点添加成功, data: {id: 9, capabilities: [local, llm], token: 明文令牌仅此一次}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "500": {description: 创建失败}
+
+  /nodes/{node_id}:
+    put:
+      tags: [节点]
+      summary: 修改节点（仅所属用户或管理员）
+      security:
+        - bearerAuth: []
+      parameters:
+        - {name: node_id, in: path, required: true, schema: {type: integer}}
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: {type: string}
+                addr: {type: string}
+                token: {type: string}
+                capabilities: {type: string, example: "local,llm"}
+      responses:
+        "200": {description: 成功, content: {application/json: {example: {success: true, message: 节点更新成功}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "403": {description: 节点不存在或无权操作（当前实现合并为 403）}
+        "500": {description: 更新失败}
+    delete:
+      tags: [节点]
+      summary: 删除节点（仅所属用户或管理员）
+      security:
+        - bearerAuth: []
+      parameters:
+        - {name: node_id, in: path, required: true, schema: {type: integer}}
+      responses:
+        "200": {description: 成功, content: {application/json: {example: {success: true, message: 节点已删除}}}}
+        "403": {description: 节点不存在或无权操作}
+        "500": {description: 删除失败}
+
+  /dashboard/summary:
+    get:
+      tags: [仪表盘]
+      summary: 仪表盘概览（别名：/dashboard/overview）
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: 成功
+          content: {application/json: {example: {type: dashboard_summary, timestamp: 1789267716, data: {total_users: 2, total_tasks: 211, online_nodes: 0, accuracy: 73.29, recent_activity: [{type: upload, title: "原神/荧", description: 任务 xxx 处理完成，置信度 96.06%, time: 7分钟前}]}}}}
+        "500": {$ref: "#/components/responses/ServerError"}
+
+  /dashboard/overview:
+    get:
+      tags: [仪表盘]
+      summary: 仪表盘概览（/dashboard/summary 的别名）
+      deprecated: true
+      security:
+        - bearerAuth: []
+      responses:
+        "200": {description: 与 /dashboard/summary 相同}
+
+  /dashboard/stats:
+    get:
+      tags: [仪表盘]
+      summary: 仪表盘统计数字
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: 成功
+          content: {application/json: {example: {type: dashboard_stats, timestamp: 1789267716, data: {total_visits: 422, total_uploads: 211, active_users: 1, online_nodes: 0, idle_nodes: 0, accuracy: 73.28809523809524}}}}
+        "500": {$ref: "#/components/responses/ServerError"}
+
+  /dashboard/nodes:
+    get:
+      tags: [仪表盘]
+      summary: 仪表盘节点列表（管理员全量）
+      security:
+        - bearerAuth: []
+      responses:
+        "200": {description: 成功, content: {application/json: {example: {type: dashboard_nodes, timestamp: 1789267716, data: []}}}}
+        "500": {$ref: "#/components/responses/ServerError"}
+
+  /dashboard/tasks:
+    get:
+      tags: [仪表盘]
+      summary: 任务记录（分页，别名：/dashboard/history）
+      security:
+        - bearerAuth: []
+      parameters:
+        - {name: page, in: query, schema: {type: integer, default: 1, minimum: 1}}
+        - {name: limit, in: query, schema: {type: integer, default: 15, maximum: 100}}
+        - {name: time_range, in: query, schema: {type: integer, default: 30, maximum: 365}, description: 时间范围（天）}
+        - {name: status, in: query, schema: {type: string, example: completed}}
+      responses:
+        "200":
+          description: 成功
+          content: {application/json: {example: {type: dashboard_tasks, timestamp: 1789267716, data: [{task_id: xxx, label: "原神/荧", confidence: 96.06, api_key_name: 主用api, created_at: "2026-09-06 02:30:52"}], page: 1, total_pages: 12, total_count: 166, completed_count: 166, pending_count: 0}}}
+
+  /dashboard/history:
+    get:
+      tags: [仪表盘]
+      summary: 任务记录（/dashboard/tasks 的别名）
+      deprecated: true
+      security:
+        - bearerAuth: []
+      responses:
+        "200": {description: 与 /dashboard/tasks 相同}
+
+  /models:
+    get:
+      tags: [模型]
+      summary: 可用识别模型列表（无需鉴权；id 是业务标识字符串）
+      responses:
+        "200":
+          description: 成功
+          content: {application/json: {example: {success: true, models: [{id: 37ac, type: local, name: 37ac, version: 0.0.1, config_url: "https://example.com/config.json", config_hash: null}, {id: auto, type: auto, name: 自动分流（55% 37ac / 45% LLM）}]}}}
+    post:
+      tags: [模型]
+      summary: 新增模型记录（管理员）
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [model_id, version, config_url]
+              properties:
+                model_id: {type: string, example: 37ac}
+                version: {type: string, example: 0.0.2}
+                config_url: {type: string}
+                display_name: {type: string}
+                type: {type: string, enum: [local, llm], default: local}
+                config_hash: {type: string}
+                notes: {type: string}
+                activate: {type: boolean, default: false}
+      responses:
+        "201": {description: 创建成功, content: {application/json: {schema: {$ref: "#/components/schemas/SuccessEnvelope"}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+
+  /models/admin:
+    get:
+      tags: [模型]
+      summary: 全部模型记录（管理员；id 是数据库主键）
+      description: 注意与 GET /models 的 id 语义不同（此处 id 为主键 int，业务标识是 model_id）。
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: 成功
+          content: {application/json: {example: {success: true, models: [{id: 1, model_id: 37ac, display_name: 37ac, type: local, version: 0.0.1, config_url: "https://example.com/config.json", config_hash: null, notes: "", status: active, created_at: "2026-08-28 21:20:26", updated_at: "2026-08-29 16:33:28"}]}}}
+        "403": {$ref: "#/components/responses/Forbidden"}
+
+  /models/{model_id}:
+    put:
+      tags: [模型]
+      summary: 编辑模型（管理员，部分字段）
+      security:
+        - bearerAuth: []
+      parameters:
+        - {name: model_id, in: path, required: true, schema: {type: integer}, description: 数据库主键}
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object, properties: {model_id: {type: string}, display_name: {type: string}, type: {type: string}, version: {type: string}, config_url: {type: string}, config_hash: {type: string}, notes: {type: string}}}
+      responses:
+        "200": {description: 成功, content: {application/json: {schema: {$ref: "#/components/schemas/SuccessEnvelope"}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+    delete:
+      tags: [模型]
+      summary: 删除模型（管理员）
+      security:
+        - bearerAuth: []
+      parameters:
+        - {name: model_id, in: path, required: true, schema: {type: integer}}
+      responses:
+        "200": {description: 成功, content: {application/json: {schema: {$ref: "#/components/schemas/SuccessEnvelope"}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+
+  /models/{model_id}/activate:
+    post:
+      tags: [模型]
+      summary: 激活模型（管理员）
+      security:
+        - bearerAuth: []
+      parameters:
+        - {name: model_id, in: path, required: true, schema: {type: integer}}
+      responses:
+        "200": {description: 成功, content: {application/json: {schema: {$ref: "#/components/schemas/SuccessEnvelope"}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+
+  /admin/users:
+    get:
+      tags: [后台管理]
+      summary: 用户列表（管理员）
+      security:
+        - bearerAuth: []
+      parameters:
+        - {name: page, in: query, schema: {type: integer, default: 1, minimum: 1}}
+        - {name: per_page, in: query, schema: {type: integer, default: 20, maximum: 100}}
+        - {name: keyword, in: query, schema: {type: string}, description: 用户名/邮箱模糊搜索}
+      responses:
+        "200":
+          description: 成功
+          content: {application/json: {example: {success: true, data: {users: [{id: 1, username: admin, email: user@example.com, role: admin, status: 1, created_at: "2026-04-25 15:58:54"}], page: 1, per_page: 2, total: 2, total_pages: 1}}}}
+        "403": {$ref: "#/components/responses/Forbidden"}
+    post:
+      tags: [后台管理]
+      summary: 创建用户（管理员）
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: {type: string}
+                password: {type: string, format: password}
+                email: {type: string, format: email}
+                role: {type: string, enum: [user, admin], default: user}
+      responses:
+        "201": {description: 创建成功, content: {application/json: {schema: {$ref: "#/components/schemas/SuccessEnvelope"}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+
+  /admin/users/{user_id}:
+    get:
+      tags: [后台管理]
+      summary: 用户详情（管理员）
+      security:
+        - bearerAuth: []
+      parameters:
+        - {name: user_id, in: path, required: true, schema: {type: integer}}
+      responses:
+        "200": {description: 成功, content: {application/json: {schema: {$ref: "#/components/schemas/SuccessEnvelope"}, example: {success: true, data: {id: 1, username: admin, email: user@example.com, role: admin, status: 1}}}}}
+        "404": {$ref: "#/components/responses/NotFound"}
+    put:
+      tags: [后台管理]
+      summary: 更新用户信息（管理员）
+      security:
+        - bearerAuth: []
+      parameters:
+        - {name: user_id, in: path, required: true, schema: {type: integer}}
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object, properties: {email: {type: string}, role: {type: string}, status: {type: integer}}}
+      responses:
+        "200": {description: 成功, content: {application/json: {schema: {$ref: "#/components/schemas/SuccessEnvelope"}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+    delete:
+      tags: [后台管理]
+      summary: 删除用户（管理员）
+      security:
+        - bearerAuth: []
+      parameters:
+        - {name: user_id, in: path, required: true, schema: {type: integer}}
+      responses:
+        "200": {description: 成功, content: {application/json: {schema: {$ref: "#/components/schemas/SuccessEnvelope"}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+
+  /admin/users/{user_id}/roles:
+    put:
+      tags: [后台管理]
+      summary: 分配用户角色（管理员）
+      security:
+        - bearerAuth: []
+      parameters:
+        - {name: user_id, in: path, required: true, schema: {type: integer}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, required: [role], properties: {role: {type: string, enum: [user, admin]}}}
+      responses:
+        "200": {description: 成功, content: {application/json: {schema: {$ref: "#/components/schemas/SuccessEnvelope"}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+
+  /admin/users/{user_id}/status:
+    put:
+      tags: [后台管理]
+      summary: 启用/禁用用户（管理员；status 必须是 int 0/1）
+      security:
+        - bearerAuth: []
+      parameters:
+        - {name: user_id, in: path, required: true, schema: {type: integer}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, required: [status], properties: {status: {type: integer, enum: [0, 1], description: 1 启用 / 0 禁用}}}
+      responses:
+        "200": {description: 成功, content: {application/json: {schema: {$ref: "#/components/schemas/SuccessEnvelope"}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+
+  /admin/settings:
+    get:
+      tags: [后台管理]
+      summary: 读取系统设置（管理员）
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: 成功
+          content: {application/json: {example: {success: true, data: {auto_split_ratio: "55", rate_limit_enabled: "1", task_max_retries: "3", maintenance_mode: "0"}}}}
+    put:
+      tags: [后台管理]
+      summary: 更新系统设置（管理员；值均为字符串）
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                auto_split_ratio: {type: string, description: auto 模式走 37ac 的百分比 0-100}
+                rate_limit_enabled: {type: string, enum: ["0", "1"]}
+                task_max_retries: {type: string}
+                maintenance_mode: {type: string, enum: ["0", "1"]}
+      responses:
+        "200": {description: 成功, content: {application/json: {schema: {$ref: "#/components/schemas/SuccessEnvelope"}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+
+  /upload:
+    get:
+      tags: [识别任务]
+      summary: 上传接口使用说明
+      responses:
+        "200": {description: 成功, content: {application/json: {example: {type: info, message: 37AC 上传 API, usage: {method: POST, url: /upload, headers: {X-API-Key: your_api_key}}}}}}
+    post:
+      tags: [识别任务]
+      summary: 上传图片并识别（排队受理；返回 200，语义上应为 202）
+      description: |
+        鉴权：X-API-Key。受滑动窗口限流（默认 5 次/秒/IP）-> 429。
+        两种响应模式：
+        - 默认 JSON：立即返回排队信息，用 task_id 轮询 GET /tasks/{task_id}；
+        - 流式：请求头 Accept: text/event-stream 或 X-Stream-Response: true -> SSE 推送 queued/waiting/completed。
+        图片来源：multipart 字段 file 或 image；或 JSON/表单字段 image_base64（可带 data URL 前缀）。
+      security:
+        - apiKeyAuth: []
+      parameters:
+        - {name: X-Stream-Response, in: header, schema: {type: string, enum: ["true"]}, description: 置 true 走 SSE 流式响应}
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file: {type: string, format: binary, description: png/jpg/jpeg/webp}
+                image: {type: string, format: binary, description: 等价于 file}
+                model: {type: string, enum: [37ac, llm, auto], default: 37ac, description: 非法值会被静默改写为 37ac}
+          application/json:
+            schema:
+              type: object
+              properties:
+                image_base64: {type: string}
+                model: {type: string, enum: [37ac, llm, auto]}
+      responses:
+        "200":
+          description: 已受理（JSON 模式）
+          content: {application/json: {example: {type: dispatch_task, timestamp: 1789267716, status: queued, message: 图片已上传，等待推理..., task_id: 52213b03-6a5c-48ef-8413-1aac63bf9be8, model: 37ac}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "429": {description: 触发限流, content: {application/json: {example: {success: false, message: 请求过于频繁，请在 1 秒后重试}}}}
+
+  /tasks/{task_id}:
+    get:
+      tags: [识别任务]
+      summary: 查询任务结果（轮询）
+      description: 注意：当前实现只校验 API Key 有效性，未校验任务归属（可读取他人任务结果，见 docs/api-inventory.md 3.1）。
+      security:
+        - apiKeyAuth: []
+      parameters:
+        - {name: task_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200":
+          description: 任务完成
+          content: {application/json: {example: {type: task_result, timestamp: 1789267716, status: completed, message: 任务完成，结果已返回, task_id: 52213b03-..., result: [{name: "原神/荧", prob: 96.06}]}}}
+        "202":
+          description: 尚未完成
+          content: {application/json: {example: {type: task_result, timestamp: 1789267737, status: pending, message: 结果尚未返回, task_id: 52213b03-..., result: []}}}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "503": {description: 数据库不可用}
+
+  /tasks/{task_id}/stream:
+    get:
+      tags: [识别任务]
+      summary: 任务结果 SSE 流
+      description: 浏览器 EventSource 无法自定义 X-API-Key 头，实际使用者是 CLI/服务端；同样未校验任务归属。等待上限 120 秒。
+      security:
+        - apiKeyAuth: []
+      parameters:
+        - {name: task_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200":
+          description: SSE 流
+          content:
+            text/event-stream:
+              schema: {type: string}
+              example: |
+                data: {"status": "completed", "message": "任务已完成", "task_id": "...", "result": [{"name": "原神/荧", "prob": 96.06}], "error": null}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+
+components:
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: POST /auth/login 返回的 data.access_token
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: POST /api-keys 创建，形如 37ac_xxx（仅创建时返回一次）
+
+  responses:
+    BadRequest:
+      description: 参数错误
+      content: {application/json: {schema: {$ref: "#/components/schemas/ErrorEnvelope"}, example: {success: false, message: 参数错误}}}
+    Unauthorized:
+      description: 未认证或令牌无效
+      content: {application/json: {schema: {$ref: "#/components/schemas/ErrorEnvelope"}, example: {success: false, message: 未提供认证令牌}}}
+    Forbidden:
+      description: 无权限（非管理员等）
+      content: {application/json: {schema: {$ref: "#/components/schemas/ErrorEnvelope"}, example: {success: false, message: 需要管理员权限}}}
+    NotFound:
+      description: 资源不存在
+      content: {application/json: {schema: {$ref: "#/components/schemas/ErrorEnvelope"}, example: {success: false, message: 用户不存在}}}
+    ServerError:
+      description: 服务端错误（dashboard 系接口此分支返回 {error} 而非 {success,message}）
+      content: {application/json: {example: {error: 获取仪表盘数据失败}}}
+
+  schemas:
+    SuccessEnvelope:
+      type: object
+      properties:
+        success: {type: boolean, example: true}
+        message: {type: string, example: 操作成功}
+        data: {type: object, nullable: true}
+    ErrorEnvelope:
+      type: object
+      properties:
+        success: {type: boolean, example: false}
+        message: {type: string, example: 参数错误}

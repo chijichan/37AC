@@ -54,10 +54,17 @@ class _PooledConnection:
 _tls = threading.local()
 
 
+# 会话隔离级别：池化连接长期存活且读路径不显式提交（autocommit=0），
+# 默认 REPEATABLE READ 下第一个 SELECT 建立的快照会一直沿用——实测后台改了
+# 设置后，同一线程仍持续读到旧值（rollback 后才刷新）。
+# 改为 READ COMMITTED：每条 SELECT 都取最新已提交数据，且不增加每次访问的往返。
+_SESSION_INIT_COMMAND = "SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED"
+
+
 def _new_connection():
-    """新建一个底层 PyMySQL 连接。"""
+    """新建一个底层 PyMySQL 连接（会话隔离级别 READ COMMITTED）。"""
     try:
-        return pymysql.connect(**DB_CONFIG)
+        return pymysql.connect(init_command=_SESSION_INIT_COMMAND, **DB_CONFIG)
     except Exception as e:
         logger.error("数据库连接失败: %s", e)
         return None

@@ -42,3 +42,6 @@ saves/
 # Logs
 *.log
 logs/
+
+# Agent 临时工作区（会话恢复导出、时间线等，不入库）
+.dsh-scratch/

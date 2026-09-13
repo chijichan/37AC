@@ -49,6 +49,12 @@ app.register_blueprint(admin_bp)
 app.register_blueprint(api_key_bp)
 app.register_blueprint(model_bp)
 
+# 响应信封收口：给所有 JSON 响应补 success / code（只加字段，不动旧字段），
+# 并把 Flask 默认的 HTML 错误页换成同款 JSON（见 utils/api_response.py）
+from utils.api_response import install as install_api_response
+
+install_api_response(app)
+
 
 # 维护模式下始终放行的路径前缀（登录/刷新令牌、后台管理、静态资源）
 _MAINTENANCE_ALLOWED_PREFIXES = ("/auth", "/admin", "/static")
@@ -86,8 +92,11 @@ def _maintenance_gate():
     except Exception:
         pass
 
+    from utils.api_response import CODE_MAINTENANCE_MODE
+
     return jsonify({
         "success": False,
+        "code": CODE_MAINTENANCE_MODE,
         "message": "系统维护中，请稍后再试",
         "maintenance": True,
     }), 503

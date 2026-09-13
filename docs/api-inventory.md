@@ -28,8 +28,45 @@
 | 限流 | **仅** `POST /upload`：默认 5 次/1 秒（滑动窗口，按客户端 IP）；超限 429，**无 `Retry-After` 头** |
 | CORS | `ALLOWED_ORIGINS=*` |
 | 维护模式 | `settings.maintenance_mode=1` 时，除 `/auth`、`/admin`、`/static`、`OPTIONS` 和「持有有效管理员令牌」的请求外，一律 `503 {"maintenance": true}` |
-| 响应信封 | **三种并存**（见 §4.1） |
-| 错误语义 | 只有中文 `message`，**没有机器可读错误码** |
+| 响应信封 | 仍然**三种并存**（见 §3.2），但已做灰度收口：所有 JSON 响应都会**补上** `success` 与 `code`，旧字段一个不动 |
+| 错误语义 | 中文 `message` + **机器可读 `code`**（2026-09-13 新增，见 §1.1） |
+
+### 1.1 统一信封与错误码（2026-09-13 新增，灰度）
+
+规则：**只加字段，不改字段**。任何 JSON 响应都会带上
+- `success`：布尔。原本就有则保持原值；B/C 形态按 HTTP 状态码补（2xx → true）。
+- `code`：机器可读字符串。优先取端点显式指定的值，否则按状态码推导。
+- `message`：B/C 形态如果没有 `message` 但有 `error`，用 `error` 的值补一份。
+
+Werkzeug 默认的 HTML 错误页（404/405/413/500…）也换成了同款 JSON 信封（含 `code`）。
+
+| HTTP | 默认 code |
+|---|---|
+| 200 / 201 / 202 | `OK` / `CREATED` / `ACCEPTED` |
+| 400 | `INVALID_PARAMS` |
+| 401 | `UNAUTHORIZED` |
+| 403 | `FORBIDDEN` |
+| 404 / 405 | `NOT_FOUND` / `METHOD_NOT_ALLOWED` |
+| 413 | `PAYLOAD_TOO_LARGE` |
+| 429 | `RATE_LIMITED`（限流） |
+| 500 | `INTERNAL_ERROR` |
+| 501 / 503 | `NOT_IMPLEMENTED` / `SERVICE_UNAVAILABLE` |
+
+业务码（覆盖上表默认值）：
+
+| code | 出现位置 |
+|---|---|
+| `AUTH_TOKEN_MISSING` | 受保护接口未带 Bearer 令牌 |
+| `AUTH_TOKEN_INVALID` | 令牌无效/过期/用户被禁用 |
+| `AUTH_TOKEN_TYPE_INVALID` | 拿 refresh token 当 access token |
+| `AUTH_INVALID_CREDENTIALS` | `POST /auth/login` 账号或密码错误 |
+| `AUTH_REFRESH_TOKEN_INVALID` | `POST /auth/refresh` 刷新令牌无效 |
+| `PERMISSION_DENIED` | 非管理员访问 `/admin/*`、模型写接口 |
+| `API_KEY_MISSING` / `API_KEY_INVALID` | `POST /upload`、`GET /tasks/*` |
+| `DB_UNAVAILABLE` | `/tasks/<id>` 查库失败（503） |
+| `MAINTENANCE_MODE` | 维护模式拦截（503，带 `maintenance: true`） |
+
+> 前端灰度建议：新代码只判 `code`，旧代码继续判 `success`/`message`，两者当前完全兼容。
 
 ## 2. 接口总表
 
@@ -68,8 +105,8 @@
 ### 2.4 节点 `/nodes`（4）
 | 方法 | 路径 | 鉴权 | 入参 | 成功响应 | 状态码 |
 |---|---|---|---|---|---|
-| GET | `/nodes` | Bearer | 无（管理员返回全量） | `{type,timestamp,data:[node...]}` | 200 / 401 / 500 |
-| POST | `/nodes` | Bearer | `name, addr?, token?, capabilities`（逗号串） | `{success,message,data:{id,capabilities,token}}` | 201 / 400 / 500 |
+| GET | `/nodes` | Bearer | 无（管理员返回全量） | `{type,timestamp,data:[node...]}`；node 同时给 `capabilities`（字符串，旧）与 `capabilities_list`（数组，新） | 200 / 401 / 500 |
+| POST | `/nodes` | Bearer | `name, addr?, token?, capabilities`（**数组或逗号串均可**） | `{success,message,data:{id,capabilities:[...],token}}` | 201 / 400 / 500 |
 | PUT | `/nodes/<node_id>` | Bearer | 同上（可选字段） | `{success,message}` | 200 / 400 / **403** / 500 |
 | DELETE | `/nodes/<node_id>` | Bearer | 无 | `{success,message}` | 200 / **403** / 500 |
 
@@ -86,8 +123,8 @@
 ### 2.6 模型 `/models`（6）
 | 方法 | 路径 | 鉴权 | 入参 | 成功响应 | 状态码 |
 |---|---|---|---|---|---|
-| GET | `/models` | 无 | 无 | `{success,models:[{id:"37ac",type,name,version,config_url,config_hash}]}` | 200 |
-| GET | `/models/admin` | 管理员 | 无 | `{success,models:[{id:1,model_id:"37ac",...}]}` | 200 / 401 / 403 |
+| GET | `/models` | 无 | 无 | `{success,models:[{id,model_id,db_id?,type,name,version,config_url,config_hash}]}` | 200 |
+| GET | `/models/admin` | 管理员 | 无 | `{success,models:[{id,db_id,model_id,display_name,...}]}` | 200 / 401 / 403 |
 | POST | `/models` | 管理员 | `model_id, version, config_url, display_name?, type?, config_hash?, notes?, activate?` | `{success,message,data?}` | 201 / 400 |
 | PUT | `/models/<model_id>` | 管理员 | 同上（可选字段） | `{success,message,data?}` | 200 / 400 |
 | DELETE | `/models/<model_id>` | 管理员 | 无 | `{success,message}` | 200 / 400 |
@@ -118,39 +155,39 @@
 
 ### 🔴 高：会影响联调正确性或数据安全
 
-**3.1 `/tasks/<task_id>` 与 `/tasks/<task_id>/stream` 不校验任务归属（IDOR）**
+**3.1 `/tasks/<task_id>` 与 `/tasks/<task_id>/stream` 不校验任务归属（IDOR）** —— ⏸ **按需求保留（特性），本轮不改**
 现状：只校验 `X-API-Key` 是否有效，SQL 是 `SELECT result, status FROM task_results WHERE task_id = %s`，没有比对 `user_id`/`api_key_id`。
 影响：任何持有有效 API Key 的用户，只要拿到别人的 `task_id`（UUID v4，难猜但会出现在日志/前端/分享链接里），就能读到他人的识别结果。
-建议：查询加归属条件 `AND (user_id = %s OR api_key_id = %s)`，命中不到时返回 404（不要用 403，避免泄漏存在性）。
+决定（2026-09-13）：作为特性保留——`task_id` 本身即凭证，跨 Key 查询是需求之一。相应地`task_id` 不能出现在公开日志/分享链接里。
+（若以后要收紧：查询加 `AND (user_id = %s OR api_key_id = %s)`，命中不到返回 404。）
 
-**3.2 三套响应信封并存**
+**3.2 三套响应信封并存** —— ✅ **已修（灰度增量）**：出口统一补 `success`/`code`，旧结构原样保留（见 §1.1）
 | 信封 | 出现的接口 | 形态 |
 |---|---|---|
 | A | `/auth/*`、`/users/*`、`/api-keys/*`、`/admin/*`、`/models`(写) | `{success, message, data}` |
 | B | `/dashboard/*`、`/nodes`、`/upload`、`/tasks/*`、`GET /models` | `{type, timestamp, data\|status\|result\|models}`（**无 success**） |
 | C | `/dashboard/*` 的异常分支 | `{error: "..."}` |
 影响：前端/Apifox 无法写一套断言或统一拦截；B 类判断成功只能看 HTTP 码，C 类连 `message` 都没有。
-建议：统一 A 为外壳（B 的 `type/timestamp` 移入 `data` 或作为可选的顶层透传字段保留一个版本周期）。
+处理：**不动旧结构**，统一补 `success`/`code`（C 形态再补 `message`）。前端可按 `code` 写统一拦截器。
+后续（不兼容窗口再做）：把 B 的 `type/timestamp` 收进 `data`。
 
-**3.3 无机器可读错误码**
-现状：失败只有中文 `message`（如「令牌无效或已过期」）。
-影响：客户端做多语言/分支处理只能匹配字符串；Apifox 无法断言错误类型。
-建议：加 `code`（如 `AUTH_TOKEN_INVALID`、`RATE_LIMITED`、`NODE_FORBIDDEN`），保留 `message` 作展示文案。
+**3.3 无机器可读错误码** —— ✅ **已修（灰度增量）**
+处理：全量响应带 `code`（状态码推导 + 业务码覆盖），`message` 仍作展示文案，见 §1.1 的码表。
 
 **3.4 同一个 `id` 在 `/models` 与 `/models/admin` 中含义不同**
 - `GET /models` → `{"id": "37ac", "type": "local"}`（业务标识字符串）
 - `GET /models/admin` → `{"id": 1, "model_id": "37ac"}`（数据库主键 int）
 影响：Apifox 会把两者合并成同一个 Model，字段类型冲突；前端也容易混用。
-建议：公共接口改用 `model_id`，或在 `/models/admin` 中把主键命名为 `db_id`。
+处理：**两个都补**——`GET /models` 每条加 `model_id`（同 id）与 `db_id`（来自 models 表时才有）；`GET /models/admin` 每条加 `db_id`。旧 `id` 保留不动。
 
 **3.5 `capabilities` 是 JSON 字符串，且请求/响应格式不一致**
 现状：响应 `{"capabilities": "[\"local\", \"llm\"]"}`（JSON-in-JSON 字符串）；请求体却收逗号分隔的 `capabilities: "local,llm"`。
 影响：任何强类型客户端都要二次解析；空值/空格处理容易出错。
-建议：请求与响应都用数组 `["local","llm"]`（服务端兼容旧字符串入参一个版本）。
+处理：请求侧兼容三种写法（JSON 数组 / JSON 数组字符串 / 逗号串，数组不再 500）；响应侧新增数组字段 `capabilities_list`，旧字符串 `capabilities` 保留。前端可先读 `capabilities_list`。
 
 ### 🟠 中：风格与语义不统一，容易踩坑
 
-**3.6 路由别名**：`/dashboard/summary` ≡ `/dashboard/overview`，`/dashboard/tasks` ≡ `/dashboard/history`。建议保留一个，另一个标 `deprecated: true`（Apifox 会显示废弃标记）。
+**3.6 路由别名** —— 📄 **文档先行（已标注）**：`/dashboard/summary` ≡ `/dashboard/overview`，`/dashboard/tasks` ≡ `/dashboard/history`。OpenAPI 里已给 `overview` / `history` 标 `deprecated: true`（Apifox 会显示废弃标记），接口本身保留。
 
 **3.7 路径风格混用**：资源名有复数（`/nodes`、`/models`、`/api-keys`），也有动词路径（`/upload`、`/auth/verify`、`/users/change-password`、`/api-keys/<id>/revoke`、`/models/<id>/activate`）；`/models/admin` 又不像 `/admin/*` 前缀那样归属清晰。建议：`/models/admin` → `/admin/models`（旧路径保留别名），动词类保留但文档标注语义。
 
@@ -186,15 +223,31 @@
 **3.20 没有 API 版本前缀**：所有路径都在根下（`/models`、`/nodes`…），一旦不兼容变更只能同时改客户端。建议新接口走 `/v1/*`，或在 OpenAPI `info.version` + CHANGELOG 里维护兼容策略。
 **3.21 预留接口返回假数据**：`GET /users/sessions` 返回一条硬编码「当前会话」（`created_at: "当前会话"` 这种非日期值），`DELETE /users/sessions/<id>` 是空实现却回 200「会话已登出」。建议未实现就返回 501，或干脆先下线。
 
-## 4. 如果要动手，建议的顺序
+## 4. 本轮实施情况（2026-09-13）
 
-1. **先修 3.1（越权读取）**——纯服务端 SQL 加条件，零兼容风险。
-2. 再统一 3.2/3.3（信封 + 错误码）——建议新增 `code` 字段并保持旧字段不变，前端灰度切换。
-3. 3.4/3.5（模型 id 语义、`capabilities` 数组化）——属于同一批「字段含义修正」，改前先在前端 grep 使用点。
-4. 其余（3.6–3.21）可作为「文档先行」：在 OpenAPI 里标注 `deprecated`/语义说明，接口本身不动，等下一次不兼容窗口一起改。
+| 项 | 状态 | 说明 |
+|---|---|---|
+| 3.1 任务结果跨 Key 可读 | ⏸ **按需求保留（特性）** | 不改代码；`task_id` 视为凭证 |
+| 3.2 三套信封 | ✅ 已修（灰度） | `after_request` 统一补 `success`/`code`，旧字段不动（§1.1） |
+| 3.3 无错误码 | ✅ 已修（灰度） | 全量响应带 `code` + 业务码表（§1.1） |
+| 3.4 模型 id 语义 | ✅ 已修（灰度） | `/models` 补 `model_id`/`db_id`，`/models/admin` 补 `db_id` |
+| 3.5 capabilities 格式 | ✅ 已修（灰度） | 请求兼容数组，响应补 `capabilities_list` |
+| 3.6–3.21 其余 | 📄 文档先行 | OpenAPI 已标 `deprecated`（别名路由）与语义说明，接口行为不动 |
 
-## 5. 相关文件
+实现位置：`src/server/utils/api_response.py`（信封收口 + 错误码表 + JSON 错误页）、`src/server/AC_web/__init__.py`（安装钩子）、`middleware/{auth_middleware,rate_limiter}.py`、`routes/{auth_routes,upload_routes,node_routes,model_routes}.py`、`services/dashboard/node_service.py`。
 
-- 机器可读接口定义：`docs/openapi.yaml`（本目录）
+验证：`pytest tests/server` **128 passed**；对备用实例（13139）实测 31 个响应**全部**带 `success`+`code`；字段语义 12/12 通过。
+
+## 5. 如果要继续动，建议顺序
+
+1. 3.2 第二步：把 B 形态的 `type/timestamp` 收进 `data`（不兼容变更，需前端同步）。
+2. 3.15 限流覆盖 `/auth/*` + 加 `Retry-After` 头。
+3. 3.11 状态码语义（`/nodes/<id>` 的 404/403 拆分）、3.12 时间格式统一。
+4. 3.17–3.21 代码卫生（死代码、`activate` 真值陷阱、参数静默降级、版本前缀、假数据预留接口）。
+
+## 6. 相关文件
+
+- 机器可读接口定义：`docs/openapi.yaml`（本目录，含 `code` 字段与 deprecated 标注）
+- 字段语义实测脚本：`.dsh-scratch/verify_field_semantics.py`（`API_BASE` 可指向任意实例）
 - 实测抓包（每个接口的真实状态码与响应体）：`.dsh-scratch/api-probe.json`（脚本 `.dsh-scratch/probe_api.py`，可重跑）
 - 路由总览脚本：`.dsh-scratch/dump_routes.py`

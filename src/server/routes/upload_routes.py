@@ -22,6 +22,11 @@ from services.sse_bus import sse_bus
 from services.task_manager import task_manager
 from services import settings_service
 from middleware.rate_limiter import rate_limit
+from utils.api_response import (
+    CODE_API_KEY_INVALID,
+    CODE_API_KEY_MISSING,
+    CODE_DB_UNAVAILABLE,
+)
 from common.constants import ALLOWED_IMAGE_EXTENSIONS as _ALLOWED_IMAGE_EXTENSIONS
 from config.log_config import get_logger
 
@@ -98,6 +103,7 @@ def _require_api_key():
             jsonify(
                 {
                     "success": False,
+                    "code": CODE_API_KEY_MISSING,
                     "message": "缺少 API Key，请在请求头中提供 X-API-Key",
                 }
             ),
@@ -106,6 +112,7 @@ def _require_api_key():
 
     result = verify_api_key(api_key)
     if not result["success"]:
+        result.setdefault("code", CODE_API_KEY_INVALID)
         return None, jsonify(result), 401
 
     return result["data"], None, None
@@ -373,6 +380,7 @@ def get_task_result(task_id):
         conn = get_db_connection()
         if not conn:
             json_response["status"] = "error"
+            json_response["code"] = CODE_DB_UNAVAILABLE
             json_response["message"] = "数据库连接失败"
             return jsonify(json_response), 503
 

@@ -8,7 +8,14 @@ info:
     由源码 + 实测抓包整理，可直接导入 Apifox（导入数据 -> OpenAPI/Swagger）。
 
     约定与注意事项：
-    - 响应信封有 THREE 种：{success,message,data}（绝大多数）、{type,timestamp,data...}（dashboard/nodes/upload/tasks）、{error}（dashboard 异常分支）。
+    - 所有 JSON 响应都带 success 与 code（机器可读错误码，2026-09-13 起）。历史结构一律保留：
+      多数接口是 {success,message,data}；dashboard/nodes/upload/tasks 是 {type,timestamp,data...}；
+      dashboard 异常分支是 {error}（另外补一份 message）。
+    - code 取值 = 状态码默认码（OK/CREATED/ACCEPTED/INVALID_PARAMS/UNAUTHORIZED/FORBIDDEN/NOT_FOUND/
+      METHOD_NOT_ALLOWED/PAYLOAD_TOO_LARGE/RATE_LIMITED/INTERNAL_ERROR/NOT_IMPLEMENTED/SERVICE_UNAVAILABLE）
+      或业务码（AUTH_TOKEN_MISSING/AUTH_TOKEN_INVALID/AUTH_TOKEN_TYPE_INVALID/AUTH_INVALID_CREDENTIALS/
+      AUTH_REFRESH_TOKEN_INVALID/PERMISSION_DENIED/API_KEY_MISSING/API_KEY_INVALID/DB_UNAVAILABLE/MAINTENANCE_MODE）。
+      完整码表见 docs/api-inventory.md 第 1.1 节。
     - 鉴权分两类：Bearer JWT（用户态接口）与 X-API-Key（识别任务接口）。
     - POST /upload 受滑动窗口限流（默认 5 次/秒/IP），超限 429。
     - 维护模式开启时（settings.maintenance_mode=1），/auth、/admin、/static 之外一律 503。
@@ -324,7 +331,7 @@ paths:
       responses:
         "200":
           description: 成功
-          content: {application/json: {example: {type: nodes_list, timestamp: 1789267716, data: [{id: 5, name: n-001, addr: "47.254.232.51:36067", status: online, is_active: true, capabilities: "[\"local\", \"llm\"]", user_id: 1, username: admin, created_at: "2026-08-07 14:40:13", updated_at: "2026-09-11 01:07:45"}]}}}
+          content: {application/json: {example: {type: nodes_list, timestamp: 1789267716, success: true, code: OK, data: [{id: 5, name: n-001, addr: "47.254.232.51:36067", status: online, is_active: true, capabilities: "[\"local\", \"llm\"]", capabilities_list: [local, llm], user_id: 1, username: admin, created_at: "2026-08-07 14:40:13", updated_at: "2026-09-11 01:07:45"}]}}}
         "401": {$ref: "#/components/responses/Unauthorized"}
     post:
       tags: [节点]
@@ -342,7 +349,11 @@ paths:
                 name: {type: string, example: n-002}
                 addr: {type: string, example: "127.0.0.1:36067", description: 可选，节点地址}
                 token: {type: string, description: 可选，自定义节点令牌；不传则服务端生成}
-                capabilities: {type: string, example: "local,llm", description: 逗号分隔的推理能力}
+                capabilities:
+                  description: 推理能力；推荐数组，兼容逗号分隔串与 JSON 数组字符串
+                  oneOf:
+                    - {type: array, items: {type: string}, example: [local, llm]}
+                    - {type: string, example: "local,llm"}
       responses:
         "201":
           description: 创建成功
@@ -367,9 +378,13 @@ paths:
                 name: {type: string}
                 addr: {type: string}
                 token: {type: string}
-                capabilities: {type: string, example: "local,llm"}
+                capabilities:
+                  description: 推理能力；推荐数组，兼容逗号分隔串与 JSON 数组字符串
+                  oneOf:
+                    - {type: array, items: {type: string}, example: [local, llm]}
+                    - {type: string, example: "local,llm"}
       responses:
-        "200": {description: 成功, content: {application/json: {example: {success: true, message: 节点更新成功}}}}
+        "200": {description: 成功, content: {application/json: {example: {success: true, code: OK, message: 节点更新成功}}}}
         "400": {$ref: "#/components/responses/BadRequest"}
         "403": {description: 节点不存在或无权操作（当前实现合并为 403）}
         "500": {description: 更新失败}
@@ -462,7 +477,7 @@ paths:
       responses:
         "200":
           description: 成功
-          content: {application/json: {example: {success: true, models: [{id: 37ac, type: local, name: 37ac, version: 0.0.1, config_url: "https://example.com/config.json", config_hash: null}, {id: auto, type: auto, name: 自动分流（55% 37ac / 45% LLM）}]}}}
+          content: {application/json: {example: {success: true, code: OK, models: [{id: 37ac, model_id: 37ac, db_id: 1, type: local, name: 37ac, version: 0.0.1, config_url: "https://example.com/config.json", config_hash: null}, {id: auto, model_id: auto, type: auto, name: 自动分流（55% 37ac / 45% LLM）}]}}}
     post:
       tags: [模型]
       summary: 新增模型记录（管理员）
@@ -498,7 +513,7 @@ paths:
       responses:
         "200":
           description: 成功
-          content: {application/json: {example: {success: true, models: [{id: 1, model_id: 37ac, display_name: 37ac, type: local, version: 0.0.1, config_url: "https://example.com/config.json", config_hash: null, notes: "", status: active, created_at: "2026-08-28 21:20:26", updated_at: "2026-08-29 16:33:28"}]}}}
+          content: {application/json: {example: {success: true, code: OK, models: [{id: 1, db_id: 1, model_id: 37ac, display_name: 37ac, type: local, version: 0.0.1, config_url: "https://example.com/config.json", config_hash: null, notes: "", status: active, created_at: "2026-08-28 21:20:26", updated_at: "2026-08-29 16:33:28"}]}}}
         "403": {$ref: "#/components/responses/Forbidden"}
 
   /models/{model_id}:
@@ -792,10 +807,20 @@ components:
       type: object
       properties:
         success: {type: boolean, example: true}
+        code: {type: string, example: OK, description: 机器可读错误码，见 api-inventory.md 1.1}
         message: {type: string, example: 操作成功}
         data: {type: object, nullable: true}
     ErrorEnvelope:
       type: object
       properties:
         success: {type: boolean, example: false}
+        code: {type: string, example: INVALID_PARAMS, description: 机器可读错误码，见 api-inventory.md 1.1}
         message: {type: string, example: 参数错误}
+    ErrorCodes:
+      type: string
+      description: 状态码默认码 + 业务码
+      enum: [OK, CREATED, ACCEPTED, INVALID_PARAMS, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, METHOD_NOT_ALLOWED,
+             PAYLOAD_TOO_LARGE, RATE_LIMITED, INTERNAL_ERROR, NOT_IMPLEMENTED, SERVICE_UNAVAILABLE,
+             AUTH_TOKEN_MISSING, AUTH_TOKEN_INVALID, AUTH_TOKEN_TYPE_INVALID, AUTH_INVALID_CREDENTIALS,
+             AUTH_REFRESH_TOKEN_INVALID, PERMISSION_DENIED, API_KEY_MISSING, API_KEY_INVALID,
+             DB_UNAVAILABLE, MAINTENANCE_MODE]

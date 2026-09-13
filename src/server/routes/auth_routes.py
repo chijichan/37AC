@@ -6,6 +6,12 @@ from flask import Blueprint, request, jsonify
 from services.auth_service import register, login, refresh_token, verify_token
 from services.auth.password_service import generate_reset_token, validate_reset_token, reset_password
 from middleware.auth_middleware import login_required
+from utils.api_response import (
+    CODE_AUTH_INVALID_CREDENTIALS,
+    CODE_AUTH_REFRESH_INVALID,
+    CODE_AUTH_TOKEN_INVALID,
+    CODE_AUTH_TOKEN_MISSING,
+)
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
 
@@ -39,6 +45,8 @@ def login_route():
 
     result = login(username, password, ip)
     status_code = 200 if result["success"] else 401
+    if not result["success"]:
+        result.setdefault("code", CODE_AUTH_INVALID_CREDENTIALS)
     return jsonify(result), status_code
 
 
@@ -53,6 +61,8 @@ def refresh_route():
 
     result = refresh_token(refresh_token_str)
     status_code = 200 if result["success"] else 401
+    if not result["success"]:
+        result.setdefault("code", CODE_AUTH_REFRESH_INVALID)
     return jsonify(result), status_code
 
 
@@ -61,11 +71,14 @@ def verify_route():
     """验证 JWT 令牌是否有效"""
     auth_header = request.headers.get("Authorization", "")
     if not auth_header.startswith("Bearer "):
-        return jsonify({"success": False, "message": "缺少令牌"}), 401
+        return jsonify({"success": False, "code": CODE_AUTH_TOKEN_MISSING,
+                        "message": "缺少令牌"}), 401
 
     token = auth_header[7:]
     result = verify_token(token)
     status_code = 200 if result["success"] else 401
+    if not result["success"]:
+        result.setdefault("code", CODE_AUTH_TOKEN_INVALID)
     return jsonify(result), status_code
 
 

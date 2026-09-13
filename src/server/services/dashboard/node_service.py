@@ -1,10 +1,48 @@
 # services/dashboard/node_service.py
 """节点服务 - 节点数据库操作"""
 
+import json
+
 import pymysql
 from common.crypto import generate_node_token, hash_node_token
 from common.db_utils import build_update_sql
 from services.node_manager import get_db_connection
+
+DEFAULT_CAPABILITIES = ("local",)
+
+
+def parse_capabilities(raw, default=DEFAULT_CAPABILITIES) -> list:
+    """把节点推理能力归一化为字符串列表。
+
+    兼容三种历史写法（请求与数据库里都出现过）：
+      - JSON 数组字符串：'["local", "llm"]'
+      - JSON 数组：["local", "llm"]
+      - 逗号分隔字符串：'local,llm'
+    空值回退 default。
+    """
+    if raw is None:
+        return list(default)
+
+    if isinstance(raw, (list, tuple, set)):
+        items = [str(x).strip() for x in raw]
+    else:
+        text = str(raw).strip()
+        if not text:
+            return list(default)
+        if text.startswith("["):
+            try:
+                parsed = json.loads(text)
+            except ValueError:
+                parsed = None
+            if isinstance(parsed, list):
+                items = [str(x).strip() for x in parsed]
+            else:
+                items = [p.strip() for p in text.split(",")]
+        else:
+            items = [p.strip() for p in text.split(",")]
+
+    result = [item for item in items if item]
+    return result or list(default)
 
 
 def create_node(name, token=None, addr=None, is_active=True, user_id=None, capabilities='["local"]'):
@@ -131,6 +169,8 @@ def _row_to_node_dict(row):
         "id": row.get("id"),
         "name": row.get("name") or row.get("node_name") or row.get("id"),
         "capabilities": row.get("capabilities") or '["local"]',
+        # 同义数组字段：capabilities 是历史遗留的 JSON 字符串，新客户端用这个
+        "capabilities_list": parse_capabilities(row.get("capabilities")),
         "status": row.get("status"),
         "addr": row.get("addr"),
         "is_active": bool(row.get("is_active")),

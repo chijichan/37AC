@@ -6,6 +6,12 @@ from functools import wraps
 from flask import request, jsonify, g
 
 from services.auth_service import decode_token, verify_token
+from utils.api_response import (
+    CODE_AUTH_TOKEN_INVALID,
+    CODE_AUTH_TOKEN_MISSING,
+    CODE_AUTH_TOKEN_TYPE_INVALID,
+    CODE_PERMISSION_DENIED,
+)
 
 
 def _verify_access_token(token):
@@ -15,20 +21,24 @@ def _verify_access_token(token):
     payload 仅在验证通过时非 None。
     """
     if not token:
-        return None, {"success": False, "message": "未提供认证令牌"}, 401
+        return None, {"success": False, "code": CODE_AUTH_TOKEN_MISSING,
+                      "message": "未提供认证令牌"}, 401
 
     payload = decode_token(token)
     if not payload:
-        return None, {"success": False, "message": "令牌无效或已过期"}, 401
+        return None, {"success": False, "code": CODE_AUTH_TOKEN_INVALID,
+                      "message": "令牌无效或已过期"}, 401
 
     # 拒绝 refresh token 当作 access token 使用
     if payload.get("type") == "refresh":
-        return None, {"success": False, "message": "请使用访问令牌而非刷新令牌"}, 401
+        return None, {"success": False, "code": CODE_AUTH_TOKEN_TYPE_INVALID,
+                      "message": "请使用访问令牌而非刷新令牌"}, 401
 
     # 校验用户是否被禁用或删除，并以数据库中的最新角色覆盖 token 内角色
     result = verify_token(token)
     if not result.get("success"):
-        return None, {"success": False, "message": result.get("message")}, 401
+        return None, {"success": False, "code": CODE_AUTH_TOKEN_INVALID,
+                      "message": result.get("message")}, 401
 
     user_data = result.get("data") or {}
     payload["user_id"] = user_data.get("user_id", payload.get("user_id"))
@@ -67,7 +77,8 @@ def admin_required(f):
             return jsonify(error), status
 
         if payload.get("role") != "admin":
-            return jsonify({"success": False, "message": "需要管理员权限"}), 403
+            return jsonify({"success": False, "code": CODE_PERMISSION_DENIED,
+                            "message": "需要管理员权限"}), 403
 
         # 将用户信息存入 Flask 全局上下文
         g.user_id = payload.get("user_id")

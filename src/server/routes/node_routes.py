@@ -11,6 +11,7 @@ from services.dashboard.node_service import (
     delete_node as delete_node_from_db,
     get_all_nodes_from_db,
     get_user_nodes_from_db,
+    parse_capabilities,
 )
 from services.node_manager import node_manager
 from config.log_config import get_logger
@@ -70,9 +71,8 @@ def add_node():
         addr = (data.get("addr") or "").strip()
         # 用户自定义 Token（可选）：提供则哈希存储，否则服务端自动生成
         custom_token = (data.get("token") or "").strip() or None
-        capabilities_raw = (data.get("capabilities") or "local").strip()
-        # 将逗号分隔字符串转为 JSON 数组格式（用于 DB 存储）
-        capabilities_list = [c.strip() for c in capabilities_raw.split(",")]
+        # capabilities 兼容 JSON 数组、JSON 数组字符串与逗号分隔串，统一按 JSON 数组入库
+        capabilities_list = parse_capabilities(data.get("capabilities"))
         capabilities_json = json.dumps(capabilities_list, ensure_ascii=False)
 
         if not name:
@@ -121,7 +121,7 @@ def edit_node(node_id):
 
         name = (data.get("name") or "").strip()
         addr = (data.get("addr") or "").strip()
-        capabilities_raw = (data.get("capabilities") or "").strip()
+        raw_capabilities = data.get("capabilities")
         # 修改 Token（可选）：提供则哈希存储并更新
         custom_token = (data.get("token") or "").strip() or None
 
@@ -130,9 +130,8 @@ def edit_node(node_id):
             kwargs["name"] = name
         if addr:
             kwargs["addr"] = addr if addr else None
-        if capabilities_raw:
-            capabilities_list = [c.strip() for c in capabilities_raw.split(",")]
-            kwargs["capabilities"] = json.dumps(capabilities_list, ensure_ascii=False)
+        if raw_capabilities not in (None, "", []):
+            kwargs["capabilities"] = json.dumps(parse_capabilities(raw_capabilities), ensure_ascii=False)
         if custom_token:
             kwargs["token"] = custom_token
 

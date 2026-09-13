@@ -9,6 +9,7 @@ from flask import request, jsonify
 
 from config.log_config import get_logger
 from config.base import RATE_LIMIT_ENABLED, RATE_LIMIT_REQUESTS, RATE_LIMIT_WINDOW_SEC
+from utils.api_response import CODE_RATE_LIMITED
 
 logger = get_logger("rate_limiter")
 
@@ -123,6 +124,7 @@ def rate_limit(f):
         if not rate_limiter.is_allowed():
             return jsonify({
                 "success": False,
+                "code": CODE_RATE_LIMITED,
                 "message": f"请求过于频繁，请在 {RATE_LIMIT_WINDOW_SEC} 秒后重试",
             }), 429
         return f(*args, **kwargs)

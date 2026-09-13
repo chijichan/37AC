@@ -22,15 +22,43 @@ logger = get_logger("model_routes")
 
 @model_bp.route("/models", methods=["GET"])
 def list_models():
-    """拉取当前可用的识别模型列表（无需鉴权）。"""
-    return jsonify({"success": True, "models": node_manager.get_model_list()}), 200
+    """拉取当前可用的识别模型列表（无需鉴权）。
+
+    说明：id 是**业务标识字符串**（37ac / llm / auto）；这里额外补上同值的
+    model_id 与数据库主键 db_id（若来自 models 表），消除与 /models/admin 的歧义。
+    """
+    # model_id -> models 表主键，便于客户端直接调用 /models/<int:model_id>
+    try:
+        db_ids = {m.get("model_id"): m.get("id") for m in model_manager.get_active_models()}
+    except Exception:
+        db_ids = {}
+
+    models = []
+    for model in node_manager.get_model_list():
+        item = dict(model)
+        item.setdefault("model_id", item.get("id"))
+        db_id = db_ids.get(item["model_id"])
+        if db_id is not None:
+            item.setdefault("db_id", db_id)
+        models.append(item)
+
+    return jsonify({"success": True, "models": models}), 200
 
 
 @model_bp.route("/models/admin", methods=["GET"])
 @admin_required
 def admin_list_models():
-    """管理员：返回全部模型记录。"""
-    return jsonify({"success": True, "models": model_manager.list_models()}), 200
+    """管理员：返回全部模型记录。
+
+    这里的 id 是数据库主键，业务标识是 model_id；额外补 db_id（= id）让两者不再混淆。
+    """
+    models = []
+    for model in model_manager.list_models():
+        item = dict(model)
+        item.setdefault("db_id", item.get("id"))
+        models.append(item)
+
+    return jsonify({"success": True, "models": models}), 200
 
 
 @model_bp.route("/models", methods=["POST"])

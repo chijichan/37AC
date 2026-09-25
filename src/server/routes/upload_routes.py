@@ -24,6 +24,9 @@ from services import settings_service
 from services import storage_service
 from services import channel_service
 from config.base import HUMAN_VOTE_LIMIT_PER_HOUR
+
+# 一次请求最多提交多少个角色标注（一张图多角色的上限）
+MAX_HUMAN_VOTES_PER_REQUEST = 20
 from middleware.rate_limiter import rate_limit
 from middleware.auth_middleware import _extract_token, _verify_access_token
 from utils.api_response import (
@@ -436,19 +439,49 @@ def upload_and_predict():
 def submit_human_label():
     """人工识别通道：提交/修改某张图的人工标注（匿名可用，按 IP 限流）。
 
-    请求体（JSON 或表单）：{task_id, name, character_index?, note?}
+    请求体两种形态：
+    1) 单条：{task_id, name, bbox?, bbox_percent?, character_index?, note?}
+    2) 批量（一张图多个角色）：{task_id, votes:[{name, bbox?, bbox_percent?, character_index?, note?}, ...]}
+    - bbox / bbox_percent：前端自己框选的人物区域（归一化 0-1 / 百分比 0-100，分母是原图尺寸）
+    - character_index：可选，沿用模型通道 characters[i] 的框（与 bbox 二选一，给了 bbox 就不再补）
+    - 批量提交时，该 IP 在这张图上此前的票会被整批替换（同一人可标注多个角色，重复提交算改票）
+    - 同一张图可以有多个 IP 各留一套票：一图多人标注
     规则：同一 IP 对同一 task 重复提交视为**改票**；每 IP 每小时上限见 HUMAN_VOTE_LIMIT_PER_HOUR。
     结果写入 result["human"]，前端与 37ac / llm 分区展示。
     """
     data = request.get_json(silent=True) or request.form or {}
     task_id = str(data.get("task_id") or "").strip()
+
+    # 批量形态：votes=[{name, bbox, note}, ...]（一张图多个角色）
+    raw_votes = data.get("votes")
+    if isinstance(raw_votes, str):
+        try:
+            raw_votes = json.loads(raw_votes)
+        except json.JSONDecodeError:
+            raw_votes = None
+    batch = raw_votes if isinstance(raw_votes, list) else None
+
     name = str(data.get("name") or data.get("human_name") or "").strip()
-    if not task_id or not name:
+    if not task_id or (not name and not batch):
         return jsonify({
             "success": False,
             "code": CODE_INVALID_PARAMS,
-            "message": "缺少 task_id 或 name",
+            "message": "缺少 task_id，或 name / votes 至少给一个",
         }), 400
+
+    if batch is not None:
+        if not batch:
+            return jsonify({
+                "success": False,
+                "code": CODE_INVALID_PARAMS,
+                "message": "votes 不能为空数组",
+            }), 400
+        if len(batch) > MAX_HUMAN_VOTES_PER_REQUEST:
+            return jsonify({
+                "success": False,
+                "code": CODE_INVALID_PARAMS,
+                "message": f"一次最多提交 {MAX_HUMAN_VOTES_PER_REQUEST} 个角色标注",
+            }), 400
 
     ip = _client_ip()
     if not channel_service.vote_allowed(ip, HUMAN_VOTE_LIMIT_PER_HOUR):
@@ -466,17 +499,43 @@ def submit_human_label():
             "message": "任务不存在或已被清理",
         }), 404
 
-    channel_service.add_human_vote(
-        payload,
-        channel_service.human_entry(
-            name,
-            character_index=data.get("character_index"),
-            note=data.get("note"),
-            source="human",
-            voter=f"ip:{ip}",
-        ),
-        voter_key=f"ip:{ip}",
-    )
+    if batch is not None:
+        entries = []
+        for item in batch:
+            item = item if isinstance(item, dict) else {}
+            entry_name = str(item.get("name") or item.get("human_name") or "").strip()
+            if not entry_name:
+                continue
+            entries.append(channel_service.human_entry(
+                entry_name,
+                character_index=item.get("character_index"),
+                bbox=item.get("bbox"),
+                bbox_percent=item.get("bbox_percent"),
+                note=item.get("note"),
+                source="human",
+                voter=f"ip:{ip}",
+            ))
+        if not entries:
+            return jsonify({
+                "success": False,
+                "code": CODE_INVALID_PARAMS,
+                "message": "votes 里没有有效的角色名",
+            }), 400
+        channel_service.set_human_votes(payload, entries, voter_key=f"ip:{ip}")
+    else:
+        channel_service.add_human_vote(
+            payload,
+            channel_service.human_entry(
+                name,
+                character_index=data.get("character_index"),
+                bbox=data.get("bbox"),
+                bbox_percent=data.get("bbox_percent"),
+                note=data.get("note"),
+                source="human",
+                voter=f"ip:{ip}",
+            ),
+            voter_key=f"ip:{ip}",
+        )
     channels = list(dict.fromkeys((payload.get("requested_channels") or []) + [channel_service.CHANNEL_HUMAN]))
     payload["requested_channels"] = channels
     channel_service.resolve_human_bbox(payload)
@@ -692,6 +751,94 @@ def get_task_image(task_id):
     response.headers["Cache-Control"] = "private, max-age=3600"
     response.headers["Content-Length"] = str(len(data))
     return response
+
+
+@upload_bp.route("/tasks/recent", methods=["GET"])
+def list_recent_tasks():
+    """最近任务列表（公开 feed + 人工标注选题用）。
+
+    只返回元数据（task_id / 状态 / 时间 / 各通道状态 / 是否已有人工票 / 图片是否可取），
+    **不返回识别结果**，供前端「历史识别（大家）」与「能工智人」自动选题使用。
+    参数：limit（默认 20，最大 50）、only_unannotated=1（只要还没有人工票的）。
+    """
+    _api_key_data, error_response, status_code = _require_api_key()
+    if error_response:
+        return error_response, status_code
+
+    limit = request.args.get("limit", 20, type=int) or 20
+    limit = max(1, min(50, limit))
+    only_unannotated = str(request.args.get("only_unannotated", "")).lower() in ("1", "true", "yes")
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({
+                "success": False,
+                "code": CODE_DB_UNAVAILABLE,
+                "message": "数据库连接失败",
+            }), 503
+
+        with conn.cursor() as cursor:
+            # 多通道会把 "<父id>:<通道>" 也写进同一张表，这里只看父任务
+            cursor.execute(
+                "SELECT task_id, status, created_at, result FROM task_results "
+                "WHERE task_id NOT LIKE '%%:%%' ORDER BY id DESC LIMIT %s",
+                (limit * 3,),
+            )
+            rows = cursor.fetchall()
+
+        tasks = []
+        for task_id, task_status, created_at, result in rows:
+            payload = {}
+            if isinstance(result, dict):
+                payload = result
+            elif isinstance(result, (str, bytes)) and result:
+                try:
+                    payload = json.loads(result)
+                except json.JSONDecodeError:
+                    payload = {}
+
+            votes = ((payload.get("human") or {}).get("votes")) or []
+            channels = payload.get("requested_channels") or []
+            channel_status = {
+                channel: channel_service.channel_status(payload, channel)
+                for channel in channels
+            } if channels else {}
+            annotated = bool(votes)
+
+            if only_unannotated and annotated:
+                continue
+
+            tasks.append({
+                "task_id": task_id,
+                "status": task_status,
+                "created_at": created_at.strftime("%Y-%m-%d %H:%M:%S") if hasattr(created_at, "strftime") else str(created_at or ""),
+                "channels": channels,
+                "channel_status": channel_status,
+                "human_votes": len(votes),
+                "annotated": annotated,
+                "image_available": bool(_image_info(task_id).get("available")),
+            })
+            if len(tasks) >= limit:
+                break
+
+        return jsonify({
+            "success": True,
+            "type": "task_list",
+            "count": len(tasks),
+            "data": {"tasks": tasks},
+        }), 200
+    except Exception as e:
+        logger.error("查询最近任务失败: %s", e)
+        return jsonify({
+            "success": False,
+            "code": CODE_INVALID_PARAMS,
+            "message": f"查询最近任务失败: {e}",
+        }), 500
+    finally:
+        if conn:
+            conn.close()
 
 
 @upload_bp.route("/tasks/<task_id>", methods=["GET"])

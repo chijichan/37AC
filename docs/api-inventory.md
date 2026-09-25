@@ -149,7 +149,7 @@ Werkzeug 默认的 HTML 错误页（404/405/413/500…）也换成了同款 JSON
 |---|---|---|---|---|---|
 | GET | `/upload` | 无 | 无 | `{type:"info",message,usage:{...}}` | 200 |
 | POST | `/upload` | `X-API-Key` + 限流 | multipart `file`/`image` 或 `image_base64`；`channels=37ac,llm,human`（或旧 `model=37ac\|llm\|auto`）；人工可内联 `human_name`/`human_character_index`/`human_note` | `{type:"dispatch_task",status:"queued",task_id,model,channels,channel_status}`；或 SSE 流 | **200**（语义应为 202）/ 400 / 401 / 429 |
-| POST | `/upload/human` | **匿名**（按 IP 限流） | `{task_id, name, character_index?, note?}` | `{success,message,data:{task_id,status,human,channel_status}}` | 200 / 400 / 404 / 429 |
+| POST | `/upload/human` | **匿名**（按 IP 限流） | 单条：`{task_id, name, character_index?, note?}`；批量（一图多角色）：`{task_id, votes:[{name, bbox?, bbox_percent?, character_index?, note?}, ...]}`（≤20 条） | `{success,message,data:{task_id,status,human,channel_status}}` | 200 / 400 / 404 / 429 |
 | GET | `/tasks/<task_id>` | `X-API-Key` | 无 | `{type:"task_result",status,result,channels_requested,channel_status,image:{...},...}` | 200 / **202**（未完成）/ 401 / 503 |
 | GET | `/tasks/<task_id>/image` | `X-API-Key` 或 Bearer | `original=1`、`max_side=N` | 图片二进制（响应头 `X-Image-Source: cache\|tmp\|node`） | 200 / 401 / **410**（本地与节点都没有） |
 | GET | `/tasks/<task_id>/stream` | `X-API-Key` | 无 | SSE：`data: {status,result,...}` | 200（流）/ 401 |
@@ -216,7 +216,9 @@ Werkzeug 默认的 HTML 错误页（404/405/413/500…）也换成了同款 JSON
 
 - **人工通道两条入口**：上传时内联（`human_name`，voter=`api:<key_id>`）；或 `POST /upload/human` 匿名补投
   （voter=`ip:<ip>`，可跨设备玩，按 IP 限流 `HUMAN_VOTE_LIMIT_PER_HOUR` 默认 60/小时）。
-- **改票**：同一 voter 对同一任务重复提交视为改票；不同 voter 各留一条。
+- **改票**：同一 voter 对同一任务重复提交视为改票；不同 voter 各留一条 → **一张图可以被多个人分别标注**。
+- **一图多角色**：单次可提交 `votes:[...]` 批量（最多 20 个角色，各自带 `bbox`/`bbox_percent`）；
+  语义是该 voter 在这张图上的标注集合**整批替换**（仍是改票，不会重复叠加）。
 - **人员位置**：人工票只给 `character_index` 时，读取接口会从模型通道的 `characters[i]` 复制 `bbox`/`bbox_percent`
   （并附 `model_guess`，便于前端显示「人 vs 模型」）。
 - **部分完成**：37ac/llm 几秒回来、人工可能永远不来；`channel_status` 给出每通道状态，

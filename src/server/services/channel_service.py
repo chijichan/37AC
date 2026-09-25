@@ -159,6 +159,37 @@ def add_human_vote(payload, entry, voter_key=None):
     return payload
 
 
+def set_human_votes(payload, entries, voter_key=None):
+    """用一整套人工标注替换某个 voter 之前的票（支持"一张图多个角色"）。
+
+    - entries：本次提交的角色列表，每项由 human_entry() 构造
+    - voter_key 非空时：先删掉该 voter 在此任务上的全部旧票，再整批写入
+      （语义：某个浏览器对某张图的标注集合 = 它最后一次提交的内容，仍算改票）
+    - 未给 voter_key 时按追加处理
+    """
+    section = payload.get(CHANNEL_HUMAN)
+    if not isinstance(section, dict):
+        section = {"status": "completed", "votes": []}
+    votes = [v for v in (section.get("votes") or []) if isinstance(v, dict)]
+
+    if voter_key:
+        votes = [v for v in votes if v.get("voter") != voter_key]
+
+    for entry in entries or []:
+        item = dict(entry)
+        if voter_key:
+            item["voter"] = voter_key
+        votes.append(item)
+
+    votes.sort(key=lambda v: (v.get("voter") or "", v.get("at") or 0))
+    section["votes"] = votes
+    section["count"] = len(votes)
+    section["status"] = "completed" if votes else "awaiting"
+    payload[CHANNEL_HUMAN] = section
+    payload["human"] = section
+    return payload
+
+
 def merge_channel_result(payload, channel, node_result):
     """把节点回传的通道结果写进 payload，并维护顶层兼容字段。"""
     payload = payload if isinstance(payload, dict) else {}

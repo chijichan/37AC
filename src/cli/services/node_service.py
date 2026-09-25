@@ -38,6 +38,7 @@ from config.base import (
     LLM_TIMEOUT_SEC,
     LOCAL_TASK_TIMEOUT_SEC,
     IMAGE_RETAIN_SEC,
+    AUTO_UPDATE_MODEL,
     CAPABILITIES,
 )
 
@@ -97,7 +98,26 @@ def _download_and_verify(url, dst, expected_hash=None, label="文件"):
     return True
 
 
-def _sync_local_model(models):
+_update_disabled_logged = False
+
+
+def should_sync_model(auto_update: bool, local_ready: bool):
+    """是否执行模型同步（纯函数，便于单测）。
+
+    Returns:
+        (execute, reason):
+            local_ready=False -> (True,  "bootstrap")  本地缺模型/类别，必须下载一次
+            auto_update=True  -> (True,  "auto")       正常自动更新
+            否则              -> (False, "disabled")   开关关闭且本地可用，跳过
+    """
+    if not local_ready:
+        return True, "bootstrap"
+    if auto_update:
+        return True, "auto"
+    return False, "disabled"
+
+
+def _sync_local_model(models, auto_update=None):
     """根据 register_ack.data.models 同步本地模型（config_url 方案）。
 
     流程：
@@ -107,6 +127,25 @@ def _sync_local_model(models):
       4. 版本不一致或文件缺失时下载权重、类别并校验替换
     本地版本记录在 MODEL_INFO_PATH（saves/models/config.json）。
     """
+    global _update_disabled_logged
+
+    # 自动更新开关：关闭时不发起任何检查/下载，除非本地模型缺失（bootstrap）
+    auto_update = AUTO_UPDATE_MODEL if auto_update is None else bool(auto_update)
+    local_ready = MODEL_PATH.exists() and CLASSES_JSON_PATH.exists()
+    execute, reason = should_sync_model(auto_update, local_ready)
+    if not execute:
+        if not _update_disabled_logged:
+            _update_disabled_logged = True
+            logger.info(
+                "模型自动更新已关闭（AUTO_UPDATE_MODEL=False），跳过版本检查与下载；"
+                "当前模型: %s（要更新请改 .env 或删掉该文件后重启）", MODEL_PATH,
+            )
+        else:
+            logger.debug("模型自动更新已关闭，跳过同步")
+        return
+    if reason == "bootstrap":
+        logger.info("本地模型或类别文件缺失，自动下载一次（bootstrap，不受 AUTO_UPDATE_MODEL 限制）")
+
     try:
         import requests
         if not models:
@@ -207,7 +246,17 @@ def _sync_local_model(models):
 
 
 # === TCP 客户端主逻辑 ===
-def start_node_service():
+def start_node_service(auto_update_model=None):
+    """启动节点服务。
+
+    Args:
+        auto_update_model: 覆盖 AUTO_UPDATE_MODEL 开关（None = 用 .env 配置）。
+                           `python main.py node --no-model-update` 会传 False。
+    """
+    if auto_update_model is None:
+        auto_update_model = AUTO_UPDATE_MODEL
+    logger.info("模型自动更新: %s", "开启" if auto_update_model else "关闭")
+
     # 配置参数已移至 config/base.py，通过 .env 文件加载
     # 请勿在此处硬编码任何敏感数据
 
@@ -593,7 +642,9 @@ def start_node_service():
                     # 注册成功：按 register_ack.data.models 后台同步所选模型
                     models_list = msg.get("data", {}).get("models") or []
                     threading.Thread(
-                        target=_sync_local_model, args=(models_list,), daemon=True
+                        target=_sync_local_model,
+                        args=(models_list, auto_update_model),
+                        daemon=True,
                     ).start()
 
                 # === 任务状态响应 ===

@@ -11,7 +11,7 @@ CLI 采用**子命令**设计（无参数运行则进入交互菜单）：
 | `python main.py predict [--llm] [--image PATH]` | 识别角色（默认本地模型；`--llm` 用大模型） |
 | `python main.py dataset verify` | 验证数据集图像 |
 | `python main.py dataset crop` | YOLO 裁剪数据集 |
-| `python main.py node` | 启动节点服务 |
+| `python main.py node [--no-model-update]` | 启动节点服务（`--no-model-update`＝本次运行不自动更新模型） |
 
 交互菜单中 **[2] 识别角色** 会先弹出**识别方式子菜单**：
 
@@ -181,6 +181,19 @@ src\www\stop-nginx.bat
 ```bash
 python src/cli/main.py node
 ```
+
+节点启动后会自动向服务端注册，并同步识别能力（local / llm）与模型列表。
+
+**模型自动更新开关**（`src/cli/.env`）：
+
+| 配置 | 行为 |
+|------|------|
+| `AUTO_UPDATE_MODEL=True`（默认） | 注册成功后检查服务端模型版本，发现新版本就下载权重/类别并热替换（先校验 SHA-256） |
+| `AUTO_UPDATE_MODEL=False` | 不检查也不更新；**仅当本地模型或 `classes.json` 缺失时下载一次**（否则节点无法推理） |
+| `python main.py node --no-model-update` | 本次运行临时按 False 处理（优先级高于 .env） |
+
+关闭后要更新模型：把开关改回 `True` 重启，或删掉 `src/cli/saves/models/` 下的权重/类别文件后重启（触发一次 bootstrap 下载）。
+本地版本记录在 `saves/models/config.json`；下载校验失败会丢弃临时文件、保留旧模型，不影响正在跑的节点。
 
 > 推荐启动顺序：Flask 服务端 -> PHP 仪表盘 -> 边缘节点
 

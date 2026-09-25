@@ -30,6 +30,13 @@ DEVICE = None
 DATASET_DIR = Path(os.getenv("DATASET_DIR", "W:/Img"))
 
 MODEL_DIR = ROOT_PATH / "saves" / "models"
+
+# ==================== 模型自动更新开关 ====================
+# True（默认）：节点注册后自动检查服务端模型版本，发现新版本就下载替换
+# False：不自动检查/更新；仅当本地模型或类别文件缺失时下载一次（否则节点无法推理）
+#        要更新时：把本开关改回 True 重启，或删掉 saves/models 下的文件后重启
+#        运行期可用 `python main.py node --no-model-update` 临时覆盖为关闭
+AUTO_UPDATE_MODEL = os.getenv("AUTO_UPDATE_MODEL", "True").lower() == "true"
 MODEL_PATH = MODEL_DIR / os.getenv("MODEL_FILENAME", "37ac-v0.0.1.pth")
 CLASSES_JSON_PATH = MODEL_DIR / "classes.json"
 # 模型配置/版本信息（训练时自动生成，供模型管理器同步比对）

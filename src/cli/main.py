@@ -132,7 +132,9 @@ def _action_node(args=None):
 
     logger.info("=== 4. 节点服务 ===")
     logger.info("正在加载节点服务模块（首次加载 PyTorch 较慢，请稍候）...")
-    start_node_service()
+    # --no-model-update：本次运行关闭模型自动更新（覆盖 .env 的 AUTO_UPDATE_MODEL）
+    auto_update = False if (args is not None and getattr(args, "no_model_update", False)) else None
+    start_node_service(auto_update_model=auto_update)
 
 
 MENU_ACTIONS = {
@@ -222,7 +224,10 @@ def main():
     ds_sub.add_parser("crop", help="使用 YOLO 裁剪数据集")
 
     # node：节点服务
-    subparsers.add_parser("node", help="启动分布式识别节点服务")
+    p_node = subparsers.add_parser("node", help="启动分布式识别节点服务")
+    p_node.add_argument("--no-model-update", action="store_true",
+                        help="本次运行不自动检查/更新模型（等价 .env 的 AUTO_UPDATE_MODEL=False；"
+                             "本地缺失时仍会下载一次）")
 
     args = parser.parse_args()
 
@@ -235,6 +240,7 @@ def main():
         ("llm", False),
         ("image", None),
         ("dataset_action", None),
+        ("no_model_update", False),
     ):
         if not hasattr(args, _attr):
             setattr(args, _attr, _default)

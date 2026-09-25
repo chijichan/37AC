@@ -272,7 +272,9 @@ if (!$isAjax) {
 
     function isAdmin() {
         const user = window.Auth ? Auth.getUser() : null;
-        return !!(user && user.role === 'admin');
+        // 令牌过期/无效时不再按管理员渲染（真正的权限由后端 403 兜底）
+        const tokenValid = window.Auth && !Auth.isTokenExpired(Auth.getToken());
+        return !!(user && user.role === 'admin' && tokenValid);
     }
 
     async function loadModels() {

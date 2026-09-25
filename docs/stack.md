@@ -33,7 +33,7 @@
 | Nunito / JetBrains Mono | 自托管可变字体 |
 | Phosphor Icons | 图标（自托管 web font） |
 | Cropper.js 1.6.2 | 图片裁剪（自托管） |
-| @imgly/background-removal 1.7.0 | AI 去背景（ESM 自托管，WASM 模型自托管） |
+| 原生 Canvas（无依赖） | 提交前把图片最长边压到 512px |
 | Auth.js | JWT 认证模块 |
 | EventSource (SSE) | 实时结果推送 |
 

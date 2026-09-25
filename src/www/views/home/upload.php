@@ -472,7 +472,7 @@ require_once ROOT_PATH . '/views/layout.php';
 <div class="upload-page ac-container">
     <div class="page-head">
         <h2>上传识别</h2>
-        <p>支持 JPG / PNG，最大 10MB，可拖拽上传。</p>
+        <p>支持 JPG / PNG，最大 50MB，可拖拽上传。</p>
     </div>
 
     <div class="card upload-card">
@@ -522,16 +522,6 @@ require_once ROOT_PATH . '/views/layout.php';
                     <span class="hint">自动裁剪将框选图片中的主要人物区域；手动裁剪可自由选择区域。</span>
                 </div>
             </div>
-
-            <div style="height:.8rem"></div>
-
-            <label class="checkbox-row" for="enableBackgroundRemoval">
-                <input type="checkbox" id="enableBackgroundRemoval" />
-                <span>移除背景（高精度抠图）</span>
-            </label>
-            <div id="backgroundRemovalSubOptions" class="sub-options">
-                <span class="hint">仅移除图片背景，保留主体（下载模型可能需要一些时间）。</span>
-            </div>
         </div>
     </fieldset>
 
@@ -578,10 +568,6 @@ require_once ROOT_PATH . '/views/layout.php';
 </div>
 
 <script type="module">
-    import {
-        removeBackground
-    } from '/static/scripts/vendor/imgly-background-removal.esm.js';
-
     /**
      * 转义 HTML 特殊字符，防止 XSS
      * @param {string} text
@@ -597,6 +583,11 @@ require_once ROOT_PATH . '/views/layout.php';
             .replace(/'/g, '&#039;');
     }
 
+    /** 前端可选图片体积上限：50MB —— 提交前会压到最长边 512px，实际上传体积远小于此 */
+    const MAX_SELECT_BYTES = 50 * 1024 * 1024;
+    /** 后端 /api/upload 的请求体上限（Flask MAX_CONTENT_LENGTH = 10MB），压缩异常时用于兜底提示 */
+    const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+
     /**
      * 二次元图片识别工具（上传 → 处理 → 识别）
      */
@@ -609,10 +600,8 @@ require_once ROOT_PATH . '/views/layout.php';
                 tempFile: null, // 原始临时文件
                 cropInstance: null, // Cropper.js 实例
                 croppedFile: null, // 最终裁剪文件
-                bgRemovedFile: null, // 最终去背景文件
                 originalImageURL: null, // 原图预览 URL
                 hasCroppedImage: false, // 是否有裁剪后的图片
-                hasBgRemovedImage: false, // 是否有去背景后的图片
             };
             this.abortController = null;
         }
@@ -632,10 +621,6 @@ require_once ROOT_PATH . '/views/layout.php';
             this.enableCropCheckbox = document.getElementById('enableCrop');
             this.cropSubOptions = document.getElementById('cropSubOptions');
             this.cropModeSelect = document.getElementById('cropMode');
-
-            // 去背景相关
-            this.enableBgRemovalCheckbox = document.getElementById('enableBackgroundRemoval');
-            this.bgRemovalSubOptions = document.getElementById('backgroundRemovalSubOptions');
 
             // 链接上传
             this.linkInput = document.getElementById('linkInput');
@@ -668,11 +653,6 @@ require_once ROOT_PATH . '/views/layout.php';
             });
 
             this.cropModeSelect.addEventListener('change', () => this.updateCropMode());
-
-            // 去背景选项切换
-            this.enableBgRemovalCheckbox.addEventListener('change', () => {
-                this.bgRemovalSubOptions.classList.toggle('active', this.enableBgRemovalCheckbox.checked);
-            });
 
             // 链接上传
             this.btnLoadLink.addEventListener('click', () => this.handleLinkLoad());
@@ -776,14 +756,13 @@ require_once ROOT_PATH . '/views/layout.php';
                 return;
             }
 
-            if (file.size > 10 * 1024 * 1024) {
-                Notify.error('图片大小不能超过 10MB');
+            if (file.size > MAX_SELECT_BYTES) {
+                Notify.error(`图片大小不能超过 ${MAX_SELECT_BYTES / 1024 / 1024}MB`);
                 return;
             }
 
             this.state.tempFile = file;
             this.resetCropState();
-            this.state.hasBgRemovedImage = false;
 
             // 显示预览，清空上次结果
             this.updatePreview(file);
@@ -912,7 +891,7 @@ require_once ROOT_PATH . '/views/layout.php';
             }
         }
 
-        /* 处理图片（裁剪 + 去背景） */
+        /* 处理图片（裁剪 + 压缩） */
         async processImage() {
             if (!this.state.tempFile) {
                 Notify.error('请先选择图片');
@@ -922,25 +901,6 @@ require_once ROOT_PATH . '/views/layout.php';
             let processedFile = this.state.tempFile;
 
             try {
-                // 去背景
-                if (this.enableBgRemovalCheckbox.checked) {
-                    this.updateProgressStatus('正在移除背景（首次使用需下载模型，请稍候）');
-                    try {
-                        // WASM 模型资源自托管，避免走默认 CDN
-                        const bgRemovedBlob = await removeBackground(processedFile, {
-                            publicPath: 'https://static.322337.xyz/file/package/dist/',
-                        });
-                        processedFile = new File([bgRemovedBlob], `bg_removed_${Date.now()}.png`, {
-                            type: 'image/png'
-                        });
-                        this.state.bgRemovedFile = processedFile;
-                        this.state.hasBgRemovedImage = true;
-                    } catch (err) {
-                        console.error('背景移除失败:', err);
-                        Notify.error('背景移除失败，将使用原图继续识别');
-                    }
-                }
-
                 // 裁剪（仅在未手动裁剪时执行自动裁剪）
                 if (this.enableCropCheckbox.checked &&
                     this.cropModeSelect.value === 'auto' &&
@@ -955,12 +915,77 @@ require_once ROOT_PATH . '/views/layout.php';
                     processedFile = this.state.croppedFile;
                 }
 
+                // 压缩：用户确认好的图片，提交前把最长边压到 512px
+                // （与后端 IMAGE_COMPRESS_MAX_SIDE / IMAGE_COMPRESS_QUALITY 口径一致）
+                processedFile = await this.compressImage(processedFile, 512, 0.85);
+
+                // 兜底：极端情况下压缩没生效（解码/编码失败会退回原图），别把超限文件发给后端
+                if (processedFile.size > MAX_UPLOAD_BYTES) {
+                    Notify.error(`压缩后仍有 ${(processedFile.size / 1024 / 1024).toFixed(1)}MB，超过后台上限，请换一张更小的图片`);
+                    return null;
+                }
+
                 return processedFile;
             } catch (err) {
                 console.error('图片处理失败:', err);
                 Notify.error('图片处理失败: ' + err.message);
                 return null;
             }
+        }
+
+        /**
+         * 压缩图片：最长边超过 maxSide 时等比缩放并重新编码为 JPEG
+         * - 已经小于等于 maxSide 的图片原样返回（不重新编码，避免无谓画质损失）
+         * - 透明像素铺白底，避免转 JPEG 后出现黑块
+         * - 任意环节失败都退回原图，不阻断识别
+         * @param {File} file
+         * @param {number} maxSide 最长边上限（px），默认 512，与后端 IMAGE_COMPRESS_MAX_SIDE 一致
+         * @param {number} quality JPEG 质量，默认 0.85，与后端 IMAGE_COMPRESS_QUALITY 一致
+         * @returns {Promise<File>}
+         */
+        async compressImage(file, maxSide = 512, quality = 0.85) {
+            let bitmap;
+            try {
+                bitmap = await createImageBitmap(file);
+            } catch (err) {
+                console.warn('[upload] 无法解码图片，跳过压缩:', err);
+                return file;
+            }
+
+            const longest = Math.max(bitmap.width, bitmap.height);
+            if (longest <= maxSide) {
+                if (bitmap.close) bitmap.close();
+                return file;
+            }
+
+            const srcWidth = bitmap.width;
+            const srcHeight = bitmap.height;
+            const scale = maxSide / longest;
+            const width = Math.max(1, Math.round(srcWidth * scale));
+            const height = Math.max(1, Math.round(srcHeight * scale));
+
+            this.updateProgressStatus(`正在压缩图片（${srcWidth}×${srcHeight} → ${width}×${height}）`);
+
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, width, height);
+            ctx.drawImage(bitmap, 0, 0, width, height);
+            if (bitmap.close) bitmap.close();
+
+            const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality));
+            if (!blob) {
+                console.warn('[upload] 压缩编码失败，改用原图');
+                return file;
+            }
+
+            const compressed = new File([blob], file.name.replace(/\.[^.]+$/, '') + '.jpg', {
+                type: 'image/jpeg'
+            });
+            console.log(`[upload] 图片压缩: ${srcWidth}×${srcHeight} ${(file.size / 1024).toFixed(0)}KB → ${width}×${height} ${(compressed.size / 1024).toFixed(0)}KB`);
+            return compressed;
         }
 
         /* 更新预览 */

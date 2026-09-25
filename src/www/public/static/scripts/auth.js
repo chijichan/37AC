@@ -39,10 +39,27 @@ const Auth = {
     },
 
     /**
-     * 检查是否已登录
+     * 检查本地是否存在「未过期」的访问令牌（同步判断，不触发刷新）
      */
     isLoggedIn() {
-        return !!this.getToken();
+        return !this.isTokenExpired(this.getToken());
+    },
+
+    /**
+     * 解析 JWT 判断令牌是否过期（解析失败一律按无效处理）
+     * @param {string} token
+     * @param {number} marginSec 提前量（秒），默认 0
+     * @returns {boolean}
+     */
+    isTokenExpired(token, marginSec = 0) {
+        if (!token) return true;
+        try {
+            const payload = JSON.parse(atob(token.split('.')[1]));
+            if (!payload.exp) return true;
+            return payload.exp * 1000 <= Date.now() + marginSec * 1000;
+        } catch (e) {
+            return true;
+        }
     },
 
     /**
@@ -75,11 +92,53 @@ const Auth = {
     },
 
     /**
+     * 清除全部业务 Cookie（登出 / 会话失效时使用）
+     */
+    clearAllCookies() {
+        ['access_token', 'user_id', 'username', 'role'].forEach((name) => {
+            document.cookie = name + '=; path=/; max-age=0';
+        });
+    },
+
+    /**
+     * 确认当前会话是否真的可用（渲染用户菜单 / 判断管理员前调用）
+     * - 没有 token：清掉可能残留的 username/role，返回 false
+     * - token 未过期：true
+     * - token 已过期：尝试用 refresh_token 续期；服务端明确拒绝才彻底登出，
+     *   网络异常只返回 false（按未登录渲染），保留本地数据等下次重试
+     * @returns {Promise<boolean>}
+     */
+    async ensureValidSession() {
+        const token = this.getToken();
+        if (!token) {
+            this.clearSession(); // token 没了但 localStorage 可能残留用户信息
+            return false;
+        }
+        if (!this.isTokenExpired(token)) return true;
+
+        const status = await this._requestNewToken();
+        if (status === 'ok') return true;
+        if (status === 'rejected') {
+            this.clearSession();
+            this.clearAllCookies();
+        }
+        return false;
+    },
+
+    /**
      * 刷新访问令牌
      */
     async refreshAccessToken() {
+        return (await this._requestNewToken()) === 'ok';
+    },
+
+    /**
+     * 用 refresh_token 换新的访问令牌
+     * @returns {Promise<'ok'|'rejected'|'error'>} rejected = 服务端明确拒绝（刷新令牌失效/被顶号），error = 网络等异常
+     */
+    async _requestNewToken() {
         const refreshToken = this.getRefreshToken();
-        if (!refreshToken) return false;
+        if (!refreshToken) return 'rejected';
 
         try {
             const response = await fetch(`${window.API_BASE_URL}/auth/refresh`, {
@@ -90,12 +149,12 @@ const Auth = {
             const result = await response.json();
             if (result.success) {
                 localStorage.setItem('access_token', result.data.access_token);
-                return true;
+                return 'ok';
             }
-            return false;
+            return 'rejected';
         } catch (e) {
             console.error('Token refresh failed:', e);
-            return false;
+            return 'error';
         }
     },
 
@@ -192,11 +251,7 @@ const Auth = {
      */
     logout() {
         this.clearSession();
-        // 清除业务 Cookie
-        document.cookie = 'access_token=; path=/; max-age=0';
-        document.cookie = 'user_id=; path=/; max-age=0';
-        document.cookie = 'username=; path=/; max-age=0';
-        document.cookie = 'role=; path=/; max-age=0';
+        this.clearAllCookies();
         window.location.href = '/auth/logout';
     }
 };
@@ -209,17 +264,9 @@ setInterval(async () => {
     const token = Auth.getToken();
     if (!token) return;
 
-    try {
-        // 解析 JWT 获取过期时间
-        const payload = JSON.parse(atob(token.split('.')[1]));
-        const exp = payload.exp * 1000;
-        const now = Date.now();
-        const margin = AUTH_CONFIG.TOKEN_REFRESH_MARGIN * 1000;
-
-        if (exp - now < margin) {
-            await Auth.refreshAccessToken();
-        }
-    } catch (e) {
-        // 静默失败
+    // 快过期/已过期就续期；这里不做清空（网络抖动不该把用户登出），
+    // 真正判定交给页面初始化时的 Auth.ensureValidSession()
+    if (Auth.isTokenExpired(token, AUTH_CONFIG.TOKEN_REFRESH_MARGIN)) {
+        await Auth.refreshAccessToken();
     }
 }, 60000);

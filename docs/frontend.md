@@ -13,7 +13,7 @@
 | 图标 | Phosphor Icons | web font，自托管于 `static/css/vendor/phosphor/` |
 | JavaScript | 原生 ES Module | `app.js` 全局模块 + `auth.js` JWT 认证 |
 | 图片裁剪 | Cropper.js 1.6.2 | 自托管于 `static/scripts/vendor/` |
-| 去背景 | @imgly/background-removal 1.7.0 | ESM 自托管，WASM 模型走自托管 publicPath |
+| 提交前压缩 | 原生 Canvas + `createImageBitmap` | 最长边压到 512px（JPEG q=0.85），无需第三方依赖 |
 
 **重要约定：全站 PHP 页面零外部 CDN 引用。** 任何新前端依赖必须下载到 `static/scripts/vendor/` 或 `static/css/vendor/` 后引用，避免 CDN 不可达导致整页功能失效。
 
@@ -32,7 +32,7 @@ www/
 │       ├── scripts/
 │       │   ├── app.js              # 全局模块（遮罩/导航/用户菜单/Notify/Modal/escapeHtml）
 │       │   ├── auth.js             # JWT 认证（暴露 window.Auth）
-│       │   └── vendor/             # 第三方 JS（cropper、imgly、onnxruntime）
+│       │   └── vendor/             # 第三方 JS（cropper）
 │       └── fonts/                  # nunito / jetbrains-mono 可变字体 woff2
 ├── controllers/
 │   ├── controller.php        # 基类（view/json/redirect/require_auth）

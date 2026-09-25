@@ -48,7 +48,7 @@
     }
 
     /* ---------- 用户菜单 ---------- */
-    function initUserMenu() {
+    async function initUserMenu() {
         const menu = document.getElementById('user-menu');
         const trigger = document.getElementById('user-trigger');
         if (!menu || !trigger) return;
@@ -58,8 +58,10 @@
         const udRole = document.getElementById('ud-role');
         const logoutBtn = document.getElementById('ud-logout');
 
-        const user = window.Auth ? Auth.getUser() : null;
-        const loggedIn = !!(window.Auth && Auth.getToken() && user);
+        // 登录态以「能用的令牌」为准：令牌过期且刷新失败时按未登录渲染。
+        // 只看 localStorage 里有没有 token 会导致会话失效后头部仍显示用户信息。
+        const loggedIn = window.Auth ? await Auth.ensureValidSession() : false;
+        const user = loggedIn && window.Auth ? Auth.getUser() : null;
 
         if (loggedIn) {
             triggerName.textContent = user.username;

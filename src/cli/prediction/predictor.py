@@ -1,7 +1,4 @@
 # prediction/predictor.py
-import torch
-import torch.nn as nn
-from torchvision import transforms
 from PIL import Image
 import os
 import json
@@ -13,7 +10,6 @@ from common.constants import IMAGE_EXTENSIONS_BASIC
 from common.recognition import parse_candidate_entry
 from utils.image_utils import validate_image_file
 from utils.file_utils import load_classes_from_file, load_classes_json_data, check_model_file
-from models.character_model import CharacterRecognitionModel
 from config.base import (
     IMAGE_SIZE,
     CLASSES_JSON_PATH,
@@ -58,14 +54,35 @@ except ImportError:
     crop_characters_by_method = None
     logger.debug("裁剪模块不可用，使用整图分类")
 
-# 数据预处理
-PREDICT_TRANSFORMS = transforms.Compose(
-    [
-        transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
-        transforms.ToTensor(),
-        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
-    ]
-)
+# 数据预处理（惰性构建：torchvision 只在真正要推理时才 import）
+# 说明：torch/torchvision 曾在本模块顶层 import，导致"只做 LLM 识别"的节点也常驻
+# 175MB(torch) + 80MB(torchvision)。改成惰性后，空闲节点不再为本地模型买单。
+_TRANSFORMS = None
+
+
+def get_predict_transforms():
+    """返回推理预处理 pipeline（首次调用时构建）。"""
+    global _TRANSFORMS
+    if _TRANSFORMS is None:
+        from torchvision import transforms
+        from config.base import apply_torch_thread_limit
+
+        apply_torch_thread_limit()
+        _TRANSFORMS = transforms.Compose(
+            [
+                transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
+                transforms.ToTensor(),
+                transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+            ]
+        )
+    return _TRANSFORMS
+
+
+def __getattr__(name):
+    """PEP 562：保留 PREDICT_TRANSFORMS 这个历史名字（按需构建）。"""
+    if name == "PREDICT_TRANSFORMS":
+        return get_predict_transforms()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 # 全局模型缓存，避免重复加载
 # 缓存结构：{ "model": nn.Module, "num_classes": int, "classes": list }
@@ -335,6 +352,11 @@ def predict_image(image_path, model_path=None, classes_file=None, use_cache=True
         # ======================
         # === 加载模型（带缓存） ===
         # ======================
+        # torch / torchvision / 模型定义都改为按需加载：
+        # 只做 LLM 识别的节点永远不会走到这里，也就不会为本地模型付出 255MB 常驻内存
+        import torch
+        from models.character_model import CharacterRecognitionModel
+
         global _model_cache
         model = None
 
@@ -370,7 +392,7 @@ def predict_image(image_path, model_path=None, classes_file=None, use_cache=True
         # ======================
         # === 图像预处理和预测 ===
         # ======================
-        transform = PREDICT_TRANSFORMS
+        transform = get_predict_transforms()
 
         def _classify(path):
             """对单张图（裁剪图或原图）做一次分类，返回 class_probs（已附加元数据）。"""

@@ -27,9 +27,16 @@ logger = get_logger("cropper")
 
 
 def available_methods() -> list:
-    """当前环境下可用的裁剪方式（供能力上报/文档/前端展示）。"""
+    """当前环境下可用的裁剪方式（供能力上报/文档/前端展示）。
+
+    MEDIAPIPE_ENABLED=false 时直接返回 ["yolo"]，**不会 import mediapipe**
+    （省 10~67MB 常驻内存）。
+    """
     methods = ["yolo"]
     try:
+        from config.base import MEDIAPIPE_ENABLED
+        if not MEDIAPIPE_ENABLED:
+            return methods
         from detection import mediapipe_detector
         if mediapipe_detector.is_available():
             methods.append("mediapipe")
@@ -49,6 +56,12 @@ def _image_size(image_path):
 
 def _mediapipe_characters(image_path, tmp_dir, max_characters, margin_ratio):
     """MediaPipe 候选框 -> 裁剪文件 + 归一化坐标。"""
+    from config.base import MEDIAPIPE_ENABLED
+
+    if not MEDIAPIPE_ENABLED:
+        # 关掉后不 import mediapipe（省内存），直接返回空让调用方回退整图
+        return {"image_size": _image_size(image_path), "detected_size": None, "characters": []}
+
     from detection import mediapipe_detector
     from detection.yolo_detector import YoloDetector
 

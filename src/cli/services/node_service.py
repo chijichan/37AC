@@ -39,6 +39,7 @@ from config.base import (
     LOCAL_TASK_TIMEOUT_SEC,
     IMAGE_RETAIN_SEC,
     AUTO_UPDATE_MODEL,
+    LOCAL_RECOGNITION_ENABLED,
     CAPABILITIES,
 )
 
@@ -128,6 +129,11 @@ def _sync_local_model(models, auto_update=None):
     本地版本记录在 MODEL_INFO_PATH（saves/models/config.json）。
     """
     global _update_disabled_logged
+
+    # 本地识别关闭（只做 LLM 的节点）时用不到本地模型：不下载、不占磁盘
+    if not LOCAL_RECOGNITION_ENABLED:
+        logger.debug("本地识别已关闭（LOCAL_RECOGNITION_ENABLED=false），跳过本地模型同步")
+        return
 
     # 自动更新开关：关闭时不发起任何检查/下载，除非本地模型缺失（bootstrap）
     auto_update = AUTO_UPDATE_MODEL if auto_update is None else bool(auto_update)
@@ -256,6 +262,11 @@ def start_node_service(auto_update_model=None):
     if auto_update_model is None:
         auto_update_model = AUTO_UPDATE_MODEL
     logger.info("模型自动更新: %s", "开启" if auto_update_model else "关闭")
+    logger.info(
+        "识别能力: 本地模型=%s，LLM=%s（本地模型按需加载：空闲进程不常驻 torch）",
+        "开启" if LOCAL_RECOGNITION_ENABLED else "关闭",
+        "开启" if LLM_RECOGNITION_ENABLED else "关闭",
+    )
 
     # 配置参数已移至 config/base.py，通过 .env 文件加载
     # 请勿在此处硬编码任何敏感数据
@@ -718,10 +729,18 @@ def start_node_service(auto_update_model=None):
                             # 优先使用节点配置的环境变量开关，兼容服务端指定类型
                             effective_type = recognition_type
                             if recognition_type == "auto":
-                                effective_type = "llm" if LLM_RECOGNITION_ENABLED else "local"
+                                if LLM_RECOGNITION_ENABLED:
+                                    effective_type = "llm"
+                                elif LOCAL_RECOGNITION_ENABLED:
+                                    effective_type = "local"
+                                else:
+                                    effective_type = "unavailable"
                             elif recognition_type == "llm" and not LLM_RECOGNITION_ENABLED:
                                 logger.warning("任务要求 LLM 识别但节点未启用，回退到本地模型")
-                                effective_type = "local"
+                                effective_type = "local" if LOCAL_RECOGNITION_ENABLED else "unavailable"
+                            elif recognition_type == "local" and not LOCAL_RECOGNITION_ENABLED:
+                                logger.warning("任务要求本地识别但本节点已关闭本地模型，回退到 LLM")
+                                effective_type = "llm" if LLM_RECOGNITION_ENABLED else "unavailable"
 
                             logger.info("推理方式: %s", effective_type)
 
@@ -738,7 +757,15 @@ def start_node_service(auto_update_model=None):
                                 try:
                                     if _effective_type == "llm":
                                         _store["value"] = predict_image_llm(_image_path)
+                                    elif _effective_type == "unavailable":
+                                        _store["value"] = {
+                                            "success": False,
+                                            "class_probs": [],
+                                            "error": "节点未启用任何识别方式"
+                                                     "（LOCAL_RECOGNITION_ENABLED / LLM_RECOGNITION_ENABLED 都为 false）",
+                                        }
                                     else:
+                                        # 本地模型路径：torch/ultralytics 都在这里才被真正加载
                                         _store["value"] = predict_image(_image_path)
                                 except Exception as exc:
                                     logger.error("%s 推理失败: %s", _effective_type, exc, exc_info=True)

@@ -179,6 +179,35 @@ src\www\stop-nginx.bat
 
 访问：`http://127.0.0.1:8000`
 
+### 5. 节点内存占用与调优
+
+`text
+空闲节点（LOCAL_RECOGNITION_ENABLED=false）      ~21 MB
+空闲节点（默认配置，尚未跑过本地任务）            ~21 MB   ← torch / ultralytics / torchvision 都不再常驻
+首次本地任务之后（torch + torchvision + 模型）   ~450 MB  ← 之后常驻，直到进程重启
+只做 LLM 的节点（跑过任务）                       ~80 MB
+`
+
+> 实测（Windows，12 核，2026-09-25 改造后）分阶段：解释器 14MB → torch +175MB → torchvision +80MB
+> → ResNet 权重 +95MB → YOLO +2MB → MediaPipe +10~67MB。
+> Windows 任务管理器里的「提交大小 / 专用工作集」通常远大于「工作集(RSS)」——torch 的线程 arena 是预留而非常驻，
+> 判断真实内存压力请看 RSS。
+
+调优开关（src/cli/.env）：
+
+| 开关 | 默认 | 作用 |
+|------|------|------|
+| `LOCAL_RECOGNITION_ENABLED` | true | 关掉＝本节点只做 LLM；不再下载/加载本地模型，torch 永不加载（省 ~440MB） |
+| `MEDIAPIPE_ENABLED` | true | 关掉＝不 import mediapipe（省 10~67MB），`CROP_METHOD=auto` 只走 YOLO → 整图 |
+| `TORCH_NUM_THREADS` | 0 | 限制 torch 线程数；小内存/共享 CPU 建议 1~2，可明显降低提交内存与 CPU 争抢 |
+| `AUTO_UPDATE_MODEL` | true | 关掉则不检查/更新模型（本地模型缺失时仍 bootstrap 一次） |
+
+建议：
+
+- **一台小内存服务器只跑一个「本地识别」节点**：那 ~450MB 是每进程一份，多开就是多份；只做 LLM 的节点很轻（空闲 ~21MB），可以多开。
+- 服务器主要出 LLM 结果时：`LOCAL_RECOGNITION_ENABLED=false`，节点注册的 capabilities 只剩 `["llm"]`，服务端不会再派本地任务给它。
+- CPU 型 VPS 另外把 `TORCH_NUM_THREADS=2`（或 1）、`YOLO_CROP_WORKERS=1` 一起设上。
+
 ### 4. 启动边缘节点
 
 ```bash

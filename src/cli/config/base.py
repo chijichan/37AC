@@ -450,11 +450,35 @@ _DEFAULT_LLM_PROMPT_ACTIVE = _DEFAULT_LLM_PROMPT_MULTI if LLM_MULTI_CHARACTER el
 # 注意：os.getenv 在变量存在但值为空字符串时返回空串而非默认值，因此用 or 兜底
 LLM_PROMPT_TEMPLATE = os.getenv("LLM_PROMPT_TEMPLATE", "") or _DEFAULT_LLM_PROMPT_ACTIVE
 
+# ==================== 资源占用开关（内存敏感机器按需关闭） ====================
+# 本地模型识别（YOLO + ResNet）：关闭后节点不再下载/加载本地模型，只做 LLM 识别。
+# 配合下面的惰性加载，空闲节点可省下约 255MB（torch 175MB + torchvision 80MB）。
+LOCAL_RECOGNITION_ENABLED = os.getenv("LOCAL_RECOGNITION_ENABLED", "True").lower() == "true"
+# MediaPipe（第二种裁剪方式）：import 一次约 +10~67MB；关闭后 CROP_METHOD=auto 不再回退到它
+MEDIAPIPE_ENABLED = os.getenv("MEDIAPIPE_ENABLED", "True").lower() == "true"
+# torch 线程数上限（0 = 不干预）。小内存/共享 CPU 的机器建议 1~2：
+# 线程越多，torch 预留的线程 arena 越大（Windows 的"提交大小"会明显上涨）
+TORCH_NUM_THREADS = int(os.getenv("TORCH_NUM_THREADS", "0") or "0")
+
+
+def apply_torch_thread_limit(torch_module=None):
+    """把 TORCH_NUM_THREADS 应用到 torch（首次 import torch 后调用一次即可）。"""
+    if TORCH_NUM_THREADS <= 0:
+        return None
+    try:
+        if torch_module is None:
+            import torch as torch_module  # type: ignore
+        torch_module.set_num_threads(int(TORCH_NUM_THREADS))
+        return int(TORCH_NUM_THREADS)
+    except Exception:
+        return None
+
+
 # ==================== 节点能力配置 ====================
 # 节点支持的识别能力列表，自动根据配置推导
-# "local" 表示支持本地 YOLO+ResNet 模型推理（始终可用）
+# "local" 表示支持本地 YOLO+ResNet 模型推理
 # "llm" 表示支持第三方多模态大模型推理
-_CAPABILITIES = ["local"]
+_CAPABILITIES = ["local"] if LOCAL_RECOGNITION_ENABLED else []
 if LLM_RECOGNITION_ENABLED:
     _CAPABILITIES.append("llm")
 CAPABILITIES = json.dumps(_CAPABILITIES, ensure_ascii=False)

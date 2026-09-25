@@ -37,10 +37,34 @@ from config.base import (
     LLM_RECOGNITION_ENABLED,
     LLM_TIMEOUT_SEC,
     LOCAL_TASK_TIMEOUT_SEC,
+    IMAGE_RETAIN_SEC,
     CAPABILITIES,
 )
 
 logger = get_logger("node_service")
+
+
+def build_image_response_payload(node_id, request_id, task_id, image_path):
+    """组装补拉响应（需求3 后半）：图片存在则带 base64，否则带 error。
+
+    抽成模块级函数便于单测；调用方负责校验 task_id 与图片路径的归属。
+    """
+    payload = {"node_id": node_id, "request_id": request_id, "task_id": task_id}
+    if not image_path or not os.path.exists(image_path):
+        payload["error"] = "节点已清理该图片"
+        return payload
+    try:
+        with open(image_path, "rb") as handle:
+            raw = handle.read()
+    except Exception as e:
+        payload["error"] = f"读取图片失败: {e}"
+        return payload
+    payload.update({
+        "image_data": base64.b64encode(raw).decode("utf-8"),
+        "image_size": len(raw),
+        "image_filename": os.path.basename(image_path),
+    })
+    return payload
 
 # JSON 协议已提取到 src/common/protocol.py，此处使用节点端实例
 json_protocol = node_json_protocol
@@ -198,6 +222,9 @@ def start_node_service():
     tasks_lock = threading.Lock()  # 保护 tasks 列表的线程安全
     pending_tasks = {}  # task_id -> {store, local_image_path, effective_type, start_time, timeout_sec}
     pending_tasks_lock = threading.Lock()  # 保护 pending_tasks 的线程安全
+    # 推理完成后仍保留一段时间的图片（供服务端回收后补拉，需求3 后半）
+    retained_images = {}  # task_id -> {"path": str, "expires_at": float}
+    retained_lock = threading.Lock()
     consecutive_none_count = 0  # recv_json 连续返回 None 的计数，超过阈值触发重连
 
     def _safe_close(sock):
@@ -237,6 +264,60 @@ def start_node_service():
             logger.debug("已清理临时图片: %s", image_path)
         except Exception as e:
             logger.warning("清理临时图片失败 %s: %s", image_path, e)
+
+    def _retain_or_cleanup(task_id, image_path):
+        """推理完成后处理本地图片：按 IMAGE_RETAIN_SEC 保留供补拉，否则直接删除。"""
+        if IMAGE_RETAIN_SEC > 0 and image_path and os.path.exists(image_path):
+            with retained_lock:
+                retained_images[task_id] = {
+                    "path": image_path,
+                    "expires_at": time.time() + IMAGE_RETAIN_SEC,
+                }
+            logger.debug("保留图片供服务端补拉: %s（%ss）", task_id, IMAGE_RETAIN_SEC)
+            return
+        _cleanup_image(image_path)
+
+    def _sweep_retained():
+        """清理超过保留期的图片。"""
+        if not retained_images:
+            return
+        now = time.time()
+        with retained_lock:
+            expired = [tid for tid, info in retained_images.items() if info["expires_at"] <= now]
+            items = [retained_images.pop(tid) for tid in expired]
+        for info in items:
+            _cleanup_image(info["path"])
+
+    def _handle_image_request(sock, data):
+        """回应服务端的图片补拉请求（需求3 后半）。"""
+        request_id = data.get("request_id")
+        req_task_id = data.get("task_id")
+        path = None
+        with retained_lock:
+            info = retained_images.get(req_task_id)
+        if info:
+            path = info["path"]
+        if not path:
+            # 仍在推理中的任务也允许直接取
+            with pending_tasks_lock:
+                pending = pending_tasks.get(req_task_id)
+            if pending:
+                path = pending.get("local_image_path")
+
+        payload = build_image_response_payload(NODE_ID, request_id, req_task_id, path)
+        if payload.get("error"):
+            logger.info("补拉请求 %s: %s", req_task_id, payload["error"])
+        else:
+            logger.info("补拉请求 %s: 回传 %d 字节", req_task_id, payload["image_size"])
+
+        try:
+            json_protocol.send_json(sock, {
+                "type": "image_response",
+                "timestamp": int(time.time()),
+                "data": payload,
+            })
+        except Exception as send_err:
+            logger.warning("回传补拉图片失败: %s", send_err)
 
     def _safe_image_extension(filename):
         """从文件名中提取安全的图片扩展名，非法扩展名返回空字符串。"""
@@ -437,8 +518,10 @@ def start_node_service():
                             tasks.remove(tid)
                     with pending_tasks_lock:
                         pending_tasks.pop(tid, None)
-                    # 清理临时图片文件
-                    _cleanup_image(info["local_image_path"])
+                    # 图片按保留期留存（供服务端补拉），过期由 _sweep_retained 清理
+                    _retain_or_cleanup(tid, info["local_image_path"])
+
+            _sweep_retained()
 
             # === 心跳超时检测 ===
             current_time = time.time()
@@ -519,6 +602,10 @@ def start_node_service():
                     message = msg.get("message")
                     task_id = msg_data.get("task_id")
                     logger.info("任务状态更新: 任务ID: %s, 动作: %s", task_id, message)
+
+                # === 服务端补拉图片（需求3 后半） ===
+                elif msg_type == "image_request":
+                    _handle_image_request(s, msg_data)
 
                 # === 任务处理 ===
                 elif msg_type == "task":

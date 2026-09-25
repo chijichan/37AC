@@ -76,7 +76,8 @@ def landmarks_to_bbox(landmarks, size, visibility_threshold=0.5):
 
 
 def detect_persons(image_path, margin_ratio: float = 0.0, min_confidence: float = None,
-                   expand_w: float = None, expand_h: float = None):
+                   expand_w: float = None, expand_h: float = None,
+                   pose_complexity: int = None, face_model_selection: int = None):
     """用 MediaPipe 估计人物区域。
 
     Returns:
@@ -88,7 +89,9 @@ def detect_persons(image_path, margin_ratio: float = 0.0, min_confidence: float 
     from config.base import (
         MEDIAPIPE_FACE_EXPAND_H,
         MEDIAPIPE_FACE_EXPAND_W,
+        MEDIAPIPE_FACE_MODEL_SELECTION,
         MEDIAPIPE_MIN_CONFIDENCE,
+        MEDIAPIPE_POSE_COMPLEXITY,
     )
 
     empty = {"image_size": (0, 0), "detected_size": (0, 0), "detections": []}
@@ -111,13 +114,18 @@ def detect_persons(image_path, margin_ratio: float = 0.0, min_confidence: float 
     min_confidence = MEDIAPIPE_MIN_CONFIDENCE if min_confidence is None else min_confidence
     expand_w = MEDIAPIPE_FACE_EXPAND_W if expand_w is None else expand_w
     expand_h = MEDIAPIPE_FACE_EXPAND_H if expand_h is None else expand_h
+    # 默认用最省的模型：姿态 lite（内存/耗时最低）、人脸全景模型（整图召回优先）
+    pose_complexity = MEDIAPIPE_POSE_COMPLEXITY if pose_complexity is None else pose_complexity
+    face_model_selection = (
+        MEDIAPIPE_FACE_MODEL_SELECTION if face_model_selection is None else face_model_selection
+    )
 
     detections = []
 
     # 1) 人脸（支持多人）
     try:
         with mp.solutions.face_detection.FaceDetection(
-            model_selection=1, min_detection_confidence=min_confidence
+            model_selection=int(face_model_selection), min_detection_confidence=min_confidence
         ) as face_detector:
             face_result = face_detector.process(pixels)
 
@@ -150,7 +158,9 @@ def detect_persons(image_path, margin_ratio: float = 0.0, min_confidence: float 
     # 2) 姿态兜底（单人）
     if not detections:
         try:
-            with mp.solutions.pose.Pose(static_image_mode=True, model_complexity=1) as pose:
+            with mp.solutions.pose.Pose(
+                static_image_mode=True, model_complexity=int(pose_complexity)
+            ) as pose:
                 pose_result = pose.process(pixels)
             if getattr(pose_result, "pose_landmarks", None):
                 body_box = landmarks_to_bbox(pose_result.pose_landmarks.landmark, size)

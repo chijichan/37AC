@@ -81,6 +81,12 @@ CREATE TABLE IF NOT EXISTS models (
     KEY idx_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='识别模型表';
 
+-- 7.1 task_results 增加 node_id（图片补拉用，需求3 后半）
+--     注意：MySQL 8 不支持 ADD COLUMN IF NOT EXISTS，重复执行会报 1060（Duplicate column），
+--     说明列已存在，忽略即可。
+ALTER TABLE task_results
+    ADD COLUMN node_id INT(11) NULL COMMENT '处理该任务的节点ID（图片补拉用）' AFTER status;
+
 -- 8. 创建 settings 表（系统设置）
 CREATE TABLE IF NOT EXISTS settings (
     id INT(11) NOT NULL AUTO_INCREMENT COMMENT '主键ID',

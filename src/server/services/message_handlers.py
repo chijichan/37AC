@@ -205,14 +205,29 @@ def async_handle_task_result(conn, addr, msg):
                 return
             with conn.cursor() as cursor:
                 sql = """
-                    INSERT INTO task_results (task_id, result, status)
-                    VALUES (%s, %s, %s)
+                    INSERT INTO task_results (task_id, result, status, node_id)
+                    VALUES (%s, %s, %s, %s)
                     ON DUPLICATE KEY UPDATE
                         result = VALUES(result),
                         status = VALUES(status),
+                        node_id = VALUES(node_id),
                         updated_at = CURRENT_TIMESTAMP
                 """
-                cursor.execute(sql, (task_id, json.dumps(result), "completed"))
+                try:
+                    cursor.execute(sql, (task_id, json.dumps(result), "completed", node_id))
+                except pymysql.err.OperationalError as sql_err:
+                    # 兜底：task_results.node_id 列尚未迁移时（1054 Unknown column），
+                    # 退回旧 SQL，避免因为迁移没跑而丢结果
+                    if sql_err.args and sql_err.args[0] == 1054:
+                        logger.warning("task_results.node_id 列不存在，退回旧写法（请执行数据库迁移）")
+                        cursor.execute(
+                            "INSERT INTO task_results (task_id, result, status) VALUES (%s, %s, %s) "
+                            "ON DUPLICATE KEY UPDATE result = VALUES(result), status = VALUES(status), "
+                            "updated_at = CURRENT_TIMESTAMP",
+                            (task_id, json.dumps(result), "completed"),
+                        )
+                    else:
+                        raise
             conn.commit()
             logger.info("任务结果已保存: task_id=%s", task_id)
 
@@ -241,6 +256,17 @@ def async_handle_task_result(conn, addr, msg):
                 logger.info("节点 %s 任务计数已减少，task_id=%s", node_id, task_id)
 
     async_processor.submit_task(process_task_result)
+
+
+def async_handle_image_response(conn, addr, msg):
+    """节点回传的补拉图片（需求3 后半）：唤醒等待中的请求方。"""
+    data = msg.get("data") or {}
+    request_id = data.get("request_id")
+    if not request_id:
+        logger.warning("image_response 缺少 request_id，已忽略")
+        return
+    from services import image_refetch
+    image_refetch.resolve(request_id, data)
 
 
 def async_handle_unknown_message(conn, addr, msg):

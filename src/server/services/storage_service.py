@@ -90,6 +90,11 @@ def safe_ext(name) -> str:
     return ext if ext in _ALLOWED_EXT else ".jpg"
 
 
+def mimetype_for(name) -> str:
+    """按扩展名给出 MIME 类型（供补拉回来的图片使用）。"""
+    return _MIME_BY_EXT.get(safe_ext(name), "application/octet-stream")
+
+
 def _dir(label: str) -> Path:
     return Path(getattr(cfg, _DIRS[label][0]))
 

@@ -394,6 +394,48 @@ def _image_info(task_id):
     }
 
 
+def _task_node_id(task_id):
+    """查询该任务是由哪个节点完成的（补拉用）。列不存在/查库失败都返回 None。"""
+    conn = None
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return None
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT node_id FROM task_results WHERE task_id = %s", (task_id,))
+            row = cursor.fetchone()
+        return row[0] if row else None
+    except Exception as e:
+        logger.debug("查询任务节点失败 task_id=%s: %s", task_id, e)
+        return None
+    finally:
+        if conn:
+            conn.close()
+
+
+def _try_refetch(task_id) -> bool:
+    """本地图片已被回收时，向处理该任务的节点补拉一份（需求3 后半）。
+
+    补拉成功后写回 tmp/cache，后续请求直接命中本地。
+    """
+    from services import image_refetch
+
+    if not image_refetch.enabled():
+        return False
+
+    node_id = _task_node_id(task_id)
+    result = image_refetch.request_from_node(node_id, task_id)
+    if not result.get("success"):
+        logger.info("补拉图片失败 task_id=%s: %s", task_id, result.get("message"))
+        return False
+
+    data = result["data"]["bytes"]
+    ext = storage_service.safe_ext(result["data"].get("filename"))
+    storage_service.save_cache(task_id, data, ext)
+    storage_service.save_temp(task_id, data, ext)
+    return True
+
+
 def _image_expired_response(task_id):
     """图片已被回收（或从未落盘）：410 + 元数据，前端可显示占位。"""
     return jsonify({
@@ -447,6 +489,9 @@ def get_task_image(task_id):
         max_side = max(16, min(4096, max_side))
 
     data, source, mimetype = storage_service.read_bytes(task_id, prefer=prefer, max_side=max_side)
+    if not data and _try_refetch(task_id):
+        # 补拉成功：已写回本地，重新按原参数读取（含 max_side 缩放）
+        data, source, mimetype = storage_service.read_bytes(task_id, prefer=prefer, max_side=max_side)
     if not data:
         return _image_expired_response(task_id)
 

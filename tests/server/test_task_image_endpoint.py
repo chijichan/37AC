@@ -52,6 +52,8 @@ def client(monkeypatch):
         lambda key: {"success": True, "data": {"key_id": 1, "user_id": 1}} if key == "good-key"
         else {"success": False, "message": "API密钥无效"},
     )
+    # 单测不打数据库：默认关闭"向节点补拉"
+    monkeypatch.setattr(upload_routes, "_try_refetch", lambda task_id: False)
     app.config.update(TESTING=False)
     yield SimpleNamespace(client=app.test_client(), dirs={"tmp": tmp_dir, "cache": cache_dir})
     shutil.rmtree(root, ignore_errors=True)
@@ -121,6 +123,32 @@ def test_missing_image_returns_410_with_metadata(client):
     assert body["success"] is False
     assert body["image"]["available"] is False
     assert body["image"]["url"].endswith("/image")
+
+
+def test_image_refetch_then_served_from_cache(client, monkeypatch):
+    """本地已回收时向节点补拉：成功后写回 cache 并正常返回（需求3 后半）。"""
+    import routes.upload_routes as upload_routes
+
+    def fake_refetch(task_id):
+        storage_service.save_cache(task_id, _solid_png((300, 200)), ".png")
+        return True
+
+    monkeypatch.setattr(upload_routes, "_try_refetch", fake_refetch)
+    response = client.client.get("/tasks/refetched-1/image", headers={"X-API-Key": "good-key"})
+
+    assert response.status_code == 200
+    assert response.headers["X-Image-Source"] == "cache"
+    assert max(_dimensions(response.data)) == 300
+
+
+def test_image_refetch_failure_still_410(client, monkeypatch):
+    import routes.upload_routes as upload_routes
+
+    monkeypatch.setattr(upload_routes, "_try_refetch", lambda task_id: False)
+    response = client.client.get("/tasks/gone-1/image", headers={"X-API-Key": "good-key"})
+
+    assert response.status_code == 410
+    assert response.get_json()["code"] == "IMAGE_EXPIRED"
 
 
 def test_image_route_survives_path_traversal_attempt(client):

@@ -17,6 +17,7 @@ from services.message_handlers import (
     async_handle_register,
     async_handle_heartbeat,
     async_handle_task_result,
+    async_handle_image_response,
     async_handle_unknown_message,
 )
 from config.base import TCP_PORT
@@ -93,6 +94,15 @@ def handle_client(conn, addr):
                 message_processor.submit_message_task(
                     "task_result", async_handle_task_result, conn, addr, msg
                 )
+
+            elif msg_type == "image_response":
+                # 补拉图片的回传（需求3 后半）
+                if not authenticated or not node_id:
+                    logger.warning("未注册连接发来 image_response，已忽略: %s", addr)
+                else:
+                    message_processor.submit_message_task(
+                        "image_response", async_handle_image_response, conn, addr, msg
+                    )
 
             else:
                 # 异步处理未知消息类型

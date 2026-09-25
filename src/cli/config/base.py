@@ -371,6 +371,10 @@ CROP_METHOD = (os.getenv("CROP_METHOD", "auto") or "auto").strip().lower()
 MEDIAPIPE_MIN_CONFIDENCE = float(os.getenv("MEDIAPIPE_MIN_CONFIDENCE", "0.4"))
 MEDIAPIPE_FACE_EXPAND_W = float(os.getenv("MEDIAPIPE_FACE_EXPAND_W", "2.4"))
 MEDIAPIPE_FACE_EXPAND_H = float(os.getenv("MEDIAPIPE_FACE_EXPAND_H", "3.2"))
+# 姿态模型复杂度：0=lite（默认，模型最小、内存与耗时最低）/ 1=full / 2=heavy
+MEDIAPIPE_POSE_COMPLEXITY = int(os.getenv("MEDIAPIPE_POSE_COMPLEXITY", "0"))
+# 人脸检测模型：0=近景短焦（229KB）/ 1=全景长焦（1.9MB，默认，适合整图）
+MEDIAPIPE_FACE_MODEL_SELECTION = int(os.getenv("MEDIAPIPE_FACE_MODEL_SELECTION", "1"))
 
 # ==================== 节点本地图片保留（需求3，供服务端补拉） ====================
 # 推理完成后本地图片保留的秒数（0 = 立即删除，保持旧行为）

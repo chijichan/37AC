@@ -763,7 +763,8 @@ paths:
       description: |
         上传后在 saves/tmp 存原图、saves/cache 存压缩副本；
         默认返回 cache（压缩图），?original=1 返回 tmp 原图，?max_side=N 即时缩放（不落盘）。
-        图片已被回收 -> 410 + code=IMAGE_EXPIRED（image.available=false，前端可显示占位）。
+        本地已回收时会向处理过该任务的节点补拉（IMAGE_NODE_REFETCH，节点保留 IMAGE_RETAIN_SEC）；
+        节点离线/已过保留期/超时 -> 410 + code=IMAGE_EXPIRED（image.available=false，前端可显示占位）。
         鉴权：X-API-Key（与 /tasks 一致）或 Bearer JWT。
       security:
         - apiKeyAuth: []
@@ -777,8 +778,8 @@ paths:
           description: 图片二进制
           headers:
             X-Image-Source:
-              schema: {type: string, enum: [cache, tmp]}
-              description: 实际命中的目录（cache=压缩副本 / tmp=原图）
+              schema: {type: string, enum: [cache, tmp, node]}
+              description: 图片来源（cache=压缩副本 / tmp=原图 / node=本地已回收、向处理该任务的节点补拉回来）
           content:
             image/png: {schema: {type: string, format: binary}}
             image/jpeg: {schema: {type: string, format: binary}}

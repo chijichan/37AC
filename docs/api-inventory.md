@@ -150,7 +150,7 @@ Werkzeug 默认的 HTML 错误页（404/405/413/500…）也换成了同款 JSON
 | GET | `/upload` | 无 | 无 | `{type:"info",message,usage:{...}}` | 200 |
 | POST | `/upload` | `X-API-Key` + 限流 | multipart `file`/`image` 或 `image_base64`，`model=37ac\|llm\|auto` | `{type:"dispatch_task",status:"queued",task_id,model}`；或 SSE 流 | **200**（语义应为 202）/ 400 / 401 / 429 |
 | GET | `/tasks/<task_id>` | `X-API-Key` | 无 | `{type:"task_result",status,result,image:{...},...}` | 200 / **202**（未完成）/ 401 / 503 |
-| GET | `/tasks/<task_id>/image` | `X-API-Key` 或 Bearer | `original=1`、`max_side=N` | 图片二进制（响应头 `X-Image-Source: cache\|tmp`） | 200 / 401 / **410**（已回收） |
+| GET | `/tasks/<task_id>/image` | `X-API-Key` 或 Bearer | `original=1`、`max_side=N` | 图片二进制（响应头 `X-Image-Source: cache\|tmp\|node`） | 200 / 401 / **410**（本地与节点都没有） |
 | GET | `/tasks/<task_id>/stream` | `X-API-Key` | 无 | SSE：`data: {status,result,...}` | 200（流）/ 401 |
 
 ### 2.9 识别结果结构（多人物，2026-09-13 起）
@@ -184,6 +184,18 @@ Werkzeug 默认的 HTML 错误页（404/405/413/500…）也换成了同款 JSON
 - 未检出人物时 `characters: []`、`crop_method: "full"`，顶层回落整图识别（老行为）。
 - 裁剪方式（env `CROP_METHOD`）：`yolo` / `mediapipe` / `auto`；auto = YOLO 优先，未命中回落 mediapipe，再没有则整图。
 - 图片文件：上传后服务端在 `saves/tmp`（原图）与 `saves/cache`（压缩副本）各留一份，节点一份；回收策略见 `docs/design-image-pipeline.md`。
+
+### 2.10 图片补拉（服务端回收后仍能取图，2026-09-25）
+
+    GET /tasks/<id>/image
+      -> 本地 saves/cache、saves/tmp 都没有
+      -> 查 task_results.node_id，向该节点发 image_request
+      <- 节点回 image_response（base64），服务端写回 tmp + cache 后再返回
+      节点离线 / 超过 IMAGE_RETAIN_SEC（默认 900s）/ 响应超时 8s -> 410 IMAGE_EXPIRED
+
+- 开关：服务端 `IMAGE_NODE_REFETCH`（默认 true）、节点侧 `IMAGE_RETAIN_SEC`（0 = 恢复"推理完即删"）。
+- 命中补拉时响应头是 `X-Image-Source: node`（写回本地后下一次即为 `cache`）。
+- 依赖列 `task_results.node_id`（迁移见 `scripts/alter_tables.sql`）；列不存在时服务端自动退回旧 SQL，仅补拉不可用。
 
 ## 3. 规范性问题清单（按严重度）
 

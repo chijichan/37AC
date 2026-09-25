@@ -137,9 +137,46 @@ src/server/saves/
 | B | 上传落盘 + `GET /tasks/<id>/image`（含 410 语义）+ 单测 | ✅ 完成（10 个单测 + 端到端 9/9） |
 | C | CLI 多人物检测/裁剪/识别 + `characters[]` 契约（需求1） | ✅ 完成（13 个单测） |
 | D | mediapipe 裁剪方式 + 可配置/回退（需求2） | ✅ 完成（11 个单测；mediapipe 未装时自动跳过） |
-| E | 节点补拉图片（协议 `image_request`/`image_response` + 节点保留期） | ⏳ 未做（当前 410 已可用，补拉留待下一阶段） |
+| E | 节点补拉图片（协议 `image_request`/`image_response` + 节点保留期） | ✅ 完成（服务端 10 个单测 + 节点侧 4 个） |
 
-## 8. 实现落点与验收（2026-09-13）
+## 8.5 图片补拉（需求3 后半，2026-09-25 完成）
+
+服务端临时文件被回收后，前端仍可来取图——此时向**处理过该任务的节点**要一份：
+
+    GET /tasks/<id>/image
+      -> 本地 cache/tmp 都没有
+      -> 查 task_results.node_id（该任务由谁完成）
+      -> TCP 发 image_request {request_id, task_id}
+      <- 节点回 image_response {request_id, image_data(base64), image_size, image_filename}
+      -> 写回 tmp + cache，再按原参数（含 max_side）读一次
+    节点离线 / 已过保留期 / 超时(8s) -> 410 + code=IMAGE_EXPIRED
+
+| 位置 | 内容 |
+|---|---|
+| `src/server/services/image_refetch.py` | 请求/应答配对（request_id → Event），超时 8s，并发上限 64 |
+| `src/server/services/listen_service.py` | 新增 `image_response` 分支（要求连接已认证） |
+| `src/server/services/message_handlers.py` | `async_handle_image_response`；任务结果写入 `task_results.node_id`（列缺失时 1054 兜底退回旧 SQL） |
+| `src/server/routes/upload_routes.py` | `_task_node_id()` + `_try_refetch()`，命中后写回本地 |
+| `src/cli/services/node_service.py` | `retained_images` 保留 `IMAGE_RETAIN_SEC`（默认 900s）+ 过期清扫 + `build_image_response_payload()` 应答 |
+| 数据库 | `task_results.node_id INT NULL`（`scripts/alter_tables.sql` / `install.sql`，已应用到线上库） |
+| 开关 | `IMAGE_NODE_REFETCH`（服务端，默认 true）、`IMAGE_RETAIN_SEC`（节点侧，0 = 恢复"推理完即删"旧行为） |
+
+## 8.6 mediapipe 安装与内存（2026-09-25）
+
+pip 在本机走不通（PyPI TCP 可达但 pip 一直挂），因此**从同机 Upants 的 venv 本地搬运**（同为 Python 3.12.9）：
+
+| 项 | 大小 |
+|---|---|
+| mediapipe 0.10.14 包 | 98.5 MB（其中 .tflite 模型 27.8 MB） |
+| 依赖：protobuf 4.25.9 / absl-py 2.5.0 / attrs 26.1.0 / flatbuffers 25.12.19 / sounddevice 0.5.5 | 4.6 MB |
+| **合计新增** | **103.1 MB** |
+| **跳过** | jax 26.7 MB + jaxlib **240.5 MB**（仅 genai 转换器用到，`import mediapipe` 实测不需要，未打补丁） |
+
+运行时内存（.venv, Windows）：基线 14 MB → `import mediapipe` 后 **81 MB** → 人脸检测后 **85 MB** → 姿态（lite）**91 MB**。
+会话每次调用创建并释放（不常驻）；省内存旋钮：`MEDIAPIPE_POSE_COMPLEXITY`（默认 **0=lite**）、`MEDIAPIPE_FACE_MODEL_SELECTION`（默认 1=全景模型）。
+若换机器用 `pip install -r src/cli/requirements.txt` 正常安装，会一并装上 jax/jaxlib（多 267 MB）；只要人脸/姿态检测可加 `--no-deps` 后手装上表 5 个小依赖。
+
+## 8.7 实现落点与验收（2026-09-13）
 
 | 需求 | 代码 | 验收 |
 |---|---|---|

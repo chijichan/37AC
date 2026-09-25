@@ -86,6 +86,7 @@ CREATE TABLE IF NOT EXISTS `task_results` (
   `api_key_id` int(11) DEFAULT NULL COMMENT '使用的API密钥ID',
   `result` json DEFAULT NULL COMMENT '识别结果（JSON）',
   `status` varchar(50) DEFAULT 'completed' COMMENT '任务状态',
+  `node_id` int(11) DEFAULT NULL COMMENT '处理该任务的节点ID（图片补拉用，需求3）',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`),

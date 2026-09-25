@@ -21,6 +21,9 @@ from config.base import (
     YOLO_ENABLED,
     MULTI_CHARACTER_ENABLED,
     MAX_CHARACTERS,
+    LLM_MULTI_CHARACTER,
+    LLM_MAX_CHARACTERS,
+    LLM_REQUEST_BOX,
     LLM_RECOGNITION_ENABLED,
     LLM_DB_RECOGNITION,
     LLM_API_KEY,
@@ -34,6 +37,7 @@ from config.base import (
     get_device,
 )
 from config.log_config import get_logger
+from detection.bbox import clamp_bbox, normalize_bbox, percent_bbox
 
 logger = get_logger("predictor")
 
@@ -825,7 +829,7 @@ def predict_image_llm(image_path: str) -> dict:
 
         def _request(prompt: str, _retries: int = 2):
             """向 LLM API 发送一次识别请求，返回解析后的
-            (label, confidence, features_used, tags, class_probs)。
+            (label, confidence, features_used, tags, class_probs, characters)。
 
             ConnectionError（网关断开）时自动重试，最多 _retries 次。
             """
@@ -846,26 +850,34 @@ def predict_image_llm(image_path: str) -> dict:
                         continue
                     result["error"] = f"LLM 连接失败: {e}"
                     logger.error("LLM %s", result["error"])
-                    return None, None, [], [], []
+                    return None, None, [], [], [], []
                 except requests.Timeout:
                     result["error"] = f"API 请求超时 ({LLM_TIMEOUT_SEC}秒)"
                     logger.error("LLM %s", result["error"])
-                    return None, None, [], [], []
+                    return None, None, [], [], [], []
                 break
             if resp.status_code != 200:
                 result["error"] = f"API 返回错误 ({resp.status_code}): {resp.text[:200]}"
                 logger.error("LLM %s", result["error"])
-                return None, None, [], [], []
+                return None, None, [], [], [], []
             resp_data = resp.json()
-            return _parse_llm_response(resp_data)
+            return _parse_llm_response(resp_data, image_size)
 
         # 实验性模式（LLM_DB_RECOGNITION=True）：把 classes.json 中已知角色的
         # features_used / tags 附加到提示词，让 LLM 对照角色数据库匹配识别
+        # 一图多角：先拿到原图尺寸，供解析层把 LLM 的 0-100 框换算成 0-1 / 百分比
+        image_size = None
+        try:
+            with Image.open(image_path) as raw_img:
+                image_size = raw_img.size
+        except Exception as size_err:
+            logger.debug("读取图片尺寸失败（多角色框将只保留百分比）: %s", size_err)
+
         prompt = LLM_PROMPT_TEMPLATE
         if LLM_DB_RECOGNITION:
             prompt = _build_db_prompt(prompt)
 
-        label, confidence, features_used, tags, class_probs = _request(prompt)
+        label, confidence, features_used, tags, class_probs, characters = _request(prompt)
 
         if not label or label.lower() == "unknown":
             result["error"] = f"LLM 无法识别该角色: {label}"
@@ -889,15 +901,29 @@ def predict_image_llm(image_path: str) -> dict:
         merged_probs = _merge_llm_class_probs(label, confidence, class_probs)
         # 类别名 = 整个对象：从 classes.json 附加 name_zh/ip/features_used/tags
         _enrich_probs_with_metadata(merged_probs)
+
+        # 一图多角：每个人物各自的候选列表也补上元数据；没有候选用自身 label 兜底
+        for character in characters:
+            if character.get("class_probs"):
+                _enrich_probs_with_metadata(character["class_probs"])
+            else:
+                character["class_probs"] = [{"name": character["label"],
+                                             "prob": round(float(character.get("confidence") or 0), 2)}]
+
         result.update(
             {
                 "success": True,
                 "class_probs": merged_probs,
                 "features_used": features_used,
                 "tags": tags,
+                # 与 37ac 通道对齐的契约：多人物 + 原图坐标（0-1 与 0-100 两套）
+                "characters": characters,
+                "character_count": len(characters),
+                "crop_method": "llm",
+                "image": {"width": image_size[0], "height": image_size[1]} if image_size else None,
             }
         )
-        logger.info("LLM 识别成功: %s -> %s", image_path, label)
+        logger.info("LLM 识别成功: %s -> %s（%d 个人物）", image_path, label, len(characters))
         return result
 
     except ImportError:
@@ -980,7 +1006,144 @@ def _normalize_label_order(label: str) -> str:
     return label
 
 
-def _parse_llm_response(resp_data: dict) -> tuple:
+def _normalize_llm_box(raw, image_size=None):
+    """把 LLM 给出的位置转成 (bbox 0-1, bbox_percent 0-100)。
+
+    容忍多种写法，避免不同模型/提示词的格式差异把结果整条丢掉：
+    - [x1, y1, x2, y2]：全 ≤1 视为归一化坐标，否则视为 0-100 百分比
+    - {"x", "y", "w", "h"} / {"left", "top", "right", "bottom"}
+    - 字符串 "x1,y1,x2,y2"
+    坐标统一走 detection/bbox.py，保证与 37ac 通道的坐标口径一致。
+    无效/退化框返回 (None, None)。
+    """
+    if raw is None:
+        return None, None
+    try:
+        if isinstance(raw, str):
+            nums = [float(v) for v in re.findall(r"-?\d+(?:\.\d+)?", raw)]
+            raw = nums
+        if isinstance(raw, (list, tuple)) and len(raw) >= 4:
+            x1, y1, x2, y2 = (float(raw[0]), float(raw[1]), float(raw[2]), float(raw[3]))
+        elif isinstance(raw, dict):
+            if all(k in raw for k in ("x", "y", "w", "h")):
+                x, y, w, h = (float(raw["x"]), float(raw["y"]), float(raw["w"]), float(raw["h"]))
+                x1, y1, x2, y2 = x, y, x + w, y + h
+            elif all(k in raw for k in ("left", "top", "right", "bottom")):
+                x1, y1, x2, y2 = (float(raw["left"]), float(raw["top"]),
+                                  float(raw["right"]), float(raw["bottom"]))
+            else:
+                return None, None
+        else:
+            return None, None
+    except (TypeError, ValueError):
+        return None, None
+
+    if max(abs(x1), abs(y1), abs(x2), abs(y2)) <= 1.0:      # 归一化 -> 百分比
+        x1, y1, x2, y2 = x1 * 100.0, y1 * 100.0, x2 * 100.0, y2 * 100.0
+    if x2 < x1:
+        x1, x2 = x2, x1
+    if y2 < y1:
+        y1, y2 = y2, y1
+    x1, y1 = max(0.0, x1), max(0.0, y1)
+    x2, y2 = min(100.0, x2), min(100.0, y2)
+    if x2 - x1 < 1.0 or y2 - y1 < 1.0:                       # 退化框（<1%）
+        return None, None
+
+    width, height = image_size or (0, 0)
+    if width and height:
+        pixel = clamp_bbox((x1 / 100.0 * width, y1 / 100.0 * height,
+                            x2 / 100.0 * width, y2 / 100.0 * height), (width, height))
+        return normalize_bbox(pixel, (width, height)), percent_bbox(pixel, (width, height))
+    # 拿不到图片尺寸时退化为纯百分比（保留 2 位小数）
+    return ({"x": round(x1 / 100.0, 4), "y": round(y1 / 100.0, 4),
+             "w": round((x2 - x1) / 100.0, 4), "h": round((y2 - y1) / 100.0, 4)},
+            {"x": round(x1, 2), "y": round(y1, 2),
+             "w": round(x2 - x1, 2), "h": round(y2 - y1, 2)})
+
+
+def _parse_llm_characters(parsed: dict, image_size=None):
+    """从 LLM 的 JSON 结论里抽出人物列表（一图多角）。
+
+    优先读 "characters"；缺失时用顶层字段兜一条单人物结果（兼容旧的单角色提示词/响应）。
+    每个条目统一为与 37ac 通道一致的形状：
+        {"index", "label", "confidence", "bbox", "bbox_percent", "class_probs",
+         "features_used", "tags", "source"}
+    """
+    if not isinstance(parsed, dict):
+        return []
+
+    entries = parsed.get("characters")
+    if not isinstance(entries, list) or not entries:
+        entries = [parsed]        # 单角色响应 -> 一个人物条目
+
+    characters = []
+    for item in entries:
+        if not isinstance(item, dict):
+            continue
+        raw_label = item.get("label") or item.get("name")
+        label = _normalize_label_order(str(raw_label).strip()) if raw_label else ""
+        # 过滤占位符/无效标签（如"作品名/角色名"、拒答文本）
+        if not label or _is_placeholder_label(label) or _is_invalid_label(label):
+            continue
+
+        try:
+            confidence = float(item.get("confidence", 95.0))
+        except (TypeError, ValueError):
+            confidence = 95.0
+
+        features = []
+        if isinstance(item.get("features_used"), list):
+            features = [str(f).strip() for f in item["features_used"] if str(f).strip()]
+        tags = []
+        if isinstance(item.get("tags"), list):
+            tags = [str(t).strip() for t in item["tags"] if str(t).strip()]
+
+        raw_alts = item.get("class_probs")
+        if not isinstance(raw_alts, list):
+            raw_alts = item.get("alternative_guesses")
+        probs = []
+        if isinstance(raw_alts, list):
+            for guess in raw_alts:
+                candidate = parse_candidate_entry(guess)
+                if not candidate:
+                    continue
+                candidate["name"] = _normalize_label_order(candidate["name"])
+                if _is_placeholder_label(candidate["name"]):
+                    continue
+                probs.append(candidate)
+
+        raw_box = item.get("box")
+        if raw_box is None:
+            raw_box = item.get("bbox", item.get("box_2d"))
+        bbox, bbox_percent = (None, None)
+        if LLM_REQUEST_BOX:
+            bbox, bbox_percent = _normalize_llm_box(raw_box, image_size)
+
+        characters.append({
+            "label": label,
+            "confidence": round(confidence, 2),
+            "bbox": bbox,
+            "bbox_percent": bbox_percent,
+            "class_probs": probs,
+            "features_used": features,
+            "tags": tags,
+            "source": "llm",
+        })
+
+    # 排序：有框按面积降序（与 37ac 一致），无框按置信度降序；再截断到上限
+    def _sort_key(character):
+        box = character.get("bbox") or {}
+        area = float(box.get("w") or 0) * float(box.get("h") or 0)
+        return (area, character.get("confidence") or 0)
+
+    characters.sort(key=_sort_key, reverse=True)
+    characters = characters[:max(1, int(LLM_MAX_CHARACTERS))]
+    for index, character in enumerate(characters):
+        character["index"] = index
+    return characters
+
+
+def _parse_llm_response(resp_data: dict, image_size=None) -> tuple:
     """从 LLM API 响应中提取 (label, confidence, features_used, tags, class_probs)。
 
     兼容四种请求格式对应的响应结构：
@@ -1062,7 +1225,7 @@ def _parse_llm_response(resp_data: dict) -> tuple:
 
         if not content:
             logger.error("LLM API 返回空内容: %s", resp_data)
-            return ("", 0.0, [], [], [])
+            return ("", 0.0, [], [], [], [])
 
         content = str(content).strip()
 
@@ -1116,19 +1279,31 @@ def _parse_llm_response(resp_data: dict) -> tuple:
             label = content
             confidence = 95.0
 
+        # 一图多角：解析人物数组（旧的单角色响应会自动兜成 1 条；框走 0-1/百分比两套坐标）
+        characters = _parse_llm_characters(parsed, image_size) if parsed else []
+
+        # 顶层 label 缺失但有人物结果时用第一个人物补齐（兼容只给 characters 的新格式）
+        if not label and characters:
+            primary = characters[0]
+            label = primary["label"]
+            confidence = primary["confidence"]
+            class_probs = class_probs or primary.get("class_probs") or []
+            features_used = features_used or primary.get("features_used") or []
+            tags = tags or primary.get("tags") or []
+
         # 确保「作品/角色」顺序（模型偶尔会写成「角色/作品」）
         label = _normalize_label_order(label)
 
         # 过滤非角色标签（安全审查、拒绝回答等）
         if _is_invalid_label(label):
             logger.warning("LLM 过滤无效标签: %s", label)
-            return ("", 0.0, [], [], [])
+            return ("", 0.0, [], [], [], [])
 
-        return label, confidence, features_used, tags, class_probs
+        return label, confidence, features_used, tags, class_probs, characters
 
     except (KeyError, IndexError, ValueError, json.JSONDecodeError) as e:
         logger.error("LLM 无法解析 API 响应: %s, 错误: %s", resp_data, e)
-        return ("", 0.0, [], [], [])
+        return ("", 0.0, [], [], [], [])
 
 
 def _is_placeholder_label(label: str) -> bool:

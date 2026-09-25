@@ -207,7 +207,7 @@ Werkzeug 默认的 HTML 错误页（404/405/413/500…）也换成了同款 JSON
       -> result = {
            "task_id": "...", "requested_channels": ["37ac","llm","human"],
            "37ac":  {"status":"completed","crop_method":"yolo","characters":[...],"class_probs":[...]},
-           "llm":   {"status":"completed","class_probs":[...]},
+           "llm":   {"status":"completed","characters":[{"index":0,"bbox":{...},"bbox_percent":{...},"class_probs":[...]}],"class_probs":[...]},
            "human": {"status":"completed","count":2,"votes":[
                        {"name":"原神/荧","character_index":0,"bbox":{...},"bbox_percent":{...},
                         "source":"upload","voter":"api:19","at":1790345251}]},
@@ -221,6 +221,10 @@ Werkzeug 默认的 HTML 错误页（404/405/413/500…）也换成了同款 JSON
   语义是该 voter 在这张图上的标注集合**整批替换**（仍是改票，不会重复叠加）。
 - **人员位置**：人工票只给 `character_index` 时，读取接口会从模型通道的 `characters[i]` 复制 `bbox`/`bbox_percent`
   （并附 `model_guess`，便于前端显示「人 vs 模型」）。
+- **llm 通道同样多角**：LLM 提示词已切到「逐个人物识别」（含 0-100 近似框），
+  节点侧按 `LLM_MULTI_CHARACTER`（默认开）/ `LLM_MAX_CHARACTERS` / `LLM_REQUEST_BOX` 控制，
+  解析时统一换算成与 37ac 相同的 `bbox`（0-1）与 `bbox_percent`（0-100）；
+  框是多模态模型的**估计值**（可能不如 YOLO 精确），读取结果里 `characters[].source` 会标明 `llm`。
 - **部分完成**：37ac/llm 几秒回来、人工可能永远不来；`channel_status` 给出每通道状态，
   任务整体 status ∈ pending / partial / completed / failed。
 - 匿名端点限流时 429 + `RATE_LIMITED`；任务不存在 404 + `NOT_FOUND`。

@@ -137,7 +137,7 @@ require_once ROOT_PATH . '/views/layout.php';
 
 <section class="about-section ac-container">
     <h2>开源协议</h2>
-    <p class="section-sub">本项目仅限内部研究使用，禁止商用及二次分发。</p>
+    <p class="section-sub">本项目遵循 MIT 开源协议。</p>
     <p>代码托管在 <a href="https://github.com/chijichan/37AC" target="_blank" rel="nofollow">GitHub</a>，欢迎提交 Issue 与建议。</p>
 </section>
 

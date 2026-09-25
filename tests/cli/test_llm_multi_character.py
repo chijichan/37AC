@@ -1,174 +1,221 @@
-"""LLM 一图多角：位置解析 + 人物数组解析（不联网）。"""
+"""LLM 一图多角（裁剪方案）：切图 + 逐张识别（不联网）。"""
 
 import json
+import shutil
+import uuid
+from pathlib import Path
 
 import pytest
+from PIL import Image
 
-from config import base as cfg
 from prediction import predictor as P
 
 
-def _api_response(payload: dict) -> dict:
-    return {"choices": [{"message": {"content": json.dumps(payload, ensure_ascii=False)}}]}
+def _make_root() -> Path:
+    base = Path(__file__).resolve().parents[2] / ".tmp-tests"
+    base.mkdir(parents=True, exist_ok=True)
+    root = base / ("llm-crop-" + uuid.uuid4().hex[:8])
+    root.mkdir(parents=True, exist_ok=True)
+    return root
 
 
-# ---------------- 位置解析 ----------------
+class FakeResponse:
+    def __init__(self, payload: dict):
+        self.status_code = 200
+        self._payload = payload
+        self.text = json.dumps(payload, ensure_ascii=False)
 
-def test_normalize_box_percent_list():
-    bbox, percent = P._normalize_llm_box([10, 20, 60, 90], (1000, 500))
-
-    assert percent == {"x": 10.0, "y": 20.0, "w": 50.0, "h": 70.0}
-    assert bbox == {"x": 0.1, "y": 0.2, "w": 0.5, "h": 0.7}
-
-
-def test_normalize_box_normalized_list():
-    bbox, percent = P._normalize_llm_box([0.1, 0.2, 0.6, 0.9], (1000, 500))
-
-    assert percent["x"] == pytest.approx(10.0, abs=0.01)
-    assert percent["w"] == pytest.approx(50.0, abs=0.01)
-    assert bbox["w"] == pytest.approx(0.5, abs=0.001)
+    def json(self):
+        return self._payload
 
 
-def test_normalize_box_xywh_dict_and_ltbr_dict():
-    bbox, percent = P._normalize_llm_box({"x": 10, "y": 10, "w": 30, "h": 40})
-    assert percent == {"x": 10.0, "y": 10.0, "w": 30.0, "h": 40.0}
-
-    _bbox2, percent2 = P._normalize_llm_box({"left": 5, "top": 6, "right": 25, "bottom": 46})
-    assert percent2 == {"x": 5.0, "y": 6.0, "w": 20.0, "h": 40.0}
-
-
-def test_normalize_box_string_and_swapped_order():
-    _bbox, percent = P._normalize_llm_box("60,90,10,20")
-    assert percent == {"x": 10.0, "y": 20.0, "w": 50.0, "h": 70.0}   # 自动交换 x1<x2, y1<y2
+def _llm_reply(label: str, confidence: int = 90, tags=None) -> dict:
+    content = json.dumps(
+        {"label": label, "confidence": confidence, "features_used": ["白发"], "tags": tags or ["女性角色"]},
+        ensure_ascii=False,
+    )
+    return {"choices": [{"message": {"content": content}}]}
 
 
-def test_normalize_box_rejects_degenerate_and_garbage():
-    assert P._normalize_llm_box(None) == (None, None)
-    assert P._normalize_llm_box([10, 10, 10.5, 90]) == (None, None)     # 宽度 <1%
-    assert P._normalize_llm_box("没有坐标") == (None, None)
-    assert P._normalize_llm_box({"foo": 1}) == (None, None)
+@pytest.fixture
+def root():
+    path = _make_root()
+    yield path
+    shutil.rmtree(path, ignore_errors=True)
 
 
-def test_normalize_box_clamps_out_of_range():
-    _bbox, percent = P._normalize_llm_box([-20, -10, 150, 130])
-    assert percent == {"x": 0.0, "y": 0.0, "w": 100.0, "h": 100.0}
+@pytest.fixture
+def image_path(root):
+    path = root / "scene.png"
+    Image.new("RGB", (400, 300), (20, 40, 60)).save(path)
+    return path
 
 
-# ---------------- 人物数组解析 ----------------
-
-def test_parse_characters_multi():
-    parsed = {
-        "characters": [
-            {"label": "蔚蓝档案/白子", "confidence": 82, "box": [55, 20, 90, 92]},
-            {"label": "原神/雷电将军", "confidence": 95, "box": [10, 15, 45, 88],
-             "class_probs": [{"label": "原神/雷电将军", "confidence": 80}]},
-        ],
-        "label": "原神/雷电将军",
-        "confidence": 95,
-    }
-    characters = P._parse_llm_characters(parsed, (1000, 1000))
-
-    assert [c["label"] for c in characters] == ["原神/雷电将军", "蔚蓝档案/白子"]   # 面积降序
-    assert [c["index"] for c in characters] == [0, 1]
-    assert characters[0]["bbox_percent"] == {"x": 10.0, "y": 15.0, "w": 35.0, "h": 73.0}
-    assert characters[0]["source"] == "llm"
-    assert characters[0]["class_probs"][0]["name"] == "原神/雷电将军"
+def _fake_crops(root, count=2):
+    """造 count 张"子图"，并返回检测器风格的 characters 列表。"""
+    crops = []
+    for index in range(count):
+        crop_file = root / f"crop_{index}.jpg"
+        Image.new("RGB", (120, 200), (200, 100, 50)).save(crop_file)
+        crops.append({
+            "index": index,
+            "crop_path": str(crop_file),
+            "bbox": (index * 100, 20, index * 100 + 100, 220),
+            "bbox_norm": {"x": 0.1 * index, "y": 0.1, "w": 0.25, "h": 0.7},
+            "bbox_percent": {"x": 10.0 * index, "y": 10.0, "w": 25.0, "h": 70.0},
+            "detector_confidence": 0.9 - index * 0.1,
+            "class_name": "person",
+        })
+    return crops
 
 
-def test_parse_characters_single_object_compat():
-    parsed = {"label": "原神/荧", "confidence": 88,
-              "class_probs": [{"label": "原神/荧", "confidence": 70}]}
-    characters = P._parse_llm_characters(parsed, (800, 600))
+# ---------------- 切图方式选择 ----------------
 
-    assert len(characters) == 1
-    assert characters[0]["label"] == "原神/荧"
-    assert characters[0]["bbox"] is None          # 旧格式没有位置
-    assert characters[0]["confidence"] == 88
+def test_resolve_crop_method_auto_prefers_yolo(monkeypatch):
+    monkeypatch.setattr(P, "LLM_CROP_METHOD", "auto")
+    monkeypatch.setattr(P, "LOCAL_RECOGNITION_ENABLED", True)
+    assert P.resolve_llm_crop_method() == "yolo"
 
-
-def test_parse_characters_filters_placeholder_and_invalid():
-    parsed = {"characters": [
-        {"label": "作品名/角色名", "confidence": 90},
-        {"label": "原神/荧", "confidence": 80},
-    ]}
-    characters = P._parse_llm_characters(parsed, (100, 100))
-
-    assert [c["label"] for c in characters] == ["原神/荧"]
+    # 只做 LLM 的节点没有 torch，不能用 YOLO -> 用 mediapipe（轻量）
+    monkeypatch.setattr(P, "LOCAL_RECOGNITION_ENABLED", False)
+    assert P.resolve_llm_crop_method() == "mediapipe"
 
 
-def test_parse_characters_normalizes_reversed_label():
-    parsed = {"characters": [{"label": "雷电将军/原神", "confidence": 90}]}
-    characters = P._parse_llm_characters(parsed, (100, 100))
-
-    assert characters[0]["label"] == "原神/雷电将军"
-
-
-def test_parse_characters_respects_cap(monkeypatch):
-    monkeypatch.setattr(P, "LLM_MAX_CHARACTERS", 2)
-    parsed = {"characters": [
-        {"label": "A/1", "confidence": 90, "box": [0, 0, 10, 10]},
-        {"label": "B/2", "confidence": 80, "box": [0, 0, 40, 40]},
-        {"label": "C/3", "confidence": 70, "box": [0, 0, 30, 30]},
-    ]}
-    characters = P._parse_llm_characters(parsed, (100, 100))
-
-    assert len(characters) == 2
-    assert [c["label"] for c in characters] == ["B/2", "C/3"]     # 面积大的优先保留
+def test_resolve_crop_method_explicit(monkeypatch):
+    for method in ("yolo", "mediapipe", "none"):
+        monkeypatch.setattr(P, "LLM_CROP_METHOD", method)
+        assert P.resolve_llm_crop_method() == method
 
 
-def test_parse_characters_without_box_sorted_by_confidence():
-    parsed = {"characters": [
-        {"label": "A/1", "confidence": 60},
-        {"label": "B/2", "confidence": 90},
-    ]}
-    characters = P._parse_llm_characters(parsed, (100, 100))
+def test_crop_for_llm_none_skips_detector(monkeypatch):
+    def _boom(*args, **kwargs):
+        raise AssertionError("method=none 时不应调用检测器")
 
-    assert [c["label"] for c in characters] == ["B/2", "A/1"]
+    monkeypatch.setattr("detection.cropper.crop_characters_by_method", _boom)
+    assert P.crop_for_llm("whatever.jpg", method="none") == ([], None, "none")
 
 
-# ---------------- 整条解析链路 ----------------
+def test_crop_for_llm_uses_detector(root, monkeypatch):
+    crops = _fake_crops(root)
+    monkeypatch.setattr("detection.cropper.crop_characters_by_method", lambda *a, **k: {
+        "image_size": (400, 300), "detected_size": (400, 300),
+        "characters": crops, "crop_method": "yolo", "tmp_dir": str(root),
+    })
 
-def test_parse_llm_response_returns_characters():
-    payload = {
-        "characters": [
-            {"label": "原神/雷电将军", "confidence": 95, "box": [10, 15, 45, 88]},
-            {"label": "蔚蓝档案/白子", "confidence": 82, "box": [55, 20, 90, 92]},
-        ],
-        "label": "原神/雷电将军",
-        "confidence": 95,
-        "features_used": ["紫色长发"],
-        "tags": ["紫发"],
-    }
-    label, confidence, features, tags, probs, characters = P._parse_llm_response(_api_response(payload), (1000, 1000))
+    found, tmp_dir, method = P.crop_for_llm("scene.png", method="yolo")
 
-    assert label == "原神/雷电将军"
-    assert confidence == 95
-    assert len(characters) == 2
-    assert characters[0]["bbox"] is not None
-    assert features == ["紫色长发"] and tags == ["紫发"]
+    assert len(found) == 2 and method == "yolo" and tmp_dir == str(root)
 
 
-def test_parse_llm_response_fills_label_from_characters():
-    payload = {"characters": [{"label": "崩坏：星穹铁道/银狼", "confidence": 77, "box": [0, 0, 50, 50]}]}
-    label, confidence, _f, _t, probs, characters = P._parse_llm_response(_api_response(payload), (100, 100))
+# ---------------- 逐张识别 ----------------
 
-    assert label == "崩坏：星穹铁道/银狼"       # 顶层缺失 -> 用人物的
+def test_predict_llm_identifies_each_crop(image_path, root, monkeypatch):
+    crops = _fake_crops(root)
+    monkeypatch.setattr(P, "LLM_RECOGNITION_ENABLED", True)
+    monkeypatch.setattr(P, "LLM_MULTI_CHARACTER", True)
+    monkeypatch.setattr(P, "crop_for_llm", lambda path, method=None: (crops, str(root), "yolo"))
+
+    calls = []
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        calls.append(json)
+        index = len(calls) - 1
+        return FakeResponse(_llm_reply(["原神/雷电将军", "蔚蓝档案/白子"][index], 95 - index * 5))
+
+    monkeypatch.setattr("requests.post", fake_post)
+
+    result = P.predict_image_llm(str(image_path))
+
+    assert result["success"] is True
+    assert len(calls) == 2                       # 每个人物一次调用
+    assert result["character_count"] == 2
+    assert result["crop_method"] == "llm_yolo"
+    # 框来自检测器（不是 LLM 猜的）
+    assert result["characters"][0]["bbox"] == crops[0]["bbox_norm"]
+    assert result["characters"][1]["bbox_percent"] == crops[1]["bbox_percent"]
+    assert result["characters"][1]["detector_confidence"] == crops[1]["detector_confidence"]
+    assert result["characters"][0]["source"] == "llm"
+    # 顶层兼容字段 = 置信度最高的人物
+    assert result["class_probs"][0]["name"] == "原神/雷电将军"
+    # 子图临时目录用完即清
+    assert not root.exists()
+
+
+def test_predict_llm_falls_back_to_whole_image(image_path, monkeypatch):
+    monkeypatch.setattr(P, "LLM_RECOGNITION_ENABLED", True)
+    monkeypatch.setattr(P, "LLM_MULTI_CHARACTER", True)
+    monkeypatch.setattr(P, "crop_for_llm", lambda path, method=None: ([], None, "none"))
+
+    calls = []
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        calls.append(json)
+        return FakeResponse(_llm_reply("原神/荧", 88))
+
+    monkeypatch.setattr("requests.post", fake_post)
+
+    result = P.predict_image_llm(str(image_path))
+
+    assert len(calls) == 1                       # 没切出人物 -> 整图一次
+    assert result["crop_method"] == "llm"
+    assert result["character_count"] == 1
+    assert result["characters"][0]["bbox"] is None
+    assert result["class_probs"][0]["name"] == "原神/荧"
+
+
+def test_predict_llm_skips_crop_when_disabled(image_path, monkeypatch):
+    monkeypatch.setattr(P, "LLM_RECOGNITION_ENABLED", True)
+    monkeypatch.setattr(P, "LLM_MULTI_CHARACTER", False)
+
+    def _boom(*args, **kwargs):
+        raise AssertionError("关闭多角时不应切图")
+
+    monkeypatch.setattr(P, "crop_for_llm", _boom)
+    monkeypatch.setattr("requests.post", lambda *a, **k: FakeResponse(_llm_reply("原神/荧")))
+
+    result = P.predict_image_llm(str(image_path))
+
+    assert result["success"] is True
+    assert result["crop_method"] == "llm"
+
+
+def test_predict_llm_partial_failure_keeps_others(image_path, root, monkeypatch):
+    """某个人物识别失败（模型返回空）时，其它人物结果照常返回。"""
+    crops = _fake_crops(root, count=2)
+    monkeypatch.setattr(P, "LLM_RECOGNITION_ENABLED", True)
+    monkeypatch.setattr(P, "LLM_MULTI_CHARACTER", True)
+    monkeypatch.setattr(P, "crop_for_llm", lambda path, method=None: (crops, str(root), "yolo"))
+
+    calls = []
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        calls.append(json)
+        if len(calls) == 1:
+            return FakeResponse({"choices": [{"message": {"content": "{}"}}]})   # 第一个失败
+        return FakeResponse(_llm_reply("蔚蓝档案/白子"))
+
+    monkeypatch.setattr("requests.post", fake_post)
+
+    result = P.predict_image_llm(str(image_path))
+
+    assert result["success"] is True
+    assert result["character_count"] == 1
+    assert result["characters"][0]["label"] == "蔚蓝档案/白子"
+
+
+# ---------------- 解析器仍兼容"整图多角"自定义提示词 ----------------
+
+def test_parse_llm_response_accepts_characters_array():
+    resp = {"choices": [{"message": {"content": json.dumps({
+        "characters": [{"label": "崩坏：星穹铁道/银狼", "confidence": 77}],
+    }, ensure_ascii=False)}}]}
+
+    label, confidence, _f, _t, probs = P._parse_llm_response(resp)
+
+    assert label == "崩坏：星穹铁道/银狼"
     assert confidence == 77
-    assert len(characters) == 1
+    assert probs == []
 
 
 def test_parse_llm_response_empty_content():
-    assert P._parse_llm_response({"choices": [{"message": {"content": ""}}]}) == ("", 0.0, [], [], [], [])
-
-
-# ---------------- 提示词开关 ----------------
-
-def test_default_prompt_switches_with_flag():
-    if cfg.LLM_MULTI_CHARACTER:
-        assert "characters" in cfg.LLM_PROMPT_TEMPLATE
-        assert "0-100" in cfg.LLM_PROMPT_TEMPLATE
-        assert cfg.LLM_PROMPT_TEMPLATE == cfg._DEFAULT_LLM_PROMPT_MULTI
-    else:
-        assert cfg.LLM_PROMPT_TEMPLATE == cfg._DEFAULT_LLM_PROMPT
-    # 两个提示词都要保底存在，便于随时切回去
-    assert "只识别主体角色" in cfg._DEFAULT_LLM_PROMPT
+    assert P._parse_llm_response({"choices": [{"message": {"content": ""}}]}) == ("", 0.0, [], [], [])

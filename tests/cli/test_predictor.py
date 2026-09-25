@@ -180,16 +180,13 @@ class TestLlmRecognition:
                 }
             ]
         }
-        # 2026-09-25 起第 6 个返回值是人物数组（一图多角）：单角色响应会兜成 1 条
-        label, confidence, features_used, tags, class_probs, characters = _parse_llm_response(resp)
+        # 一图多角改为"先切图、再逐张问 LLM"后，解析器仍是单角色 5 元组
+        label, confidence, features_used, tags, class_probs = _parse_llm_response(resp)
         assert label == "原神/荧"
         assert confidence == 90.0
         assert features_used == ["金发", "双辫"]
         assert tags == ["长发", "女性角色"]
         assert class_probs == []
-        assert len(characters) == 1
-        assert characters[0]["label"] == "原神/荧"
-        assert characters[0]["bbox"] is None          # 旧格式没有位置信息
 
     def test_build_db_prompt_appends_character_db(self):
         """测试把角色数据库（特征/标签）附加到提示词"""

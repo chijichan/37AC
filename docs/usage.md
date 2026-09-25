@@ -26,9 +26,11 @@ CLI 采用**子命令**设计（无参数运行则进入交互菜单）：
 
 - **[1] 本地模型** — 使用本地 37ac ResNet 模型（需已训练模型与 classes.json）
 - **[2] LLM 大模型** — 使用多模态 API 识别（需 `.env` 中 `LLM_RECOGNITION_ENABLED=true`）
-  - 默认**一图多角**：提示词让模型逐个人物返回结果，并给出每个人 0-100 的近似位置；
-    开关：`LLM_MULTI_CHARACTER`（默认 true，关掉则回到「只识别主体角色」）、`LLM_MAX_CHARACTERS`（默认 8）、
-    `LLM_REQUEST_BOX`（默认 true，关掉则不要求位置）；自定义提示词用 `LLM_PROMPT_TEMPLATE`（优先级最高）。
+  - 默认**一图多角（裁剪方案）**：先用 YOLO（只做 LLM 的节点自动改用 MediaPipe）把图里每个人切成子图，
+    再逐张问模型 —— 人物框来自检测器（比让大模型猜坐标准），模型每次只看一个人，也更容易认出角色。
+    开关：`LLM_MULTI_CHARACTER`（默认 true）、`LLM_MAX_CHARACTERS`（默认 8，**每人一次调用**）、
+    `LLM_CROP_METHOD`（auto / yolo / mediapipe / none）、`LLM_CROP_MAX_SIDE`（默认 768）；
+    自定义提示词仍用 `LLM_PROMPT_TEMPLATE`（优先级最高）。
 
 ### 1. 训练模型
 

@@ -221,10 +221,11 @@ Werkzeug 默认的 HTML 错误页（404/405/413/500…）也换成了同款 JSON
   语义是该 voter 在这张图上的标注集合**整批替换**（仍是改票，不会重复叠加）。
 - **人员位置**：人工票只给 `character_index` 时，读取接口会从模型通道的 `characters[i]` 复制 `bbox`/`bbox_percent`
   （并附 `model_guess`，便于前端显示「人 vs 模型」）。
-- **llm 通道同样多角**：LLM 提示词已切到「逐个人物识别」（含 0-100 近似框），
-  节点侧按 `LLM_MULTI_CHARACTER`（默认开）/ `LLM_MAX_CHARACTERS` / `LLM_REQUEST_BOX` 控制，
-  解析时统一换算成与 37ac 相同的 `bbox`（0-1）与 `bbox_percent`（0-100）；
-  框是多模态模型的**估计值**（可能不如 YOLO 精确），读取结果里 `characters[].source` 会标明 `llm`。
+- **llm 通道同样多角（裁剪方案）**：节点先用检测器把每个人切成子图，再逐张问 LLM；
+  **人物框来自检测器**（与 37ac 同源：`bbox` 0-1 / `bbox_percent` 0-100），不需要模型猜坐标；
+  `characters[].source` 为 `llm`，`crop_method` 形如 `llm_yolo`（整图回退时为 `llm`，该条无框）。
+  开关：`LLM_MULTI_CHARACTER` / `LLM_MAX_CHARACTERS`（**每人一次调用**）/ `LLM_CROP_METHOD` / `LLM_CROP_MAX_SIDE`。
+  代价：N 个人物 = N 次 LLM 调用，耗时与 token 随人数线性增长（可用 `LLM_MAX_CHARACTERS` 封顶）。
 - **部分完成**：37ac/llm 几秒回来、人工可能永远不来；`channel_status` 给出每通道状态，
   任务整体 status ∈ pending / partial / completed / failed。
 - 匿名端点限流时 429 + `RATE_LIMITED`；任务不存在 404 + `NOT_FOUND`。

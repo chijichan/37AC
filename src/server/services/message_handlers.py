@@ -271,7 +271,11 @@ def async_handle_task_result(conn, addr, msg):
                     c: channel_service.channel_status(payload, c)
                     for c in (payload.get("requested_channels") or [])
                 },
+                # 旧字段：顶层 characters（主通道），老前端零改动
                 "result": payload.get("characters") or [],
+                # 新字段：完整的分通道结果 —— 前端可以在 partial 时立刻渲染已完成的通道，
+                # 不必等其余通道（例如 37ac 比 llm 快时先出结果）
+                "channel_results": payload,
             })
         except Exception as e:
             logger.error("异步保存失败: %s", e)

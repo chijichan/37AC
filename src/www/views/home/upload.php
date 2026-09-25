@@ -1279,7 +1279,7 @@ require_once ROOT_PATH . '/views/layout.php';
     /** 通道展示元数据（顺序即页面展示顺序） */
     const CHANNEL_META = [{
             key: '37ac',
-            label: '37ac 本地模型',
+            label: '37ac 模型',
             short: '37ac'
         },
         {
@@ -1316,6 +1316,9 @@ require_once ROOT_PATH . '/views/layout.php';
                 hasCroppedImage: false, // 是否有裁剪后的图片
             };
             this.abortController = null;
+            // 每次"新识别"自增：旧 SSE 流 / 旧轮询看到 epoch 变了就立刻作废，
+            // 避免旧结果回写到新结果上造成闪烁
+            this.updateEpoch = 0;
         }
 
         /* DOM 元素 */
@@ -1858,12 +1861,16 @@ require_once ROOT_PATH . '/views/layout.php';
         async handleSubmit(event) {
             event.preventDefault();
 
+            // 新请求进来：先拦掉旧的流与轮询，旧结果一律不再回写
+            const epoch = this.beginUpdate();
+
             this.showLoading(true);
             this.hideResult();
 
             try {
                 // 处理图片
                 const processedFile = await this.processImage();
+                if (epoch !== this.updateEpoch) return;
                 if (!processedFile) {
                     this.showLoading(false);
                     return;
@@ -1924,6 +1931,16 @@ require_once ROOT_PATH . '/views/layout.php';
                 this.currentTaskId = null; // 记录 task_id，用于 SSE 完成事件丢失时回退查询
 
                 while (true) {
+                    if (epoch !== this.updateEpoch) {
+                        // 已经有新的识别请求了：丢弃这条流
+                        try {
+                            await reader.cancel();
+                        } catch (e) {
+                            // 忽略
+                        }
+                        break;
+                    }
+
                     const {
                         done,
                         value
@@ -1955,6 +1972,8 @@ require_once ROOT_PATH . '/views/layout.php';
                                     finalResult = jsonData.result;
                                     finalChannelStatus = jsonData.channel_status || finalChannelStatus;
                                 }
+                                // 部分通道已完成（例如 37ac 比 llm 快）：立刻渲染，别干等
+                                this.renderPartialResult(jsonData, epoch);
 
                                 // 失败 / 错误
                                 if (jsonData.status === 'failed' || jsonData.status === 'error') {
@@ -1987,6 +2006,7 @@ require_once ROOT_PATH . '/views/layout.php';
                                 finalResult = jsonData.result;
                                 finalChannelStatus = jsonData.channel_status || finalChannelStatus;
                             }
+                            this.renderPartialResult(jsonData, epoch);
                             if (jsonData.status === 'failed' || jsonData.status === 'error') {
                                 streamError = jsonData.message || '识别过程中发生错误';
                             }
@@ -2016,6 +2036,7 @@ require_once ROOT_PATH . '/views/layout.php';
                     await this.recoverResult();
                 }
             } catch (error) {
+                if (epoch !== this.updateEpoch) return; // 旧请求的报错直接丢弃，不打扰新请求
                 if (error.name === 'AbortError') {
                     this.updateProgressStatus('识别已取消');
                     this.showError('识别已取消');
@@ -2024,9 +2045,33 @@ require_once ROOT_PATH . '/views/layout.php';
                     this.showError(error.message || '网络连接失败，请检查网络后重试');
                 }
             } finally {
-                this.showLoading(false);
-                this.abortController = null;
+                if (epoch === this.updateEpoch) {
+                    this.showLoading(false);
+                    this.abortController = null;
+                } else {
+                    this.setBusy(false); // 旧请求只把 busy 计数还回去，不动新请求的加载态
+                }
             }
+        }
+
+        /* 事件里带了部分通道结果就立刻渲染（partial/completed 都算） */
+        renderPartialResult(eventData, epoch) {
+            if (epoch !== undefined && epoch !== this.updateEpoch) return; // 旧请求的结果丢掉
+            const data = eventData || {};
+            const payload = data.channel_results || data.result;
+            if (!payload) return;
+            const isPartial = data.status === 'partial';
+            if (!isPartial && data.status !== 'completed') return;
+            // 旧字段 result 是 characters 数组；新字段 channel_results 是分通道对象
+            const result = Array.isArray(payload) ? {
+                characters: payload
+            } : payload;
+            if (!result || (Array.isArray(result.characters) && result.characters.length === 0 &&
+                    !result['37ac'] && !result.llm && !result.human)) {
+                return;
+            }
+            this.hasPartialResult = true;
+            this.showResult(result, data.channel_status || {});
         }
 
         /* 处理流式事件（后端按 status 字段推送状态） */
@@ -2070,6 +2115,11 @@ require_once ROOT_PATH . '/views/layout.php';
 
                 case 'processing':
                     this.updateProgressStatus('正在识别图片');
+                    break;
+
+                case 'partial':
+                    // 有通道先完成（例如 37ac），其余仍在跑：结果区已经先渲染出来了
+                    this.updateProgressStatus('部分通道已完成，结果先展示，其余通道继续等待…');
                     break;
 
                 case 'completed':
@@ -2236,6 +2286,29 @@ require_once ROOT_PATH . '/views/layout.php';
                 Notify.error('无法从链接加载图片: ' + err.message);
             } finally {
                 this.showLoading(false);
+            }
+        }
+
+        /* 开始一次新的识别：作废旧流 + 旧轮询，返回本次的 epoch */
+        beginUpdate() {
+            this.updateEpoch = (this.updateEpoch || 0) + 1;
+            this.stopChannelRefresh();
+            if (this.abortController) {
+                try {
+                    this.abortController.abort();
+                } catch (e) {
+                    // 忽略：只是作废旧请求
+                }
+                this.abortController = null;
+            }
+            return this.updateEpoch;
+        }
+
+        /* 停掉结果轮询 */
+        stopChannelRefresh() {
+            if (this.channelTimer) {
+                clearInterval(this.channelTimer);
+                this.channelTimer = null;
             }
         }
 
@@ -2462,7 +2535,7 @@ require_once ROOT_PATH . '/views/layout.php';
             }
             body += this.channelErrorHtml(section, state);
 
-            return this.channelCard('37ac 本地模型', state, body);
+            return this.channelCard('37ac 模型', state, body);
         }
 
         /* 大模型通道：候选列表 */
@@ -2672,12 +2745,12 @@ require_once ROOT_PATH . '/views/layout.php';
                 this.channelTimer = null;
             }
             const self = this;
+            const epoch = this.updateEpoch;
             let attempts = 0;
             const tick = async () => {
                 attempts += 1;
-                if (attempts > 24 || self.currentTaskId !== taskId) {
-                    clearInterval(self.channelTimer);
-                    self.channelTimer = null;
+                if (attempts > 24 || epoch !== self.updateEpoch || self.currentTaskId !== taskId) {
+                    self.stopChannelRefresh();
                     return;
                 }
                 try {
@@ -2686,8 +2759,17 @@ require_once ROOT_PATH . '/views/layout.php';
                             'X-Requested-With': 'XMLHttpRequest'
                         },
                     });
+                    // 关键：请求往返期间可能已经有新的识别请求，回来后再校验一次
+                    if (epoch !== self.updateEpoch) {
+                        self.stopChannelRefresh();
+                        return;
+                    }
                     if (!resp.ok) return;
                     const data = await resp.json();
+                    if (epoch !== self.updateEpoch) {
+                        self.stopChannelRefresh();
+                        return;
+                    }
                     const status = data.channel_status || {};
                     const result = data.result || {};
                     self.updateHistoryEntry(taskId, {
@@ -2699,8 +2781,7 @@ require_once ROOT_PATH . '/views/layout.php';
                     });
                     self.resultWrap.classList.add('active');
                     const pendingNode = Object.keys(status).filter((c) => c !== 'human' && status[c] !== 'completed');
-                    const humanVotes = ((result.human || {}).votes || []).length;
-                    if (!pendingNode.length && humanVotes > 0) {
+                    if (!pendingNode.length) {
                         clearInterval(self.channelTimer);
                         self.channelTimer = null;
                     }

@@ -467,6 +467,587 @@ require_once ROOT_PATH . '/views/layout.php';
             flex-basis: 5.5em;
         }
     }
+
+    /* 去掉 datalist 的原生下拉三角（Chrome/Edge 的 input[list] 指示器） */
+    .upload-page input[list]::-webkit-calendar-picker-indicator {
+        display: none !important;
+        width: 0;
+        height: 0;
+        opacity: 0;
+    }
+
+    /* 骨架卡片：列表 / 结果区加载态（不写字，直接流水卡片） */
+    .skeleton-card {
+        display: grid;
+        grid-template-columns: 64px 1fr auto;
+        gap: .8rem;
+        align-items: center;
+        padding: .6rem;
+        border: 1px solid var(--ac-line, #f0e6ea);
+        border-radius: var(--ac-radius-card);
+    }
+
+    .sk-thumb {
+        width: 64px;
+        height: 64px;
+        border-radius: var(--ac-radius-input);
+    }
+
+    .sk-line {
+        display: block;
+        height: 12px;
+        border-radius: 999px;
+    }
+
+    .sk-chip {
+        display: inline-block;
+        width: 72px;
+        height: 18px;
+        border-radius: 999px;
+    }
+
+    .sk-btn {
+        display: block;
+        width: 78px;
+        height: 32px;
+        border-radius: 999px;
+    }
+
+    .skeleton-card .sk-body {
+        display: block;
+    }
+
+    @media (max-width: 720px) {
+        .skeleton-card {
+            grid-template-columns: 56px 1fr;
+        }
+
+        .skeleton-card .sk-btn {
+            display: none;
+        }
+    }
+
+    /* 空内容框：套用仪表盘同款流水光效（复用设计系统的 skeleton-shimmer 关键帧） */
+    .flow-empty {
+        background: linear-gradient(90deg, var(--ac-ink-100, #f0e6ea) 25%, var(--ac-surface-2, #faf6f8) 50%, var(--ac-ink-100, #f0e6ea) 75%) !important;
+        background-size: 200% 100% !important;
+        animation: skeleton-shimmer 1.4s infinite;
+    }
+
+    .human-crop-canvas.is-empty {
+        border-style: solid;
+        border-color: transparent;
+    }
+
+
+    /* 一张图多个角色：待提交列表 */
+    .human-form-actions {
+        display: flex;
+        gap: .6rem;
+        flex-wrap: wrap;
+    }
+
+    .human-pending {
+        margin-top: 1rem;
+    }
+
+    .pending-item {
+        display: grid;
+        grid-template-columns: 56px 1fr auto;
+        gap: .7rem;
+        align-items: center;
+        padding: .5rem;
+        margin-top: .5rem;
+        border: 1px solid var(--ac-line, #f0e6ea);
+        border-radius: var(--ac-radius-card);
+        background: var(--ac-surface-2, #faf6f8);
+    }
+
+    .pending-thumb {
+        width: 56px;
+        height: 56px;
+        object-fit: cover;
+        border-radius: var(--ac-radius-input);
+        background: var(--ac-surface, #fff);
+    }
+
+    .pending-name {
+        font-weight: 700;
+        color: var(--ac-ink-900);
+    }
+
+    /* 已有票：按投票人分组 */
+    .vote-group {
+        margin-top: .8rem;
+    }
+
+    .vote-group-head {
+        font-size: .8rem;
+        font-weight: 700;
+        color: var(--ac-ink-600);
+        padding-bottom: .2rem;
+        border-bottom: 1px solid var(--ac-line, #f0e6ea);
+    }
+
+    /* 能工智人：未选图时整块收起，选了才展开（避免空图 + 空表单） */
+    .human-annotate-card[hidden] {
+        display: none !important;
+    }
+
+    .human-crop-canvas {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 240px;
+        border: 1px dashed var(--ac-line, #e6dade);
+        background: var(--ac-surface-2, #faf6f8);
+    }
+
+    .human-crop-canvas img {
+        display: none;
+        max-width: 100%;
+    }
+
+    .human-crop-placeholder {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: .5rem;
+        padding: 2rem 1rem;
+        color: var(--ac-ink-500);
+        font-size: .85rem;
+        text-align: center;
+    }
+
+    .human-crop-placeholder i {
+        font-size: 1.7rem;
+        color: var(--ac-pink-300, #f0a6c8);
+    }
+
+    .human-crop-side .col-label {
+        display: block;
+        margin-bottom: .4rem;
+        font-size: .8rem;
+        font-weight: 700;
+        color: var(--ac-ink-600);
+    }
+
+    .human-crop-actions {
+        display: flex;
+        justify-content: flex-end;
+        margin-bottom: .4rem;
+    }
+
+    /* 能工智人：左边自己拉框，右边预览 */
+    .human-crop {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 200px;
+        gap: 1rem;
+        align-items: start;
+        margin-bottom: 1.1rem;
+    }
+
+    .human-crop-canvas {
+        background: var(--ac-surface-2, #f6f2f4);
+        border-radius: var(--ac-radius-card);
+        overflow: hidden;
+        min-height: 160px;
+    }
+
+    .human-crop-canvas img {
+        display: block;
+        max-width: 100%;
+    }
+
+    .human-crop-side .hint {
+        margin-bottom: .6rem;
+    }
+
+    .human-crop-preview {
+        width: 100%;
+        height: 160px;
+        overflow: hidden;
+        border-radius: var(--ac-radius-card);
+        background: var(--ac-surface-2, #f6f2f4);
+        margin-bottom: .6rem;
+    }
+
+    .human-crop-preview img {
+        display: block;
+        max-width: 100%;
+    }
+
+    .form-row {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: .9rem;
+    }
+
+    .history-item.active {
+        border-color: var(--ac-pink-400);
+        box-shadow: 0 0 0 2px var(--ac-pink-100);
+    }
+
+    @media (max-width: 720px) {
+        .human-crop {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    /* 37ac 卡片里的"每个人物"区块 */
+    .char-block {
+        margin-top: .7rem;
+        padding-top: .55rem;
+        border-top: 1px dashed var(--ac-line, #f0e6ea);
+    }
+
+    .char-block:first-of-type {
+        border-top: 0;
+        padding-top: 0;
+    }
+
+    .char-head {
+        display: flex;
+        align-items: center;
+        gap: .35rem;
+        flex-wrap: wrap;
+        margin-bottom: .35rem;
+    }
+
+    .char-index {
+        font-family: var(--ac-font-mono);
+        font-size: .78rem;
+        color: var(--ac-ink-500);
+    }
+
+    .char-name {
+        font-weight: 800;
+        color: var(--ac-ink-900);
+    }
+
+    .char-conf {
+        font-size: .78rem;
+        color: var(--ac-ink-600);
+    }
+
+    /* 候选行：角色名 + IP 徽章（name 列原来是固定 7.5em，长名被截断才显得"IP 和角色不分"） */
+    .upload-page .prob-item .name {
+        flex: 1 1 auto;
+        min-width: 0;
+        max-width: 52%;
+    }
+
+    .cand-ip {
+        margin-left: .35rem;
+        font-size: .68rem;
+        vertical-align: middle;
+    }
+
+    .cand-link {
+        margin: -.1rem 0 .35rem;
+        font-size: .75rem;
+        text-align: right;
+    }
+
+    .cand-link a {
+        color: var(--ac-pink-600);
+        text-decoration: none;
+    }
+
+    .channel-error {
+        margin-top: .5rem;
+        font-size: .82rem;
+        color: var(--ac-danger, #d64550);
+        word-break: break-word;
+    }
+
+    /* 面板内各卡片之间留出间距（之前历史列表和结果区贴在一起） */
+    .tab-panel .card+.card,
+    .tab-panel .result-wrap {
+        margin-top: 1rem;
+    }
+
+    /* 顶部加载条：与仪表盘同款（.skeleton 自带闪动） */
+    .dashboard-loading {
+        display: none;
+        justify-content: center;
+        padding: 2rem 0;
+    }
+
+    .dashboard-loading[aria-busy="true"] {
+        display: flex;
+    }
+
+    /* ---------- 标签页：上传识别 / 历史识别 / 能工智人 ---------- */
+    .upload-tabs {
+        display: flex;
+        gap: .4rem;
+        margin-bottom: 1.2rem;
+        border-bottom: 1px solid var(--ac-line, #f0e6ea);
+        flex-wrap: wrap;
+    }
+
+    .upload-tab {
+        appearance: none;
+        border: 0;
+        background: transparent;
+        padding: .6rem 1rem;
+        font: inherit;
+        font-weight: 800;
+        color: var(--ac-ink-500);
+        cursor: pointer;
+        border-bottom: 2px solid transparent;
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+    }
+
+    .upload-tab:hover {
+        color: var(--ac-pink-600);
+    }
+
+    .upload-tab.active {
+        color: var(--ac-pink-700);
+        border-bottom-color: var(--ac-pink-600);
+    }
+
+    .tab-panel {
+        display: none;
+    }
+
+    .tab-panel.active {
+        display: block;
+    }
+
+    .panel-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    .panel-head h3 {
+        margin: 0 0 .2rem;
+    }
+
+    .tag-human {
+        display: inline-block;
+        padding: .1rem .45rem;
+        border-radius: var(--ac-radius-pill);
+        background: var(--ac-pink-100);
+        color: var(--ac-pink-700);
+        font-size: .68rem;
+        font-weight: 800;
+        letter-spacing: .06em;
+        vertical-align: middle;
+    }
+
+    /* ---------- 结果：三通道分区（37ac / 大模型 / 能工智人） ---------- */
+    .channel-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    .channel-card {
+        padding: 1.1rem 1.2rem;
+    }
+
+    .channel-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: .5rem;
+        margin-bottom: .7rem;
+    }
+
+    .channel-title {
+        font-weight: 800;
+        color: var(--ac-ink-900);
+    }
+
+    .channel-empty {
+        color: var(--ac-ink-500);
+        font-size: .9rem;
+    }
+
+    .channel-chip {
+        display: inline-block;
+        padding: .1rem .45rem;
+        border-radius: var(--ac-radius-pill);
+        font-size: .72rem;
+        font-weight: 700;
+        background: var(--ac-surface-2, #f6f2f4);
+        color: var(--ac-ink-600);
+        white-space: nowrap;
+    }
+
+    .channel-chip.ok {
+        background: var(--ac-pink-100);
+        color: var(--ac-pink-700);
+    }
+
+    .channel-chip.run {
+        background: #fff4d6;
+        color: #8a6100;
+    }
+
+    .channel-chip.bad {
+        background: #ffe3e3;
+        color: #a3242f;
+    }
+
+    .channel-meta {
+        font-size: .8rem;
+        color: var(--ac-ink-500);
+        margin-top: .5rem;
+    }
+
+    .result-tools {
+        display: flex;
+        gap: .6rem;
+        align-items: center;
+        flex-wrap: wrap;
+        margin-top: .2rem;
+    }
+
+    .task-id-line {
+        font-family: var(--ac-font-mono);
+        font-size: .8rem;
+        color: var(--ac-ink-500);
+    }
+
+    /* ---------- 历史识别 ---------- */
+    .history-list {
+        display: flex;
+        flex-direction: column;
+        gap: .6rem;
+    }
+
+    .history-item {
+        display: grid;
+        grid-template-columns: 64px 1fr auto;
+        gap: .8rem;
+        align-items: center;
+        padding: .6rem;
+        border: 1px solid var(--ac-line, #f0e6ea);
+        border-radius: var(--ac-radius-card);
+    }
+
+    .history-thumb {
+        width: 64px;
+        height: 64px;
+        object-fit: cover;
+        border-radius: var(--ac-radius-input);
+        background: var(--ac-surface-2, #f6f2f4);
+    }
+
+    .history-line {
+        display: flex;
+        gap: .6rem;
+        align-items: baseline;
+        flex-wrap: wrap;
+    }
+
+    .history-id {
+        font-weight: 700;
+    }
+
+    .history-time {
+        font-size: .8rem;
+        color: var(--ac-ink-500);
+    }
+
+    .history-chips {
+        display: flex;
+        gap: .35rem;
+        flex-wrap: wrap;
+        margin-top: .35rem;
+    }
+
+    .history-actions {
+        display: flex;
+        gap: .4rem;
+    }
+
+    /* ---------- 能工智人（人工通道） ---------- */
+    .human-preview {
+        margin: .4rem 0 1rem;
+    }
+
+    .human-preview img {
+        max-width: 100%;
+        max-height: 320px;
+        border-radius: var(--ac-radius-card);
+        border: 1px solid var(--ac-line, #f0e6ea);
+    }
+
+    .human-form {
+        display: flex;
+        flex-direction: column;
+        gap: .9rem;
+        max-width: 520px;
+    }
+
+    .human-form .req {
+        color: var(--ac-danger, #d64550);
+    }
+
+    .name-suggest {
+        display: flex;
+        gap: .35rem;
+        flex-wrap: wrap;
+        margin-top: .4rem;
+    }
+
+    .name-suggest button {
+        appearance: none;
+        border: 1px solid var(--ac-line, #e6dade);
+        background: var(--ac-surface, #fff);
+        border-radius: var(--ac-radius-pill);
+        padding: .15rem .6rem;
+        font: inherit;
+        font-size: .8rem;
+        cursor: pointer;
+    }
+
+    .name-suggest button:hover {
+        border-color: var(--ac-pink-400);
+        color: var(--ac-pink-700);
+    }
+
+    .human-votes {
+        margin-top: 1.2rem;
+    }
+
+    .vote-row {
+        display: flex;
+        gap: .6rem;
+        align-items: baseline;
+        padding: .45rem 0;
+        border-bottom: 1px dashed var(--ac-line, #f0e6ea);
+        font-size: .9rem;
+        flex-wrap: wrap;
+    }
+
+    .vote-row .who,
+    .vote-row .model-guess {
+        color: var(--ac-ink-500);
+        font-size: .78rem;
+    }
+
+    @media (max-width: 720px) {
+        .history-item {
+            grid-template-columns: 56px 1fr;
+        }
+
+        .history-actions {
+            grid-column: 1 / -1;
+            justify-content: flex-end;
+        }
+    }
 </style>
 
 <div class="upload-page ac-container">
@@ -475,96 +1056,201 @@ require_once ROOT_PATH . '/views/layout.php';
         <p>支持 JPG / PNG，最大 50MB，可拖拽上传。</p>
     </div>
 
-    <div class="card upload-card">
-        <div class="upload-area" id="uploadArea">
-            <input type="file" id="fileInput" accept="image/jpeg,image/png" hidden />
-            <div class="ua-icon"><i class="ph ph-cloud-arrow-up"></i></div>
-            <div class="ua-title">点击选择或拖拽图片到这里</div>
-            <div class="ua-sub">识别结果通常在几秒内返回</div>
-        </div>
-
-        <div class="link-divider"><span>或粘贴图片链接</span></div>
-        <div class="link-row">
-            <input type="url" id="linkInput" class="input" placeholder="https://example.com/image.jpg" />
-            <button type="button" class="btn btn-secondary" id="btnLoadLink">加载图片</button>
-        </div>
+    <!-- 三个入口：上传识别 / 历史识别 / 能工智人 -->
+    <div class="upload-tabs" role="tablist">
+        <button type="button" class="upload-tab active" data-tab="upload" role="tab" aria-selected="true">
+            <i class="ph ph-cloud-arrow-up"></i>上传识别
+        </button>
+        <button type="button" class="upload-tab" data-tab="history" role="tab" aria-selected="false">
+            <i class="ph ph-clock-counter-clockwise"></i>历史识别
+        </button>
+        <button type="button" class="upload-tab" data-tab="human" role="tab" aria-selected="false">
+            <i class="ph ph-users-three"></i>能工智人
+        </button>
     </div>
 
-    <!-- 识别模型选择 -->
-    <fieldset class="option-group" id="recognitionGroup" disabled>
-        <legend>识别模型</legend>
-        <div class="group-body">
-            <div class="field">
-                <label for="recognitionType">推理模型</label>
-                <select id="recognitionType" class="select">
-                    <option value="37ac" selected>37ac 本地模型</option>
-                </select>
-                <span class="hint">自动模式由节点根据配置选择。</span>
+    <!-- 顶部加载条（三个标签共用，与仪表盘同款闪动） -->
+    <div class="dashboard-loading" id="dashboard-loading" aria-busy="false">
+        <span class="skeleton" style="width: 200px; height: 20px;"></span>
+    </div>
+
+    <!-- ① 上传识别 -->
+    <section class="tab-panel active" id="panel-upload">
+
+        <div class="card upload-card">
+            <div class="upload-area" id="uploadArea">
+                <input type="file" id="fileInput" accept="image/jpeg,image/png" hidden />
+                <div class="ua-icon"><i class="ph ph-cloud-arrow-up"></i></div>
+                <div class="ua-title">点击选择或拖拽图片到这里</div>
+                <div class="ua-sub">识别结果通常在几秒内返回</div>
+            </div>
+
+            <div class="link-divider"><span>或粘贴图片链接</span></div>
+            <div class="link-row">
+                <input type="url" id="linkInput" class="input" placeholder="https://example.com/image.jpg" />
+                <button type="button" class="btn btn-secondary" id="btnLoadLink">加载图片</button>
             </div>
         </div>
-    </fieldset>
 
-    <!-- 图片处理选项 -->
-    <fieldset class="option-group" id="imageProcessingGroup" disabled>
-        <legend>图片处理</legend>
-        <div class="group-body">
-            <label class="checkbox-row" for="enableCrop">
-                <input type="checkbox" id="enableCrop" />
-                <span>裁剪图片</span>
-            </label>
-            <div id="cropSubOptions" class="sub-options">
-                <div class="field">
-                    <label for="cropMode">裁剪模式</label>
-                    <select id="cropMode" class="select">
-                        <option value="auto">自动裁剪（YOLO 识别边界）</option>
-                        <option value="manual">手动裁剪（可视化框选）</option>
-                    </select>
-                    <span class="hint">自动裁剪将框选图片中的主要人物区域；手动裁剪可自由选择区域。</span>
+        <!-- 图片处理选项 -->
+        <fieldset class="option-group" id="imageProcessingGroup" disabled>
+            <legend>图片处理</legend>
+            <div class="group-body">
+                <label class="checkbox-row" for="enableCrop">
+                    <input type="checkbox" id="enableCrop" />
+                    <span>裁剪图片</span>
+                </label>
+                <div id="cropSubOptions" class="sub-options">
+                    <div class="field">
+                        <label for="cropMode">裁剪模式</label>
+                        <select id="cropMode" class="select">
+                            <option value="auto">自动裁剪（YOLO 识别边界）</option>
+                            <option value="manual">手动裁剪（可视化框选）</option>
+                        </select>
+                        <span class="hint">自动裁剪将框选图片中的主要人物区域；手动裁剪可自由选择区域。</span>
+                    </div>
+                </div>
+            </div>
+        </fieldset>
+
+        <!-- 裁剪器 -->
+        <div class="cropper-wrap card" id="cropperWrap">
+            <div class="cropper-col">
+                <span class="col-label">原图（拖动框选裁剪区域）</span>
+                <div class="cropper-container-box">
+                    <img id="cropperImage" src="" alt="待裁剪图片" />
+                </div>
+            </div>
+            <div class="cropper-col">
+                <div class="preview-label-row">
+                    <span class="col-label">预览</span>
+                </div>
+                <div id="preview"></div>
+                <div class="cropper-actions">
+                    <button type="button" class="btn btn-primary btn-sm" id="btnCropImage">裁剪图片</button>
+                    <button type="button" class="btn btn-ghost btn-sm" id="btnCropReset">重置选框</button>
                 </div>
             </div>
         </div>
-    </fieldset>
 
-    <!-- 裁剪器 -->
-    <div class="cropper-wrap card" id="cropperWrap">
-        <div class="cropper-col">
-            <span class="col-label">原图（拖动框选裁剪区域）</span>
-            <div class="cropper-container-box">
-                <img id="cropperImage" src="" alt="待裁剪图片" />
+        <!-- 提交 -->
+        <div class="submit-wrap card" id="submitWrap">
+            <form id="uploadForm">
+                <button type="submit" class="btn btn-primary btn-lg btn-block">开始识别</button>
+            </form>
+            <div class="preview-box" id="previewWrap">
+                <img id="previewImage" alt="识别预览" />
             </div>
         </div>
-        <div class="cropper-col">
-            <div class="preview-label-row">
-                <span class="col-label">预览</span>
-            </div>
-            <div id="preview"></div>
-            <div class="cropper-actions">
-                <button type="button" class="btn btn-primary btn-sm" id="btnCropImage">裁剪图片</button>
-                <button type="button" class="btn btn-ghost btn-sm" id="btnCropReset">重置选框</button>
-            </div>
+
+        <!-- 加载状态 -->
+        <div class="loading-wrap" id="loadingWrap">
+            <img src="https://static.322337.xyz/view.php/2b41dcf3c57aabd59adb77f0c90c6eba.gif" alt="" />
+            <p class="loading-text">识别中，请稍候</p>
+            <p class="progress-hint" id="progressStatusText">正在上传图片</p>
+            <button type="button" class="btn btn-ghost btn-sm" id="btnCancelRequest">取消识别</button>
         </div>
-    </div>
 
-    <!-- 提交 -->
-    <div class="submit-wrap card" id="submitWrap">
-        <form id="uploadForm">
-            <button type="submit" class="btn btn-primary btn-lg btn-block">开始识别</button>
-        </form>
-        <div class="preview-box" id="previewWrap">
-            <img id="previewImage" alt="识别预览" />
+        <!-- 结果：按通道分区（37ac / 大模型 / 能工智人） -->
+        <div class="result-wrap" id="resultWrap"></div>
+    </section>
+
+    <!-- ② 历史识别 -->
+    <section class="tab-panel" id="panel-history">
+        <div class="card">
+            <div class="panel-head">
+                <div>
+                    <h3>历史识别</h3>
+                    <p class="hint">保存在本机浏览器的最近识别记录（最多 20 条）；换设备或清缓存后会消失。</p>
+                </div>
+                <button type="button" class="btn btn-ghost btn-sm" id="btnClearHistory">清空记录</button>
+            </div>
+            <div id="historyList" class="history-list"></div>
         </div>
-    </div>
 
-    <!-- 加载状态 -->
-    <div class="loading-wrap" id="loadingWrap">
-        <img src="https://static.322337.xyz/view.php/2b41dcf3c57aabd59adb77f0c90c6eba.gif" alt="" />
-        <p class="loading-text">识别中，请稍候</p>
-        <p class="progress-hint" id="progressStatusText">正在上传图片</p>
-        <button type="button" class="btn btn-ghost btn-sm" id="btnCancelRequest">取消识别</button>
-    </div>
+        <div class="card">
+            <div class="panel-head">
+                <div>
+                    <h3>大家最近在识别</h3>
+                    <p class="hint">服务端最近的识别任务（只含任务与各通道状态，不含结果）；「查看结果」可看这一单的三通道结果，「去投票」直接跳人工通道。</p>
+                </div>
+                <button type="button" class="btn btn-ghost btn-sm" id="btnRefreshFeed">刷新</button>
+            </div>
+            <div id="publicFeed" class="history-list"></div>
+        </div>
 
-    <!-- 结果 -->
-    <div class="result-wrap" id="resultWrap"></div>
+        <div class="result-wrap" id="historyResultWrap"></div>
+    </section>
+
+    <!-- ③ 能工智人（人工通道） -->
+    <section class="tab-panel" id="panel-human">
+        <div class="card">
+            <div class="panel-head">
+                <div>
+                    <h3>能工智人 <span class="tag-human">HUMAN</span></h3>
+                    <p class="hint">挑一张还没人标注的图 → 在图上框住要认的角色 → 填作品和角色名。无需登录，同一浏览器重复提交算改票。</p>
+                </div>
+                <button type="button" class="btn btn-ghost btn-sm" id="btnRefreshHumanTasks">刷新任务</button>
+            </div>
+            <div id="humanTaskList" class="history-list"></div>
+        </div>
+
+        <div class="card human-annotate-card" id="humanAnnotateCard" hidden>
+            <div class="panel-head">
+                <div>
+                    <h3 id="humanTaskTitle">从上面挑一张图开始标注</h3>
+                    <p class="hint" id="humanTaskMeta">点列表里的「标注这张」</p>
+                </div>
+            </div>
+
+            <div class="human-crop" id="humanCropWrap">
+                <div class="human-crop-canvas" id="humanCropCanvas">
+                    <div class="human-crop-placeholder" id="humanCropPlaceholder">
+                        <i class="ph ph-selection-plus"></i>
+                        <span>选好图后，在图上按住拖动框住要认的角色</span>
+                    </div>
+                    <img id="humanCropImage" src="" alt="" />
+                </div>
+                <div class="human-crop-side">
+                    <span class="col-label">框选预览</span>
+                    <div id="humanCropPreview" class="human-crop-preview"></div>
+                    <div class="human-crop-actions">
+                        <button type="button" class="btn btn-ghost btn-sm" id="btnHumanCropReset">清除选框</button>
+                    </div>
+                    <p class="hint">不框也可以，就按整图提交。</p>
+                </div>
+            </div>
+
+            <form id="humanForm" class="human-form" novalidate>
+                <div class="form-row">
+                    <div class="field">
+                        <label for="humanIp">作品 / IP <span class="req">*</span></label>
+                        <input type="text" id="humanIp" class="input" list="humanIpOptions" placeholder="如：蔚蓝档案" required />
+                        <datalist id="humanIpOptions"></datalist>
+                    </div>
+                    <div class="field">
+                        <label for="humanName">角色名 <span class="req">*</span></label>
+                        <input type="text" id="humanName" class="input" list="humanNameOptions" placeholder="如：阿洛娜" required />
+                        <datalist id="humanNameOptions"></datalist>
+                    </div>
+                </div>
+                <div id="humanNameSuggest" class="name-suggest"></div>
+                <div class="field">
+                    <label for="humanNote">备注</label>
+                    <input type="text" id="humanNote" class="input" placeholder="可选，例如：侧面照 / 卡面" />
+                </div>
+                <div class="human-form-actions">
+                    <button type="button" class="btn btn-secondary" id="btnAddCharacter">＋ 添加这个角色</button>
+                    <button type="submit" class="btn btn-primary" id="btnSubmitVotes">提交标注</button>
+                </div>
+                <p class="hint">一张图可以标多个角色：框住一个 → 填作品 / 角色名 → 点「添加这个角色」，重复即可；最后一次性提交。多个人标注同一张图也没问题。</p>
+            </form>
+
+            <div id="humanPending" class="human-pending"></div>
+
+            <div id="humanVotes" class="human-votes"></div>
+        </div>
+    </section>
 </div>
 
 <script type="module">
@@ -588,6 +1274,29 @@ require_once ROOT_PATH . '/views/layout.php';
     /** 后端 /api/upload 的请求体上限（Flask MAX_CONTENT_LENGTH = 10MB），压缩异常时用于兜底提示 */
     const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 
+    /** 识别通道：一次上传同时请求三条通道（后端 channels 参数） */
+    const CHANNELS = ['37ac', 'llm', 'human'];
+    /** 通道展示元数据（顺序即页面展示顺序） */
+    const CHANNEL_META = [{
+            key: '37ac',
+            label: '37ac 本地模型',
+            short: '37ac'
+        },
+        {
+            key: 'llm',
+            label: '大模型（LLM）',
+            short: '大模型'
+        },
+        {
+            key: 'human',
+            label: '能工智人（人工）',
+            short: '人工'
+        },
+    ];
+    /** 本机历史记录（localStorage） */
+    const HISTORY_KEY = '37ac_history';
+    const HISTORY_MAX = 20;
+
     /**
      * 二次元图片识别工具（上传 → 处理 → 识别）
      */
@@ -595,7 +1304,10 @@ require_once ROOT_PATH . '/views/layout.php';
         constructor() {
             this.initElements();
             this.bindEvents();
-            this.loadModels();
+            this.currentTab = 'upload';
+            this.humanLoadedTask = null;
+            this.humanTaskData = null;
+            this.initTabs();
             this.state = {
                 tempFile: null, // 原始临时文件
                 cropInstance: null, // Cropper.js 实例
@@ -615,6 +1327,7 @@ require_once ROOT_PATH . '/views/layout.php';
             this.previewWrap = document.getElementById('previewWrap');
             this.previewImage = document.getElementById('previewImage');
             this.loadingWrap = document.getElementById('loadingWrap');
+            this.loadingIndicator = document.getElementById('dashboard-loading');
             this.submitWrap = document.getElementById('submitWrap');
 
             // 裁剪相关
@@ -627,9 +1340,37 @@ require_once ROOT_PATH . '/views/layout.php';
             this.btnLoadLink = document.getElementById('btnLoadLink');
 
             // 选项组
-            this.recognitionGroup = document.getElementById('recognitionGroup');
-            this.recognitionTypeSelect = document.getElementById('recognitionType');
             this.imageProcessingGroup = document.getElementById('imageProcessingGroup');
+
+            // 历史识别
+            this.historyList = document.getElementById('historyList');
+            this.historyResultWrap = document.getElementById('historyResultWrap');
+            this.btnClearHistory = document.getElementById('btnClearHistory');
+            this.publicFeed = document.getElementById('publicFeed');
+            this.btnRefreshFeed = document.getElementById('btnRefreshFeed');
+            this.btnRefreshHumanTasks = document.getElementById('btnRefreshHumanTasks');
+
+            // 能工智人（人工通道）
+            this.humanForm = document.getElementById('humanForm');
+            this.humanTaskList = document.getElementById('humanTaskList');
+            this.humanTaskTitle = document.getElementById('humanTaskTitle');
+            this.humanTaskMeta = document.getElementById('humanTaskMeta');
+            this.humanAnnotateCard = document.getElementById('humanAnnotateCard');
+            this.humanCropPlaceholder = document.getElementById('humanCropPlaceholder');
+            this.humanCropCanvas = document.getElementById('humanCropCanvas');
+            this.humanCropImage = document.getElementById('humanCropImage');
+            this.humanCropPreview = document.getElementById('humanCropPreview');
+            this.humanIp = document.getElementById('humanIp');
+            this.humanIpOptions = document.getElementById('humanIpOptions');
+            this.humanName = document.getElementById('humanName');
+            this.humanNameOptions = document.getElementById('humanNameOptions');
+            this.humanNameSuggest = document.getElementById('humanNameSuggest');
+            this.btnHumanCropReset = document.getElementById('btnHumanCropReset');
+            this.humanNote = document.getElementById('humanNote');
+            this.humanVotes = document.getElementById('humanVotes');
+            this.humanPending = document.getElementById('humanPending');
+            this.btnAddCharacter = document.getElementById('btnAddCharacter');
+            this.btnSubmitVotes = document.getElementById('btnSubmitVotes');
         }
 
         /* 事件绑定 */
@@ -669,29 +1410,108 @@ require_once ROOT_PATH . '/views/layout.php';
 
             // 取消识别按钮
             document.getElementById('btnCancelRequest').addEventListener('click', () => this.cancelRequest());
-        }
 
-        /* 从服务端拉取识别模型列表并填充下拉框 */
-        async loadModels() {
-            try {
-                const resp = await fetch(`${window.API_BASE_URL}/models`);
-                if (!resp.ok) return;
-                const data = await resp.json();
-                const models = Array.isArray(data.models) ? data.models : [];
-                if (models.length === 0) return;
-                const select = this.recognitionTypeSelect;
-                select.innerHTML = '';
-                let hasDefault = false;
-                models.forEach((m) => {
-                    const opt = document.createElement('option');
-                    opt.value = m.id;
-                    opt.textContent = m.name || m.id;
-                    select.appendChild(opt);
-                    if (m.id === '37ac') hasDefault = true;
+            // 历史识别：点条目看结果，点「去投票」跳人工通道
+            if (this.btnClearHistory) {
+                this.btnClearHistory.addEventListener('click', () => this.clearHistory());
+            }
+            if (this.historyList) {
+                this.historyList.addEventListener('click', (e) => {
+                    const item = e.target.closest('.history-item');
+                    if (!item) return;
+                    const taskId = item.getAttribute('data-task');
+                    const btn = e.target.closest('button[data-role]');
+                    if (btn && btn.getAttribute('data-role') === 'vote') {
+                        this.selectHumanTask(taskId);
+                    } else {
+                        this.openHistoryTask(taskId);
+                    }
                 });
-                select.value = hasDefault ? '37ac' : models[0].id;
-            } catch (e) {
-                console.error('拉取模型列表失败:', e);
+            }
+
+            // 结果区的「去能工智人投票」
+            document.addEventListener('click', (e) => {
+                const btn = e.target.closest('button[data-role="goto-human"]');
+                if (btn) this.selectHumanTask(btn.getAttribute('data-task'));
+            });
+
+            // 能工智人：待标注列表（点「标注这张」）+ 刷新 + 清除选框 + 点候选双填
+            if (this.humanTaskList) {
+                this.humanTaskList.addEventListener('click', (e) => {
+                    const item = e.target.closest('.history-item');
+                    const btn = e.target.closest('button[data-role="annotate"]');
+                    if (!item || !btn) return;
+                    this.loadHumanTask(item.getAttribute('data-task'));
+                });
+            }
+            if (this.btnRefreshHumanTasks) {
+                this.btnRefreshHumanTasks.addEventListener('click', () => this.loadHumanTaskList());
+            }
+            if (this.btnHumanCropReset) {
+                this.btnHumanCropReset.addEventListener('click', () => {
+                    if (this.humanCropInstance) this.humanCropInstance.clear();
+                    if (this.humanCropPreview) this.humanCropPreview.classList.add('flow-empty');
+                });
+            }
+            if (this.humanCropImage) {
+                // 图片就绪后再挂裁剪器（Cropper 需要图片尺寸）
+                this.humanCropImage.addEventListener('load', () => {
+                    this.humanImageLoading = false;
+                    this.humanCropImage.style.display = 'block';
+                    if (this.humanCropPlaceholder) this.humanCropPlaceholder.style.display = 'none';
+                    if (this.humanCropCanvas) this.humanCropCanvas.classList.remove('flow-empty');
+                    this.initHumanCropper();
+                });
+                this.humanCropImage.addEventListener('error', () => {
+                    // 只有正在加载真实图片时才当错误（清空 src 会触发假 error）
+                    if (!this.humanImageLoading) return;
+                    this.humanImageLoading = false;
+                    this.humanCropImage.style.display = 'none';
+                    // 卡片里不写死文案：保持流水效果，错误用 toast 提示
+                    if (this.humanCropPlaceholder) this.humanCropPlaceholder.style.display = 'none';
+                    if (this.humanCropCanvas) this.humanCropCanvas.classList.add('is-empty', 'flow-empty');
+                    Notify.error('这张图已过期或被清理，换一张试试');
+                });
+            }
+            if (this.humanNameSuggest) {
+                this.humanNameSuggest.addEventListener('click', (e) => {
+                    const btn = e.target.closest('button[data-name]');
+                    if (!btn) return;
+                    if (this.humanIp) this.humanIp.value = btn.getAttribute('data-ip') || '';
+                    if (this.humanName) this.humanName.value = btn.getAttribute('data-name') || '';
+                });
+            }
+            if (this.humanForm) {
+                this.humanForm.addEventListener('submit', (e) => this.submitHumanVotes(e));
+            }
+            if (this.btnAddCharacter) {
+                this.btnAddCharacter.addEventListener('click', () => this.addPendingVote());
+            }
+            if (this.humanPending) {
+                this.humanPending.addEventListener('click', (e) => {
+                    const btn = e.target.closest('button[data-role="remove-pending"]');
+                    const item = e.target.closest('.pending-item');
+                    if (!btn || !item) return;
+                    this.removePendingVote(Number(item.getAttribute('data-i')));
+                });
+            }
+
+            // 公共 feed（大家的识别）
+            if (this.btnRefreshFeed) {
+                this.btnRefreshFeed.addEventListener('click', () => this.loadPublicFeed());
+            }
+            if (this.publicFeed) {
+                this.publicFeed.addEventListener('click', (e) => {
+                    const item = e.target.closest('.history-item');
+                    if (!item) return;
+                    const taskId = item.getAttribute('data-task');
+                    const btn = e.target.closest('button[data-role]');
+                    if (btn && btn.getAttribute('data-role') === 'vote') {
+                        this.selectHumanTask(taskId);
+                    } else {
+                        this.openHistoryTask(taskId);
+                    }
+                });
             }
         }
 
@@ -769,7 +1589,6 @@ require_once ROOT_PATH . '/views/layout.php';
             this.hideResult();
 
             // 显示处理选项
-            this.recognitionGroup.disabled = false;
             this.imageProcessingGroup.disabled = false;
 
             // 手动裁剪模式下：图片更新后同步刷新裁剪器（replace 保留选框设置）
@@ -1057,7 +1876,8 @@ require_once ROOT_PATH . '/views/layout.php';
                 const formData = new FormData();
                 formData.append('file', processedFile);
                 // 推理模型选择：37ac / llm（来自 GET /models）
-                formData.append('model', this.recognitionTypeSelect.value);
+                // 多通道：一次上传同时请求 37ac / 大模型 / 能工智人
+                formData.append('channels', CHANNELS.join(','));
 
                 this.updateProgressStatus('正在上传图片');
 
@@ -1098,6 +1918,7 @@ require_once ROOT_PATH . '/views/layout.php';
                 const decoder = new TextDecoder();
                 let buffer = '';
                 let finalResult = null;
+                let finalChannelStatus = null;
                 let streamError = null;
                 let streamTimeout = false;
                 this.currentTaskId = null; // 记录 task_id，用于 SSE 完成事件丢失时回退查询
@@ -1132,6 +1953,7 @@ require_once ROOT_PATH . '/views/layout.php';
                                 // 最终结果
                                 if (jsonData.status === 'completed' && jsonData.result) {
                                     finalResult = jsonData.result;
+                                    finalChannelStatus = jsonData.channel_status || finalChannelStatus;
                                 }
 
                                 // 失败 / 错误
@@ -1163,6 +1985,7 @@ require_once ROOT_PATH . '/views/layout.php';
                             this.handleStreamEvent(jsonData);
                             if (jsonData.status === 'completed' && jsonData.result) {
                                 finalResult = jsonData.result;
+                                finalChannelStatus = jsonData.channel_status || finalChannelStatus;
                             }
                             if (jsonData.status === 'failed' || jsonData.status === 'error') {
                                 streamError = jsonData.message || '识别过程中发生错误';
@@ -1182,7 +2005,7 @@ require_once ROOT_PATH . '/views/layout.php';
                     throw new Error(streamError);
                 }
                 if (finalResult) {
-                    this.showResult(finalResult);
+                    this.showResult(finalResult, finalChannelStatus);
                 } else if (streamTimeout) {
                     // 等待超时但任务可能仍在后台处理：提示用户稍后查询，而非误报失败
                     this.updateProgressStatus('识别时间较长，任务仍在后台处理中');
@@ -1220,6 +2043,12 @@ require_once ROOT_PATH . '/views/layout.php';
 
             switch (status) {
                 case 'queued':
+                    // 任务一建立就记进本机历史，失败也能回看
+                    if (eventData.task_id) {
+                        this.addHistoryEntry(eventData.task_id, {
+                            channel_status: eventData.channel_status || {}
+                        });
+                    }
                     // 携带预估等待上限（后端按识别方式计算），供用户参考
                     timeoutSec = eventData.timeout || 0;
                     this.updateProgressStatus(timeoutSec ?
@@ -1259,6 +2088,13 @@ require_once ROOT_PATH . '/views/layout.php';
             }
         }
 
+        /* 顶部加载条（与仪表盘一致）：计数式，避免并发请求提前收起 */
+        setBusy(active) {
+            if (!this.loadingIndicator) return;
+            this.busyCount = Math.max(0, (this.busyCount || 0) + (active ? 1 : -1));
+            this.loadingIndicator.setAttribute('aria-busy', this.busyCount > 0 ? 'true' : 'false');
+        }
+
         /* 显示加载状态 */
         showLoading(show) {
             if (show) {
@@ -1266,65 +2102,29 @@ require_once ROOT_PATH . '/views/layout.php';
             } else {
                 this.loadingWrap.classList.remove('active');
             }
+            this.setBusy(show);
         }
 
-        /* 显示结果（所有 API 返回文本均经 escapeHtml 转义） */
-        showResult(data) {
-            // 节点结果失败（模型缺失、图片损坏等）
-            if (!data || data.success === false || data.error) {
+        /* 显示结果：按通道分区（37ac / 大模型 / 能工智人） */
+        showResult(data, channelStatus) {
+            // 节点结果失败（模型缺失、图片损坏等）：只有所有通道都失败才算整体失败
+            if (!data || data.error) {
                 this.showError((data && data.error) || '识别失败，请稍后重试');
                 return;
             }
-            this.resultWrap.innerHTML = this.generateResultHTML(data);
+            const taskId = this.currentTaskId;
+            const status = channelStatus || (data && data.channel_status) || {};
+            this.resultWrap.innerHTML = this.generateChannelsHTML(data, status, {
+                taskId: taskId
+            });
             this.resultWrap.classList.add('active');
-        }
-
-        /* 生成结果 HTML（统一结构：class_probs 为 Candidate 列表，prob 0-100，第一项即最佳结果） */
-        generateResultHTML(data) {
-            // 置信度：统一使用 0-100 百分数（字段名 prob）
-            const toPercent = (v) => Number(v) || 0;
-
-            const candidates = (data.class_probs || []).map(p => ({
-                name: p.name,
-                prob: toPercent(Number(p.prob) || 0),
-            }));
-            const top = candidates[0] || {
-                name: '',
-                prob: 0
-            };
-            // 最佳结果格式为「作品名/角色名」（角色IP/角色名），拆分为 IP 与角色名分别展示
-            const labelParts = (top.name || '').split('/').map(s => s.trim()).filter(Boolean);
-            const characterIP = labelParts[0] || '未知作品';
-            const characterName = labelParts[1] || labelParts[0] || '未知角色';
-            const from_source = (data.from_source !== undefined) ?
-                data.from_source :
-                (data.recognition_type === 'llm' ? 1 : 0);
-            const confidence = top.prob.toFixed(2);
-
-            let html = '<div class="card result-card">';
-            html += '<div class="result-top">';
-            html += `<span class="result-name">${escapeHtml(characterName)}</span>`;
-            if (characterIP && characterIP !== characterName) {
-                html += `<span class="badge badge-neutral">${escapeHtml(characterIP)}</span>`;
-            }
-            if (characterName !== '未知角色') {
-                html += `<a class="result-link" href="https://zh.moegirl.org.cn/${encodeURIComponent(characterName)}" target="_blank" rel="nofollow">萌娘百科</a>`;
-            }
-            html += `<span class="badge ${from_source === 0 ? 'badge-pink' : 'badge-mint'}">${from_source === 0 ? '37ac模型' : '大模型'}</span>`;
-            html += '</div>';
-            html += `<div class="result-confidence">置信度 <span class="mono">${confidence}%</span></div>`;
-
-            // 前 5 高概率角色
-            if (candidates.length > 0) {
-                html += '<div class="prob-list">';
-                candidates.slice(0, 5).forEach((item) => {
-                    html += this.generateProbabilityItem(item);
+            if (taskId) {
+                this.updateHistoryEntry(taskId, {
+                    channel_status: status
                 });
-                html += '</div>';
+                this.renderHistory();
+                this.startChannelRefresh(taskId);
             }
-
-            html += '</div>';
-            return html;
         }
 
         /* 生成概率条目 HTML（统一字段：{name, prob(0-100)}） */
@@ -1378,7 +2178,7 @@ require_once ROOT_PATH . '/views/layout.php';
                         const result = data && data.result;
                         // 完成且带结果 → 展示
                         if (result && data.status === 'completed') {
-                            this.showResult(result);
+                            this.showResult(result, data.channel_status);
                             return;
                         }
                         // 明确失败 / 错误 → 直接抛出对应提示
@@ -1454,6 +2254,929 @@ require_once ROOT_PATH . '/views/layout.php';
             }
             this.destroyCropper();
             this.cancelRequest();
+            if (this.channelTimer) {
+                clearInterval(this.channelTimer);
+                this.channelTimer = null;
+            }
+        }
+
+        /* ==================== 标签页：上传识别 / 历史识别 / 能工智人 ==================== */
+        initTabs() {
+            this.tabs = Array.from(document.querySelectorAll('.upload-tab'));
+            this.panels = {
+                upload: document.getElementById('panel-upload'),
+                history: document.getElementById('panel-history'),
+                human: document.getElementById('panel-human'),
+            };
+            this.tabs.forEach((tab) => {
+                tab.addEventListener('click', () => this.switchTab(tab.getAttribute('data-tab')));
+            });
+            const params = new URLSearchParams(window.location.search || '');
+            const hash = (window.location.hash || '').replace('#', '');
+            const wanted = params.get('tab') || hash;
+            if (wanted && this.panels[wanted]) {
+                this.switchTab(wanted);
+            }
+            // ?task=<id>&tab=human 直达某张图去标注
+            const taskParam = (params.get('task') || '').trim();
+            if (taskParam) {
+                this.switchTab('human');
+                this.loadHumanTask(taskParam);
+            }
+        }
+
+        switchTab(name) {
+            if (!this.panels || !this.panels[name]) return;
+            this.currentTab = name;
+            this.tabs.forEach((tab) => {
+                const active = tab.getAttribute('data-tab') === name;
+                tab.classList.toggle('active', active);
+                tab.setAttribute('aria-selected', active ? 'true' : 'false');
+            });
+            Object.keys(this.panels).forEach((key) => {
+                this.panels[key].classList.toggle('active', key === name);
+            });
+            if (name === 'history') {
+                this.renderHistory();
+                this.loadPublicFeed();
+            }
+            if (name === 'human') this.renderHumanPanel();
+        }
+
+        /* ==================== 加载骨架（仪表盘同款流水卡片，不写字） ==================== */
+        skeletonListHtml(count) {
+            const one = '<div class="skeleton-card">' +
+                '<span class="sk-thumb flow-empty"></span>' +
+                '<span class="sk-body">' +
+                '<span class="sk-line flow-empty" style="width:42%"></span>' +
+                '<span class="sk-line flow-empty" style="width:72%;margin-top:.5rem"></span>' +
+                '<span class="sk-chip flow-empty" style="margin-top:.5rem"></span>' +
+                '</span>' +
+                '<span class="sk-btn flow-empty"></span>' +
+                '</div>';
+            return new Array(count || 3).fill(one).join('');
+        }
+
+        skeletonChannelsHtml(count) {
+            const one = '<div class="card channel-card">' +
+                '<div class="channel-head"><span class="sk-line flow-empty" style="width:38%"></span></div>' +
+                '<span class="sk-line flow-empty" style="width:88%"></span>' +
+                '<span class="sk-line flow-empty" style="width:74%;margin-top:.55rem"></span>' +
+                '<span class="sk-line flow-empty" style="width:56%;margin-top:.55rem"></span>' +
+                '</div>';
+            return '<div class="channel-grid">' + new Array(count || 3).fill(one).join('') + '</div>';
+        }
+
+        /* ==================== 三通道结果（37ac / 大模型 / 能工智人） ==================== */
+        channelState(channelStatus, key, result) {
+            if (channelStatus && channelStatus[key]) return channelStatus[key];
+            const section = (result || {})[key];
+            return (section && section.status) || 'missing';
+        }
+
+        stateLabel(state) {
+            const map = {
+                queued: '排队中',
+                waiting: '等待节点',
+                assigned: '已分配',
+                processing: '识别中',
+                completed: '已完成',
+                partial: '部分完成',
+                failed: '失败',
+                error: '失败',
+                awaiting: '等待人工',
+                missing: '未请求',
+                unknown: '未知',
+            };
+            return map[state] || state || '未知';
+        }
+
+        stateClass(state) {
+            if (state === 'completed') return 'ok';
+            if (state === 'failed' || state === 'error') return 'bad';
+            if (state === 'missing') return '';
+            return 'run';
+        }
+
+        channelCard(title, state, bodyHtml, metaHtml) {
+            let html = '<div class="card channel-card">';
+            html += '<div class="channel-head">';
+            html += '<span class="channel-title">' + title + '</span>';
+            html += '<span class="channel-chip ' + this.stateClass(state) + '">' + this.stateLabel(state) + '</span>';
+            html += '</div>';
+            html += bodyHtml || '<div class="channel-empty">暂无结果</div>';
+            if (metaHtml) html += metaHtml;
+            html += '</div>';
+            return html;
+        }
+
+        /* 拆分候选：优先用后端给的 ip / name_zh，否则按 "IP/角色" 拆 */
+        splitLabel(item) {
+            const src = item || {};
+            const raw = String(src.name || src.name_zh || '');
+            const parts = raw.split('/').map((s) => s.trim()).filter(Boolean);
+            const ip = src.ip || (parts.length > 1 ? parts[0] : '');
+            const name = src.name_zh || (parts.length > 1 ? parts[1] : (parts[0] || ''));
+            return {
+                ip: ip,
+                name: name,
+                raw: raw
+            };
+        }
+
+        /* 萌娘百科跳转（按角色名搜） */
+        moegirlHtml(name) {
+            if (!name || name === '未知') return '';
+            return '<a class="result-link" target="_blank" rel="nofollow" href="https://zh.moegirl.org.cn/' +
+                encodeURIComponent(name) + '">萌娘百科</a>';
+        }
+
+        /* 一行候选：角色名 + IP 徽章 + 概率条 + 百分比（首行附萌娘百科） */
+        candidateRowHtml(item, withLink) {
+            const pct = (Number(item && item.prob) || 0).toFixed(2);
+            const label = this.splitLabel(item);
+            let nameHtml = escapeHtml(label.name || '未知');
+            if (label.ip && label.ip !== label.name) {
+                nameHtml += '<span class="badge badge-neutral cand-ip">' + escapeHtml(label.ip) + '</span>';
+            }
+            let html = '<div class="prob-item">';
+            html += '<span class="name">' + nameHtml + '</span>';
+            html += '<span class="prob-bar"><i style="width:' + pct + '%"></i></span>';
+            html += '<span class="pct">' + pct + '%</span>';
+            html += '</div>';
+            if (withLink && label.name) {
+                html += '<div class="cand-link">' + this.moegirlHtml(label.name) + '</div>';
+            }
+            return html;
+        }
+
+        /* 候选列表（首行带萌娘百科跳转） */
+        candidatesHtml(list, limit) {
+            const probs = (list || []).slice(0, limit || 5);
+            if (!probs.length) return '';
+            let html = '';
+            probs.forEach((p, i) => {
+                html += this.candidateRowHtml(p, i === 0);
+            });
+            return html;
+        }
+
+        /* 通道内部的失败信息（后端可能 status=completed 但 success=false + error） */
+        channelErrorHtml(section, state) {
+            if (!section) {
+                return (state === 'failed' || state === 'error') ? '<div class="channel-error">该通道识别失败</div>' : '';
+            }
+            const err = section.error || (section.success === false ? (section.message || '未识别出结果') : '');
+            if (!err) return '';
+            return '<div class="channel-error">' + escapeHtml(String(err)) + '</div>';
+        }
+
+        /* 37ac 通道：多人物 + 候选列表 */
+        generate37acCard(data, status) {
+            const state = this.channelState(status, '37ac', data);
+            const section = (data && data['37ac']) || ((data && (data.characters || data.class_probs)) ? data : null);
+            let body = '';
+
+            if (section && Array.isArray(section.characters) && section.characters.length) {
+                let meta = '检出 ' + section.characters.length + ' 个人物';
+                if (section.crop_method) meta += ' · 裁剪 ' + escapeHtml(section.crop_method);
+                body += '<div class="channel-meta">' + meta + '</div>';
+                section.characters.slice(0, 5).forEach((c) => {
+                    const top = (c.class_probs && c.class_probs[0]) || {};
+                    const label = this.splitLabel(top);
+                    body += '<div class="char-block">';
+                    body += '<div class="char-head">';
+                    body += '<span class="char-index">#' + (Number(c.index) + 1) + '</span>';
+                    body += '<span class="char-name">' + escapeHtml(label.name || '未知') + '</span>';
+                    if (label.ip && label.ip !== label.name) {
+                        body += '<span class="badge badge-neutral cand-ip">' + escapeHtml(label.ip) + '</span>';
+                    }
+                    body += '<span class="mono char-conf">' + (Number(c.confidence) || 0).toFixed(2) + '%</span>';
+                    if (label.name) body += ' ' + this.moegirlHtml(label.name);
+                    body += '</div>';
+                    body += this.candidatesHtml(c.class_probs, 3);
+                    body += '</div>';
+                });
+            } else if (section && Array.isArray(section.class_probs) && section.class_probs.length) {
+                body += this.candidatesHtml(section.class_probs, 5);
+            }
+            body += this.channelErrorHtml(section, state);
+
+            return this.channelCard('37ac 本地模型', state, body);
+        }
+
+        /* 大模型通道：候选列表 */
+        generateLlmCard(data, status) {
+            const state = this.channelState(status, 'llm', data);
+            const section = (data && data['llm']) || null;
+            let body = '';
+            if (section && Array.isArray(section.class_probs) && section.class_probs.length) {
+                body += this.candidatesHtml(section.class_probs, 5);
+                const features = (section.features_used && section.features_used.length) ? section.features_used : (section.tags || []);
+                if (features.length) {
+                    body += '<div class="channel-meta">依据：' + escapeHtml(features.slice(0, 4).join('、')) + '</div>';
+                }
+            }
+            body += this.channelErrorHtml(section, state);
+            return this.channelCard('大模型（LLM）', state, body);
+        }
+
+        /* 能工智人通道：人工票列表 */
+        generateHumanCard(data, status) {
+            const state = this.channelState(status, 'human', data);
+            const section = (data && data['human']) || {};
+            const votes = section.votes || [];
+            let body = '';
+            if (votes.length) {
+                body += this.votesHtml(votes);
+            } else {
+                body += '<div class="channel-empty">还没有人工票 —— 切到「能工智人」投一票</div>';
+            }
+            return this.channelCard('能工智人（人工）', state, body);
+        }
+
+        votesHtml(votes) {
+            let html = '';
+            (votes || []).forEach((v) => {
+                const guess = v.model_guess ? (v.model_guess.name || v.model_guess) : '';
+                const label = this.splitLabel({
+                    name: v.name,
+                    ip: v.ip,
+                    name_zh: v.name_zh
+                });
+                html += '<div class="vote-row">';
+                html += '<strong>' + escapeHtml(label.name || '?') + '</strong>';
+                if (label.ip && label.ip !== label.name) {
+                    html += '<span class="badge badge-neutral cand-ip">' + escapeHtml(label.ip) + '</span>';
+                }
+                if (v.character_index !== undefined && v.character_index !== null) {
+                    html += '<span class="channel-chip">#' + (Number(v.character_index) + 1) + '</span>';
+                }
+                if (label.name) html += this.moegirlHtml(label.name);
+                if (guess) html += '<span class="model-guess">模型猜测：' + escapeHtml(guess) + '</span>';
+                if (v.note) html += '<span class="who">' + escapeHtml(v.note) + '</span>';
+                html += '<span class="who">' + escapeHtml(v.voter || v.source || '') + '</span>';
+                html += '</div>';
+            });
+            return html;
+        }
+
+        /**
+         * 生成三通道结果 HTML
+         * @param {object} result 任务结果（含 37ac / llm / human 分段）
+         * @param {object} channelStatus {通道: 状态}
+         * @param {object} options {taskId}
+         */
+        generateChannelsHTML(result, channelStatus, options) {
+            const opts = options || {};
+            const data = result || {};
+            const status = channelStatus || {};
+            let html = '<div class="channel-grid">';
+            html += this.generate37acCard(data, status);
+            html += this.generateLlmCard(data, status);
+            html += this.generateHumanCard(data, status);
+            html += '</div>';
+
+            if (opts.taskId) {
+                html += '<div class="card result-card"><div class="result-tools">';
+                html += '<span class="task-id-line">任务 ID：' + escapeHtml(opts.taskId) + '</span>';
+                html += '<button type="button" class="btn btn-secondary btn-sm" data-role="goto-human" data-task="' + escapeHtml(opts.taskId) + '">去能工智人投票</button>';
+                html += '</div></div>';
+            }
+            return html;
+        }
+
+        /* ==================== 历史识别（保存在本机） ==================== */
+        loadHistory() {
+            try {
+                const raw = localStorage.getItem(HISTORY_KEY);
+                const list = raw ? JSON.parse(raw) : [];
+                return Array.isArray(list) ? list : [];
+            } catch (e) {
+                return [];
+            }
+        }
+
+        saveHistory(list) {
+            try {
+                localStorage.setItem(HISTORY_KEY, JSON.stringify((list || []).slice(0, HISTORY_MAX)));
+            } catch (e) {
+                console.warn('历史记录写入失败:', e);
+            }
+        }
+
+        addHistoryEntry(taskId, extra) {
+            if (!taskId) return;
+            const entry = Object.assign({
+                task_id: taskId,
+                at: Date.now()
+            }, extra || {});
+            const list = this.loadHistory().filter((item) => item.task_id !== taskId);
+            list.unshift(entry);
+            this.saveHistory(list);
+            if (this.currentTab === 'history') this.renderHistory();
+            this.loadHumanTaskList();
+        }
+
+        updateHistoryEntry(taskId, extra) {
+            const list = this.loadHistory();
+            const idx = list.findIndex((item) => item.task_id === taskId);
+            if (idx < 0) return this.addHistoryEntry(taskId, extra);
+            list[idx] = Object.assign({}, list[idx], extra || {});
+            this.saveHistory(list);
+        }
+
+        clearHistory() {
+            this.saveHistory([]);
+            this.renderHistory();
+            this.loadHumanTaskList();
+            Notify.success('已清空本机历史记录');
+        }
+
+        renderHistory() {
+            const wrap = this.historyList;
+            if (!wrap) return;
+            const list = this.loadHistory();
+            if (!list.length) {
+                wrap.innerHTML = '<div class="empty"><div class="empty-icon"><i class="ph ph-clock-counter-clockwise"></i></div><p>这台设备还没有识别记录</p></div>';
+                return;
+            }
+            wrap.innerHTML = list.map((item) => {
+                const time = new Date(item.at || Date.now()).toLocaleString();
+                const chips = CHANNEL_META.map((meta) => {
+                    const state = (item.channel_status || {})[meta.key] || 'unknown';
+                    return '<span class="channel-chip ' + this.stateClass(state) + '">' + meta.short + ' ' + this.stateLabel(state) + '</span>';
+                }).join('');
+                return '<div class="history-item" data-task="' + escapeHtml(item.task_id) + '">' +
+                    '<img class="history-thumb" alt="" loading="lazy" src="/api/tasks/' + encodeURIComponent(item.task_id) + '/image?max_side=160" onerror="this.style.visibility=&quot;hidden&quot;">' +
+                    '<div class="history-body">' +
+                    '<div class="history-line"><span class="mono history-id">' + escapeHtml(String(item.task_id).slice(0, 8)) + '…</span>' +
+                    '<span class="history-time">' + escapeHtml(time) + '</span></div>' +
+                    '<div class="history-chips">' + chips + '</div>' +
+                    '</div>' +
+                    '<div class="history-actions">' +
+                    '<button type="button" class="btn btn-secondary btn-sm" data-role="view">查看结果</button>' +
+                    '<button type="button" class="btn btn-ghost btn-sm" data-role="vote">去投票</button>' +
+                    '</div>' +
+                    '</div>';
+            }).join('');
+        }
+
+        async openHistoryTask(taskId) {
+            if (!taskId) return;
+            const wrap = this.historyResultWrap;
+            if (wrap) {
+                wrap.innerHTML = this.skeletonChannelsHtml(3);
+                wrap.classList.add('active');
+                wrap.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'start'
+                });
+            }
+            this.setBusy(true);
+            try {
+                const resp = await fetch('/api/tasks/' + encodeURIComponent(taskId), {
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                });
+                const data = await resp.json();
+                if (!resp.ok) throw new Error(data.message || ('读取失败 (' + resp.status + ')'));
+                const result = data.result || {};
+                const status = data.channel_status || {};
+                this.updateHistoryEntry(taskId, {
+                    channel_status: status
+                });
+                this.renderHistory();
+                if (wrap) {
+                    wrap.innerHTML = this.generateChannelsHTML(result, status, {
+                        taskId: taskId
+                    });
+                }
+            } catch (e) {
+                if (wrap) {
+                    wrap.innerHTML = '';
+                    wrap.classList.remove('active');
+                }
+                Notify.error('读取任务结果失败：' + (e.message || e));
+            } finally {
+                this.setBusy(false);
+            }
+        }
+
+        /* 结果自动刷新：多通道/人工票是陆续到的，渲染后再轮询几次把卡片更新掉 */
+        startChannelRefresh(taskId) {
+            if (!taskId) return;
+            if (this.channelTimer) {
+                clearInterval(this.channelTimer);
+                this.channelTimer = null;
+            }
+            const self = this;
+            let attempts = 0;
+            const tick = async () => {
+                attempts += 1;
+                if (attempts > 24 || self.currentTaskId !== taskId) {
+                    clearInterval(self.channelTimer);
+                    self.channelTimer = null;
+                    return;
+                }
+                try {
+                    const resp = await fetch('/api/tasks/' + encodeURIComponent(taskId), {
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest'
+                        },
+                    });
+                    if (!resp.ok) return;
+                    const data = await resp.json();
+                    const status = data.channel_status || {};
+                    const result = data.result || {};
+                    self.updateHistoryEntry(taskId, {
+                        channel_status: status
+                    });
+                    if (self.currentTab === 'history') self.renderHistory();
+                    self.resultWrap.innerHTML = self.generateChannelsHTML(result, status, {
+                        taskId: taskId
+                    });
+                    self.resultWrap.classList.add('active');
+                    const pendingNode = Object.keys(status).filter((c) => c !== 'human' && status[c] !== 'completed');
+                    const humanVotes = ((result.human || {}).votes || []).length;
+                    if (!pendingNode.length && humanVotes > 0) {
+                        clearInterval(self.channelTimer);
+                        self.channelTimer = null;
+                    }
+                } catch (e) {
+                    // 网络抖动忽略，等下一轮
+                }
+            };
+            this.channelTimer = setInterval(tick, 5000);
+            tick();
+        }
+
+        /* ==================== 公共 feed：大家最近在识别 ==================== */
+        async loadPublicFeed() {
+            const wrap = this.publicFeed;
+            if (!wrap) return;
+            wrap.innerHTML = this.skeletonListHtml(4);
+            this.setBusy(true);
+            try {
+                const resp = await fetch('/api/tasks/recent?limit=20', {
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                });
+                const data = await resp.json();
+                if (!resp.ok || data.success === false) {
+                    throw new Error(data.message || ('加载失败 (' + resp.status + ')'));
+                }
+                const tasks = (data.data && data.data.tasks) || [];
+                this.publicTasks = tasks;
+                if (!tasks.length) {
+                    wrap.innerHTML = '<div class="empty"><div class="empty-icon"><i class="ph ph-users-three"></i></div><p>服务端还没有识别任务</p></div>';
+                    return;
+                }
+                wrap.innerHTML = tasks.map((t) => this.feedItemHtml(t)).join('');
+            } catch (e) {
+                this.publicTasks = [];
+                wrap.innerHTML = '<div class="empty"><div class="empty-icon"><i class="ph ph-cloud-slash"></i></div><p>暂时拿不到列表，点「刷新」重试</p></div>';
+                Notify.error('加载最近任务失败：' + (e.message || e));
+            } finally {
+                this.setBusy(false);
+            }
+        }
+
+        feedItemHtml(task) {
+            const chips = CHANNEL_META.map((meta) => {
+                const state = (task.channel_status || {})[meta.key] || 'unknown';
+                return '<span class="channel-chip ' + this.stateClass(state) + '">' + meta.short + ' ' + this.stateLabel(state) + '</span>';
+            }).join('');
+            const votes = task.human_votes ? '<span class="channel-chip ok">人工 ' + task.human_votes + ' 票</span>' : '';
+            const thumb = task.image_available ?
+                '<img class="history-thumb" alt="" loading="lazy" src="/api/tasks/' + encodeURIComponent(task.task_id) +
+                '/image?max_side=160" onerror="this.style.visibility=&quot;hidden&quot;">' :
+                '<div class="history-thumb"></div>';
+            return '<div class="history-item" data-task="' + escapeHtml(task.task_id) + '">' + thumb +
+                '<div class="history-body">' +
+                '<div class="history-line">' +
+                '<span class="mono history-id">' + escapeHtml(String(task.task_id).slice(0, 8)) + '…</span>' +
+                '<span class="history-time">' + escapeHtml(task.created_at || '') + '</span>' +
+                '</div>' +
+                '<div class="history-chips">' + chips + votes + '</div>' +
+                '</div>' +
+                '<div class="history-actions">' +
+                '<button type="button" class="btn btn-secondary btn-sm" data-role="view">查看结果</button>' +
+                '<button type="button" class="btn btn-ghost btn-sm" data-role="vote">去投票</button>' +
+                '</div>' +
+                '</div>';
+        }
+
+        /* ==================== 能工智人（人工通道） ==================== */
+        /* 待标注任务列表：最新的「还没有人工票」的任务，卡片样式同历史识别 */
+        async loadHumanTaskList() {
+            const wrap = this.humanTaskList;
+            if (!wrap) return;
+            wrap.innerHTML = this.skeletonListHtml(3);
+            this.setBusy(true);
+            try {
+                const resp = await fetch('/api/tasks/recent?limit=12', {
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                });
+                const data = await resp.json();
+                if (!resp.ok || data.success === false) {
+                    throw new Error(data.message || ('加载失败 (' + resp.status + ')'));
+                }
+                const tasks = ((data.data && data.data.tasks) || []).filter((t) => t.image_available);
+                this.humanTaskPool = tasks;
+                if (!tasks.length) {
+                    wrap.innerHTML = '<div class="empty"><div class="empty-icon"><i class="ph ph-users-three"></i></div><p>暂时没有待标注的任务，等有人上传后再来</p></div>';
+                    return;
+                }
+                wrap.innerHTML = tasks.map((t) => this.humanTaskCardHtml(t)).join('');
+            } catch (e) {
+                this.humanTaskPool = [];
+                wrap.innerHTML = '<div class="empty"><div class="empty-icon"><i class="ph ph-cloud-slash"></i></div><p>暂时拿不到待标注任务，点「刷新任务」重试</p></div>';
+                Notify.error('加载待标注任务失败：' + (e.message || e));
+            } finally {
+                this.setBusy(false);
+            }
+        }
+
+        humanTaskCardHtml(task) {
+            const chips = CHANNEL_META.map((meta) => {
+                const state = (task.channel_status || {})[meta.key] || 'unknown';
+                return '<span class="channel-chip ' + this.stateClass(state) + '">' + meta.short + ' ' + this.stateLabel(state) + '</span>';
+            }).join('');
+            const active = task.task_id === this.humanLoadedTask ? ' active' : '';
+            return '<div class="history-item' + active + '" data-task="' + escapeHtml(task.task_id) + '">' +
+                '<img class="history-thumb" alt="" loading="lazy" src="/api/tasks/' + encodeURIComponent(task.task_id) +
+                '/image?max_side=160" onerror="this.style.visibility=&quot;hidden&quot;">' +
+                '<div class="history-body">' +
+                '<div class="history-line">' +
+                '<span class="mono history-id">' + escapeHtml(String(task.task_id).slice(0, 8)) + '…</span>' +
+                '<span class="history-time">' + escapeHtml(task.created_at || '') + '</span>' +
+                '</div>' +
+                '<div class="history-chips">' + chips +
+                '<span class="channel-chip' + (task.human_votes ? ' ok' : '') + '">' +
+                (task.human_votes ? ('人工 ' + task.human_votes + ' 票') : '还没人工票') + '</span></div>' +
+                '</div>' +
+                '<div class="history-actions">' +
+                '<button type="button" class="btn btn-primary btn-sm" data-role="annotate">标注这张</button>' +
+                '</div>' +
+                '</div>';
+        }
+
+        /* 跳到「能工智人」并选中某个任务 */
+        selectHumanTask(taskId) {
+            this.switchTab('human');
+            if (taskId) this.loadHumanTask(taskId);
+            window.scrollTo({
+                top: 0,
+                behavior: 'smooth'
+            });
+        }
+
+        renderHumanPanel() {
+            const taskId = this.humanLoadedTask;
+            if (!taskId && this.humanAnnotateCard) this.humanAnnotateCard.hidden = true;
+            this.loadHumanTaskList().then(() => {
+                if (taskId) this.loadHumanTask(taskId); // 刷新列表时保持当前任务高亮
+            });
+        }
+
+        /* 载入待标注任务：图片 + 框选器 + 模型猜测 + 现有票（去重后未提交） */
+        async loadHumanTask(taskId) {
+            if (!taskId) return;
+            this.humanLoadedTask = taskId;
+            const image = this.humanCropImage;
+            const title = this.humanTaskTitle;
+            const meta = this.humanTaskMeta;
+
+            if (title) title.textContent = '任务 ' + String(taskId).slice(0, 8) + '…';
+            if (meta) meta.textContent = '';
+            this.destroyHumanCropper();
+            if (this.humanAnnotateCard) this.humanAnnotateCard.hidden = false;
+            this.setBusy(true);
+            if (this.humanCropPlaceholder) {
+                this.humanCropPlaceholder.style.display = 'none';
+            }
+            if (this.humanCropPreview) this.humanCropPreview.innerHTML = '';
+            this.pendingVotes = [];
+            this.renderPending();
+            if (this.humanCropCanvas) {
+                this.humanCropCanvas.classList.add('is-empty', 'flow-empty');
+            }
+            if (this.humanCropPreview) {
+                this.humanCropPreview.classList.add('flow-empty');
+            }
+            if (image) {
+                // 注意：把 src 置空/移除会触发一次假的 error 事件，
+                // 所以这里用 guard 标记"真正在加载中"，error 只认这一次加载。
+                this.humanImageLoading = false;
+                image.style.display = 'none';
+                image.removeAttribute('src');
+            }
+
+            try {
+                const resp = await fetch('/api/tasks/' + encodeURIComponent(taskId), {
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                });
+                const data = await resp.json();
+                if (!resp.ok) throw new Error(data.message || ('读取失败 (' + resp.status + ')'));
+                this.humanTaskData = data;
+
+                if (image) {
+                    // 加时间戳避免浏览器复用上次的图
+                    this.humanImageLoading = true;
+                    image.src = '/api/tasks/' + encodeURIComponent(taskId) + '/image?max_side=1024&t=' + Date.now();
+                }
+                this.fillHumanSuggestions(data.result || {});
+                this.renderHumanVotes(taskId, data.result || {});
+                if (meta) {
+                    const status = data.channel_status || {};
+                    const parts = CHANNEL_META.map((m) => m.short + ' ' + this.stateLabel(status[m.key] || 'unknown'));
+                    meta.textContent = '识别状态：' + parts.join(' · ');
+                }
+                this.markHumanTaskActive(taskId);
+            } catch (e) {
+                this.humanTaskData = null;
+                this.humanLoadedTask = null;
+                if (this.humanAnnotateCard) this.humanAnnotateCard.hidden = true;
+                if (meta) meta.textContent = '';
+                if (this.humanVotes) this.humanVotes.innerHTML = '';
+                Notify.error('任务读取失败：' + (e.message || e));
+            } finally {
+                this.setBusy(false);
+            }
+        }
+
+        markHumanTaskActive(taskId) {
+            if (!this.humanTaskList) return;
+            this.humanTaskList.querySelectorAll('.history-item').forEach((el) => {
+                el.classList.toggle('active', el.getAttribute('data-task') === taskId);
+            });
+        }
+
+        /* 模型猜测：拆成 IP / 角色名，分别灌进两个 datalist + 可点选标签 */
+        fillHumanSuggestions(result) {
+            const ips = [];
+            const names = [];
+            const pairs = [];
+            const push = (list) => {
+                (list || []).forEach((p) => {
+                    const label = this.splitLabel(p);
+                    if (!label.name) return;
+                    if (label.ip && ips.indexOf(label.ip) < 0) ips.push(label.ip);
+                    if (names.indexOf(label.name) < 0) names.push(label.name);
+                    pairs.push(label);
+                });
+            };
+            push(result['37ac'] && result['37ac'].class_probs);
+            push(result['llm'] && result['llm'].class_probs);
+            ((result['37ac'] && result['37ac'].characters) || result.characters || []).forEach((c) => push(c.class_probs));
+
+            if (this.humanIpOptions) {
+                this.humanIpOptions.innerHTML = ips.map((v) => '<option value="' + escapeHtml(v) + '"></option>').join('');
+            }
+            if (this.humanNameOptions) {
+                this.humanNameOptions.innerHTML = names.map((v) => '<option value="' + escapeHtml(v) + '"></option>').join('');
+            }
+            if (this.humanNameSuggest) {
+                this.humanNameSuggest.innerHTML = pairs.slice(0, 6).map((p, i) =>
+                    '<button type="button" data-ip="' + escapeHtml(p.ip) + '" data-name="' + escapeHtml(p.name) + '" data-i="' + i + '">' +
+                    escapeHtml((p.ip ? p.ip + ' | ' : '') + p.name) + '</button>').join('');
+            }
+        }
+
+        renderHumanVotes(taskId, result) {
+            if (!this.humanVotes) return;
+            const votes = ((result.human || {}).votes) || [];
+            if (!votes.length) {
+                this.humanVotes.innerHTML = '<h4>这张图还没有标注</h4><div class="channel-empty">你可以当第一个；别人标过之后这里会按人分组显示</div>';
+                return;
+            }
+            const groups = {};
+            votes.forEach((v) => {
+                const key = v.voter || v.source || '匿名';
+                (groups[key] = groups[key] || []).push(v);
+            });
+            const voters = Object.keys(groups);
+            let html = '<h4>这张图上的标注（' + votes.length + ' 个角色 / ' + voters.length + ' 人）</h4>';
+            voters.forEach((key) => {
+                html += '<div class="vote-group">' +
+                    '<div class="vote-group-head">' + escapeHtml(key) + ' · ' + groups[key].length + ' 个角色</div>' +
+                    this.votesHtml(groups[key]) +
+                '</div>';
+            });
+            this.humanVotes.innerHTML = html;
+        }
+
+        /* 框选器：让人自己拉框，不用 YOLO 的人物序号 */
+        initHumanCropper() {
+            const image = this.humanCropImage;
+            if (!image || typeof Cropper === 'undefined' || this.humanCropInstance) return;
+            this.humanCropInstance = new Cropper(image, {
+                preview: '#humanCropPreview',
+                viewMode: 1,
+                guides: true,
+                center: true,
+                highlight: false,
+                background: false,
+                autoCrop: false, // 不给默认框：想标谁就自己拉
+                autoCropArea: 0.6,
+                movable: false,
+                zoomable: true,
+                rotatable: false,
+                scalable: false,
+                cropBoxMovable: true,
+                cropBoxResizable: true,
+                toggleDragModeOnDblclick: false,
+                cropstart: () => {
+                    if (this.humanCropPreview) this.humanCropPreview.classList.remove('flow-empty');
+                },
+            });
+        }
+
+        destroyHumanCropper() {
+            if (this.humanCropInstance) {
+                this.humanCropInstance.destroy();
+                this.humanCropInstance = null;
+            }
+        }
+
+        /* 读取当前选框并换算成归一化坐标（分母是原图尺寸） */
+        readHumanBbox() {
+            const image = this.humanCropImage;
+            if (!this.humanCropInstance || !image || !image.naturalWidth) return null;
+            const data = this.humanCropInstance.getData(); // 原图像素坐标
+            const w = image.naturalWidth;
+            const h = image.naturalHeight;
+            if (!data || data.width < 8 || data.height < 8) return null; // 没框或框太小
+            const bbox = {
+                x: Number((data.x / w).toFixed(4)),
+                y: Number((data.y / h).toFixed(4)),
+                w: Number((data.width / w).toFixed(4)),
+                h: Number((data.height / h).toFixed(4)),
+            };
+            const percent = {
+                x: Number((bbox.x * 100).toFixed(2)),
+                y: Number((bbox.y * 100).toFixed(2)),
+                w: Number((bbox.w * 100).toFixed(2)),
+                h: Number((bbox.h * 100).toFixed(2)),
+            };
+            return {
+                bbox: bbox,
+                percent: percent
+            };
+        }
+
+        /* 把当前"选框 + 表单"收进待提交列表；silent=true 时不出提示（供提交前自动收集） */
+        collectPendingVote(silent) {
+            const taskId = this.humanLoadedTask;
+            if (!taskId) {
+                if (!silent) Notify.error('请先在上面选一张图');
+                return false;
+            }
+            const ip = (this.humanIp && this.humanIp.value || '').trim();
+            const character = (this.humanName && this.humanName.value || '').trim();
+            if (!ip || !character) {
+                if (!silent) Notify.error('作品和角色名都要填');
+                return false;
+            }
+            const box = this.readHumanBbox();
+            if (!box) {
+                if (!silent) Notify.error('先在图上框住要标注的角色');
+                return false;
+            }
+
+            let thumb = '';
+            try {
+                const canvas = this.humanCropInstance.getCroppedCanvas({
+                    width: 72,
+                    height: 72,
+                    fillColor: '#ffffff'
+                });
+                if (canvas) thumb = canvas.toDataURL('image/jpeg', 0.7);
+            } catch (e) {
+                // 缩略图失败不影响提交
+            }
+
+            this.pendingVotes = this.pendingVotes || [];
+            this.pendingVotes.push({
+                name: ip + '/' + character,
+                ip: ip,
+                name_zh: character,
+                bbox: box.bbox,
+                bbox_percent: box.percent,
+                note: (this.humanNote && this.humanNote.value || '').trim(),
+                thumb: thumb,
+            });
+            this.renderPending();
+
+            // 清掉选框与角色名，方便接着标下一个
+            if (this.humanCropInstance) this.humanCropInstance.clear();
+            if (this.humanCropPreview) this.humanCropPreview.classList.add('flow-empty');
+            if (this.humanName) this.humanName.value = '';
+            if (this.humanNote) this.humanNote.value = '';
+            if (!silent) Notify.success('已加入待提交（可以继续标下一个角色）');
+            return true;
+        }
+
+        addPendingVote() {
+            return this.collectPendingVote(false);
+        }
+
+        renderPending() {
+            const wrap = this.humanPending;
+            const list = this.pendingVotes || [];
+            if (wrap) {
+                if (!list.length) {
+                    wrap.innerHTML = '';
+                } else {
+                    wrap.innerHTML = '<h4>待提交（' + list.length + ' 个角色）</h4>' + list.map((v, i) => {
+                        const label = this.splitLabel({ name: v.name, ip: v.ip, name_zh: v.name_zh });
+                        const pct = v.bbox_percent || {};
+                        return '<div class="pending-item" data-i="' + i + '">' +
+                            (v.thumb ? '<img class="pending-thumb" src="' + v.thumb + '" alt="">' : '<span class="pending-thumb"></span>') +
+                            '<div class="pending-body">' +
+                                '<div class="pending-name">' + escapeHtml(label.name) +
+                                (label.ip ? '<span class="badge badge-neutral cand-ip">' + escapeHtml(label.ip) + '</span>' : '') +
+                                '</div>' +
+                                '<div class="channel-meta">框选 ' + (Number(pct.x) || 0).toFixed(0) + '%,' + (Number(pct.y) || 0).toFixed(0) +
+                                '% · ' + (Number(pct.w) || 0).toFixed(0) + '%×' + (Number(pct.h) || 0).toFixed(0) + '%' +
+                                (v.note ? ' · ' + escapeHtml(v.note) : '') + '</div>' +
+                            '</div>' +
+                            '<button type="button" class="btn btn-ghost btn-sm" data-role="remove-pending">移除</button>' +
+                        '</div>';
+                    }).join('');
+                }
+            }
+            if (this.btnSubmitVotes) {
+                this.btnSubmitVotes.textContent = list.length ? ('提交 ' + list.length + ' 个标注') : '提交标注';
+            }
+        }
+
+        removePendingVote(index) {
+            this.pendingVotes = (this.pendingVotes || []).filter((v, i) => i !== index);
+            this.renderPending();
+        }
+
+        /* 提交：整批替换自己在这张图上的标注（支持多角色、多人各投各的） */
+        async submitHumanVotes(event) {
+            event.preventDefault();
+            const taskId = this.humanLoadedTask;
+            if (!taskId) {
+                Notify.error('请先在上面选一张图');
+                return;
+            }
+            // 表单里还留着内容（填了但没点"添加"）时，提交前自动收进待提交列表
+            this.collectPendingVote(true);
+
+            const list = this.pendingVotes || [];
+            if (!list.length) {
+                Notify.error('先框住角色、填好作品/角色名，再点「添加这个角色」或直接提交');
+                return;
+            }
+
+            const payload = {
+                task_id: taskId,
+                votes: list.map((v) => ({
+                    name: v.name,
+                    ip: v.ip,
+                    name_zh: v.name_zh,
+                    bbox: v.bbox,
+                    bbox_percent: v.bbox_percent,
+                    note: v.note || undefined,
+                })),
+            };
+
+            const btn = this.btnSubmitVotes || this.humanForm.querySelector('button[type="submit"]');
+            if (btn) btn.disabled = true;
+            try {
+                const resp = await fetch(window.API_BASE_URL + '/upload/human', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: JSON.stringify(payload),
+                });
+                const data = await resp.json();
+                if (!resp.ok || data.success === false) {
+                    throw new Error(data.message || ('提交失败 (' + resp.status + ')'));
+                }
+                Notify.success('已提交 ' + list.length + ' 个角色标注，感谢投喂！');
+                this.pendingVotes = [];
+                this.renderPending();
+                await this.loadHumanTask(taskId);
+                this.loadHumanTaskList();
+            } catch (e) {
+                Notify.error('提交失败：' + (e.message || e));
+            } finally {
+                if (btn) btn.disabled = false;
+            }
         }
     }
 

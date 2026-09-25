@@ -259,7 +259,9 @@ $router->get('/auth/logout', 'auth_controller@logout');
 
 // API 代理路由（X-API-Key 由服务端注入，前端零密钥）
 $router->post('/api/upload', 'api_controller@upload');
+$router->get('/api/tasks/recent', 'api_controller@task_recent');
 $router->get('/api/tasks/{task_id}/stream', 'api_controller@task_stream');
+$router->get('/api/tasks/{task_id}/image', 'api_controller@task_image');
 $router->get('/api/tasks/{task_id}', 'api_controller@task_result');
 
 // 执行路由分发

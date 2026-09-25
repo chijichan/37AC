@@ -84,6 +84,45 @@ class api_controller extends controller
         $this->passthroughJson($ch);
     }
 
+    /**
+     * GET /api/tasks/recent
+     * 代理「最近任务列表」（公开 feed + 人工标注选题）。查询参数原样转发。
+     */
+    public function task_recent()
+    {
+        $this->requireApiKey();
+
+        $query = $_SERVER['QUERY_STRING'] ?? '';
+        $url = API_BASE_URL . '/tasks/recent';
+        if ($query !== '') {
+            $url .= '?' . $query;
+        }
+
+        $ch = $this->buildBaseCurl($url);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, ['X-API-Key: ' . UPLOAD_API_KEY]);
+        $this->passthroughJson($ch);
+    }
+
+    /**
+     * GET /api/tasks/{task_id}/image
+     * 代理任务图片（缩略图/原图）。查询参数原样转发（max_side / original）。
+     * 说明：服务端接口要 X-API-Key，匿名访客拿不到，必须由 PHP 注入。
+     */
+    public function task_image($task_id)
+    {
+        $this->requireApiKey();
+
+        $query = $_SERVER['QUERY_STRING'] ?? '';
+        $url = API_BASE_URL . '/tasks/' . rawurlencode($task_id) . '/image';
+        if ($query !== '') {
+            $url .= '?' . $query;
+        }
+
+        $ch = $this->buildBaseCurl($url);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, ['X-API-Key: ' . UPLOAD_API_KEY]);
+        $this->passthroughBinary($ch);
+    }
+
     /* ==================== 内部方法 ==================== */
 
     private function requireApiKey()
@@ -134,6 +173,50 @@ class api_controller extends controller
         http_response_code($status);
         header('Content-Type: application/json; charset=utf-8');
         echo $body;
+    }
+
+    /**
+     * 二进制透传（图片）：转发状态码与图片相关响应头，字节流边收边吐。
+     */
+    private function passthroughBinary($ch)
+    {
+        while (ob_get_level()) {
+            ob_end_clean();
+        }
+
+        curl_setopt($ch, CURLOPT_HEADERFUNCTION, function ($ch, $line) {
+            $len = strlen($line);
+            $trimmed = trim($line);
+            if ($trimmed === '') {
+                return $len;
+            }
+            if (stripos($trimmed, 'HTTP/') === 0) {
+                if (preg_match('#\d{3}#', $trimmed, $m)) {
+                    http_response_code((int) $m[0]);
+                }
+                return $len;
+            }
+            $parts = explode(':', $trimmed, 2);
+            if (count($parts) === 2) {
+                $name = strtolower(trim($parts[0]));
+                if (in_array($name, ['content-type', 'content-length', 'x-image-source'], true)) {
+                    header($parts[0] . ': ' . trim($parts[1]));
+                }
+            }
+            return $len;
+        });
+
+        // 图片可短时缓存，避免历史列表反复拉取
+        header('Cache-Control: private, max-age=600');
+
+        curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($ch, $data) {
+            echo $data;
+            return strlen($data);
+        });
+
+        curl_exec($ch);
+        curl_close($ch);
+        exit;
     }
 
     /**

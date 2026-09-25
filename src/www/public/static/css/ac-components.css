@@ -412,6 +412,10 @@
 
 /* ---------- 进度条（无轨道式，结果展示用） ---------- */
 .prob-bar {
+    /* 必须显式 block + 100%：原来是 inline 的 span，
+       height/overflow 对行内元素无效，进度条会溢出、轨道底色也盖不住它 */
+    display: block;
+    width: 100%;
     height: 8px;
     border-radius: var(--ac-radius-pill);
     background: var(--ac-pink-100);
@@ -421,6 +425,7 @@
 .prob-bar>i {
     display: block;
     height: 100%;
+    max-width: 100%;
     border-radius: inherit;
     background: linear-gradient(90deg, var(--ac-pink-400), var(--ac-pink-600));
     transition: width .5s var(--ac-ease-out);

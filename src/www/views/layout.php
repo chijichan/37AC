@@ -60,18 +60,28 @@ if (strpos($page_canonical, 'http') !== 0) {
     <link rel="preload" href="/static/fonts/nunito-latin.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="/static/fonts/jetbrains-mono-latin.woff2" as="font" type="font/woff2" crossorigin />
 
+    <?php
+    // 静态资源带 filemtime 版本号：nginx 对 /static 下发 Cache-Control: max-age=604800，
+    // 不套版本号的话改完 CSS/JS 用户必须强刷才生效（线上表现就是“样式改了没用”）。
+    $asset_url = static function (string $url): string {
+        $path = ROOT_PATH . '/public' . $url;
+        $mtime = is_file($path) ? @filemtime($path) : false;
+        return $mtime ? $url . '?v=' . $mtime : $url;
+    };
+    ?>
+
     <!-- 设计系统 -->
-    <link rel="stylesheet" href="/static/css/ac-tokens.css" />
-    <link rel="stylesheet" href="/static/css/ac-components.css" />
+    <link rel="stylesheet" href="<?= htmlspecialchars($asset_url('/static/css/ac-tokens.css'), ENT_QUOTES, 'UTF-8') ?>" />
+    <link rel="stylesheet" href="<?= htmlspecialchars($asset_url('/static/css/ac-components.css'), ENT_QUOTES, 'UTF-8') ?>" />
     <!-- 图标（Phosphor Icons，已本地化） -->
-    <link rel="stylesheet" href="/static/css/vendor/phosphor/regular/style.css" />
-    <link rel="stylesheet" href="/static/css/vendor/phosphor/bold/style.css" />
+    <link rel="stylesheet" href="<?= htmlspecialchars($asset_url('/static/css/vendor/phosphor/regular/style.css'), ENT_QUOTES, 'UTF-8') ?>" />
+    <link rel="stylesheet" href="<?= htmlspecialchars($asset_url('/static/css/vendor/phosphor/bold/style.css'), ENT_QUOTES, 'UTF-8') ?>" />
 
     <?php
     // 页面级附加样式：视图在引用布局前设置 $extra_css = ['/static/css/pages/xxx.css']
     if (!empty($extra_css) && is_array($extra_css)) {
         foreach ($extra_css as $css) {
-            echo '    <link rel="stylesheet" href="' . htmlspecialchars($css, ENT_QUOTES, 'UTF-8') . '" />' . "\n";
+            echo '    <link rel="stylesheet" href="' . htmlspecialchars($asset_url($css), ENT_QUOTES, 'UTF-8') . '" />' . "\n";
         }
     }
     ?>
@@ -80,8 +90,8 @@ if (strpos($page_canonical, 'http') !== 0) {
     <script>
         window.API_BASE_URL = '<?= API_BASE_URL ?>';
     </script>
-    <script src="/static/scripts/auth.js" defer></script>
-    <script src="/static/scripts/app.js" defer></script>
+    <script src="<?= htmlspecialchars($asset_url('/static/scripts/auth.js'), ENT_QUOTES, 'UTF-8') ?>" defer></script>
+    <script src="<?= htmlspecialchars($asset_url('/static/scripts/app.js'), ENT_QUOTES, 'UTF-8') ?>" defer></script>
 </head>
 
 <body>

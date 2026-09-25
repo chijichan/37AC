@@ -366,11 +366,15 @@ require_once ROOT_PATH . '/views/layout.php';
 
         function renderPageData(page) {
             if (page !== 'overview') return window.__pageLoadPromise || Promise.resolve();
-            return fetchJson(`${window.API_BASE_URL}/dashboard/summary`).then((payload) => {
+
+            // 「用户总数」由 overview 片段自己取（GET /admin/users 的 total）。
+            // /dashboard/summary 的 stats 里没有 total_users，之前这里也写同一个元素，
+            // 两个请求并发谁后返回谁生效 → 表现为「— → 2 → —」的闪烁，所以这里不再碰它。
+            const ownPromise = window.__pageLoadPromise || Promise.resolve();
+            const summaryPromise = fetchJson(`${window.API_BASE_URL}/dashboard/summary`).then((payload) => {
                 const data = payload.data || {};
                 const stats = data.stats || {};
                 const system = data.system || {};
-                document.getElementById('stats-total-users') && (document.getElementById('stats-total-users').textContent = stats.total_users ?? '—');
                 document.getElementById('stats-total-uploads') && (document.getElementById('stats-total-uploads').textContent = stats.total_uploads ?? '—');
                 document.getElementById('stats-total-nodes') && (document.getElementById('stats-total-nodes').textContent = stats.online_nodes ?? '—');
                 document.getElementById('stats-accuracy') && (document.getElementById('stats-accuracy').textContent = stats.accuracy != null ? Number(stats.accuracy).toFixed(2) + '%' : '—');
@@ -381,6 +385,9 @@ require_once ROOT_PATH . '/views/layout.php';
                 setBar('system-memory-bar', system.memory ?? 0);
                 setBar('system-disk-bar', system.disk ?? 0);
             }).catch((e) => console.error(e));
+
+            // 等两个请求都结束再收加载态，避免加载条提前消失/数值二次跳动
+            return Promise.all([ownPromise, summaryPromise]);
         }
 
         function updateNavActive(page) {
@@ -389,8 +396,11 @@ require_once ROOT_PATH . '/views/layout.php';
 
         allNavLinks.forEach(link => {
             link.addEventListener('click', (e) => {
+                // 只接管带 data-page 的 SPA 链接，其余（外链/无 data-page）走浏览器默认跳转
+                const page = link.getAttribute('data-page');
+                if (!page) return;
                 e.preventDefault();
-                loadPage(link.getAttribute('data-page'), true);
+                loadPage(page, true);
             });
         });
 

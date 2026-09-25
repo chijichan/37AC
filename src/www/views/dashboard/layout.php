@@ -495,8 +495,13 @@ require_once ROOT_PATH . '/views/layout.php';
 
         allNavLinks.forEach(link => {
             link.addEventListener('click', (e) => {
+                // 只接管带 data-page 的站内 SPA 链接；
+                // 没有 data-page 的（如「后台管理」→ /admin）交给浏览器正常跳转，
+                // 否则 page 为 null 会被当成页面名解析，渲染成“无法加载页面：”
+                const page = link.getAttribute('data-page');
+                if (!page) return;
                 e.preventDefault();
-                loadPage(link.getAttribute('data-page'), true);
+                loadPage(page, true);
             });
         });
 

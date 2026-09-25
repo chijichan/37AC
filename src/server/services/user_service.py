@@ -49,7 +49,7 @@ def get_user_by_id(user_id: int) -> dict:
 
 def update_profile(user_id: int, data: dict) -> dict:
     """更新用户个人资料"""
-    allowed_fields = {"email", "avatar", "username"}
+    allowed_fields = {"email", "username"}
 
     for field in allowed_fields:
         if field in data and field == "email" and data[field] and not validate_email(data[field]):
@@ -105,7 +105,9 @@ def get_users(page: int = 1, per_page: int = 20, keyword: str = None) -> dict:
             total = cursor.fetchone()["total"]
 
             offset = (page - 1) * per_page
-            sql = f"""SELECT id, username, email, role, status, avatar,
+            # 注意：users 表没有 avatar 列（见 scripts/install.sql），
+            # 之前写成 SELECT ... avatar 会让整个列表接口 400（Unknown column 'avatar'）
+            sql = f"""SELECT id, username, email, role, status,
                              last_login_at, last_login_ip, created_at, updated_at
                       FROM users {where_clause}
                       ORDER BY created_at DESC
@@ -186,7 +188,7 @@ def create_user(username: str, password: str, email: str = None, role: str = "us
 
 def update_user(user_id: int, data: dict) -> dict:
     """更新用户信息（管理员）"""
-    allowed_fields = {"email", "role", "status", "avatar"}
+    allowed_fields = {"email", "role", "status"}
 
     for field in allowed_fields:
         if field in data:

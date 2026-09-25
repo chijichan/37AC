@@ -721,7 +721,7 @@ paths:
                 model: {type: string, enum: [37ac, llm, auto], default: 37ac, description: 旧参数（单通道）；非法值会被静默改写为 37ac}
                 channels: {type: string, example: "37ac,llm,human", description: 多通道逗号分隔；不给则按 model 推导}
                 human_name: {type: string, description: 上传时内联提交人工答案（自动加入 human 通道）}
-                human_character_index: {type: integer, description: 人工答案对应的人物序号（characters[i]）}
+                human_character_index: {type: integer, description: "人工答案对应的人物序号（characters[i]）"}
                 human_note: {type: string}
           application/json:
             schema:
@@ -760,7 +760,7 @@ paths:
               properties:
                 task_id: {type: string, format: uuid}
                 name: {type: string, example: 原神/荧}
-                character_index: {type: integer, description: 对应 37ac 结果的 characters[i]，可选}
+                character_index: {type: integer, description: "对应 37ac 结果的 characters[i]，可选"}
                 note: {type: string, description: 可选备注}
       responses:
         "200":

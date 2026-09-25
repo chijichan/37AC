@@ -11,6 +11,7 @@ import pymysql
 from common.crypto import verify_node_token
 from config.base import DB_CONFIG
 from config.log_config import get_logger
+from services import channel_service
 from services.node_manager import node_manager, get_db_connection
 from services.protocol.json_protocol import json_protocol
 from services.async_processor import async_processor
@@ -197,6 +198,9 @@ def async_handle_task_result(conn, addr, msg):
         )
         return
 
+    # 多通道：节点回来的可能是 "<父id>:<通道>"，结果要合并进父任务行
+    parent_id, channel = channel_service.split_task_id(task_id)
+
     def process_task_result():
         try:
             conn = get_db_connection()
@@ -204,6 +208,28 @@ def async_handle_task_result(conn, addr, msg):
                 logger.error("任务结果保存失败: 数据库连接失败 task_id=%s", task_id)
                 return
             with conn.cursor() as cursor:
+                # 1) 读出父任务已有的 result（多通道要按通道合并，不能互相覆盖）
+                payload = {}
+                try:
+                    cursor.execute("SELECT result FROM task_results WHERE task_id = %s", (parent_id,))
+                    row = cursor.fetchone()
+                    if row and row[0]:
+                        payload = json.loads(row[0]) if isinstance(row[0], str) else row[0]
+                except Exception as read_err:
+                    logger.debug("读取已有任务结果失败 task_id=%s: %s", parent_id, read_err)
+                if not isinstance(payload, dict):
+                    payload = {}
+
+                # 2) 合并本通道结果（无后缀时按节点上报的 recognition_type 归到 37ac / llm）
+                if channel:
+                    channel_service.merge_channel_result(payload, channel, result)
+                else:
+                    guessed = (result or {}).get("recognition_type")
+                    fallback = (channel_service.CHANNEL_LLM if guessed == "llm"
+                                else channel_service.CHANNEL_37AC)
+                    channel_service.merge_channel_result(payload, fallback, result)
+
+                status = channel_service.overall_status(payload) or "completed"
                 sql = """
                     INSERT INTO task_results (task_id, result, status, node_id)
                     VALUES (%s, %s, %s, %s)
@@ -214,7 +240,7 @@ def async_handle_task_result(conn, addr, msg):
                         updated_at = CURRENT_TIMESTAMP
                 """
                 try:
-                    cursor.execute(sql, (task_id, json.dumps(result), "completed", node_id))
+                    cursor.execute(sql, (parent_id, json.dumps(payload, ensure_ascii=False), status, node_id))
                 except pymysql.err.OperationalError as sql_err:
                     # 兜底：task_results.node_id 列尚未迁移时（1054 Unknown column），
                     # 退回旧 SQL，避免因为迁移没跑而丢结果
@@ -224,23 +250,28 @@ def async_handle_task_result(conn, addr, msg):
                             "INSERT INTO task_results (task_id, result, status) VALUES (%s, %s, %s) "
                             "ON DUPLICATE KEY UPDATE result = VALUES(result), status = VALUES(status), "
                             "updated_at = CURRENT_TIMESTAMP",
-                            (task_id, json.dumps(result), "completed"),
+                            (parent_id, json.dumps(payload, ensure_ascii=False), status),
                         )
                     else:
                         raise
             conn.commit()
-            logger.info("任务结果已保存: task_id=%s", task_id)
+            logger.info("任务结果已保存: task_id=%s channel=%s status=%s", parent_id, channel, status)
 
             # DB 写入成功后才从 pending_tasks 移除，避免竞态导致任务丢失
             from services.task_manager import task_manager
             task_manager.mark_task_completed(task_id)
 
-            # 推送到 SSE 事件总线（实时通知前端）
-            sse_bus.publish(task_id, {
-                "status": "completed",
-                "message": "任务完成，结果已返回",
-                "task_id": task_id,
-                "result": result,
+            # 推送到 SSE 事件总线（按父任务 id 推送，前端只订阅一次）
+            sse_bus.publish(parent_id, {
+                "status": "completed" if status == "completed" else status,
+                "message": "任务完成，结果已返回" if status == "completed" else "部分通道已完成",
+                "task_id": parent_id,
+                "channel": channel or fallback,
+                "channel_status": {
+                    c: channel_service.channel_status(payload, c)
+                    for c in (payload.get("requested_channels") or [])
+                },
+                "result": payload.get("characters") or [],
             })
         except Exception as e:
             logger.error("异步保存失败: %s", e)

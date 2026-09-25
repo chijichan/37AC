@@ -341,17 +341,28 @@ def start_node_service(auto_update_model=None):
         """回应服务端的图片补拉请求（需求3 后半）。"""
         request_id = data.get("request_id")
         req_task_id = data.get("task_id")
+        # 多通道时服务端可能用父 id 来补拉，而节点这边记的是 "<父id>:<通道>"
+        candidates = [req_task_id]
+        for suffix in ("37ac", "llm"):
+            sub = f"{req_task_id}:{suffix}"
+            if sub not in candidates:
+                candidates.append(sub)
+
         path = None
-        with retained_lock:
-            info = retained_images.get(req_task_id)
-        if info:
-            path = info["path"]
+        for candidate in candidates:
+            with retained_lock:
+                info = retained_images.get(candidate)
+            if info:
+                path = info["path"]
+                break
         if not path:
             # 仍在推理中的任务也允许直接取
-            with pending_tasks_lock:
-                pending = pending_tasks.get(req_task_id)
-            if pending:
-                path = pending.get("local_image_path")
+            for candidate in candidates:
+                with pending_tasks_lock:
+                    pending = pending_tasks.get(candidate)
+                if pending:
+                    path = pending.get("local_image_path")
+                    break
 
         payload = build_image_response_payload(NODE_ID, request_id, req_task_id, path)
         if payload.get("error"):

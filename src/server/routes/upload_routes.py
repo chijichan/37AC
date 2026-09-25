@@ -22,6 +22,8 @@ from services.sse_bus import sse_bus
 from services.task_manager import task_manager
 from services import settings_service
 from services import storage_service
+from services import channel_service
+from config.base import HUMAN_VOTE_LIMIT_PER_HOUR
 from middleware.rate_limiter import rate_limit
 from middleware.auth_middleware import _extract_token, _verify_access_token
 from utils.api_response import (
@@ -29,6 +31,9 @@ from utils.api_response import (
     CODE_API_KEY_MISSING,
     CODE_DB_UNAVAILABLE,
     CODE_IMAGE_EXPIRED,
+    CODE_INVALID_PARAMS,
+    CODE_NOT_FOUND,
+    CODE_RATE_LIMITED,
 )
 from common.constants import ALLOWED_IMAGE_EXTENSIONS as _ALLOWED_IMAGE_EXTENSIONS
 from config.log_config import get_logger
@@ -130,17 +135,31 @@ def upload_and_predict():
         if error_response:
             return error_response, status_code
 
-        # 从请求中获取识别模型（默认 37ac 本地模型）
+        # 识别通道（2026-09-25）：channels=37ac,llm,human；未给则按旧 model 参数推导
         model = (request.form.get("model") or "").strip().lower()
-        if request.is_json:
-            body = request.get_json(silent=True) or {}
-            model = (body.get("model") or model or "").strip().lower()
+        channels_raw = (request.form.get("channels") or "").strip()
+        body_json = request.get_json(silent=True) or {} if request.is_json else {}
+        model = (body_json.get("model") or model or "").strip().lower()
+        channels_raw = str(body_json.get("channels") or channels_raw or "").strip()
         if model not in ("37ac", "llm", "auto"):
             model = "37ac"
 
+        channels = channel_service.parse_channels(channels_raw, model)
+
+        # 人工通道：上传时内联提交（human_name），或稍后由 POST /upload/human 匿名补投
+        human_name = str(
+            request.form.get("human_name") or body_json.get("human_name") or body_json.get("human") or ""
+        ).strip()
+        human_index = request.form.get("human_character_index", body_json.get("human_character_index"))
+        human_note = request.form.get("human_note") or body_json.get("human_note")
+        if human_name and "human" not in channels:
+            channels.append("human")
+
+        node_channels = channel_service.node_channels(channels)
+
         # auto：按系统设置 auto_split_ratio 分流（默认 55% 37ac / 45% llm）
         # 无启用 LLM 的在线节点时全走 37ac
-        if model == "auto":
+        if "auto" in channels:
             try:
                 split_ratio = int(settings_service.get_settings().get("auto_split_ratio", "55"))
             except Exception:
@@ -150,8 +169,11 @@ def upload_and_predict():
                 recognition_type = "llm"
             else:
                 recognition_type = "local"
+        elif node_channels:
+            # 多通道时以第一个节点通道为准（每个通道会各自 dispatch 一次）
+            recognition_type = channel_service.CHANNEL_TO_RECOGNITION.get(node_channels[0], "local")
         else:
-            recognition_type = node_manager.resolve_model_to_recognition_type(model) or "local"
+            recognition_type = "local"
 
         # 图片来源：优先 multipart 文件（file / image），其次 image_base64
         image_data = None
@@ -200,6 +222,18 @@ def upload_and_predict():
         except Exception as e:
             logger.warning("保存上传图片失败 task_id=%s: %s", task_id, e)
 
+        # 结果骨架：result 里按通道分段（37ac / llm / human）
+        initial_payload = channel_service.initial_result(task_id, channels)
+        if human_name:
+            channel_service.add_human_vote(
+                initial_payload,
+                channel_service.human_entry(
+                    human_name, character_index=human_index, note=human_note, source="upload",
+                    voter=f"api:{api_key_data['key_id']}",
+                ),
+                voter_key=f"api:{api_key_data['key_id']}",
+            )
+
         # 判断客户端是否期望流式响应
         wants_stream = (
             request.accept_mimetypes.best == "text/event-stream"
@@ -216,9 +250,10 @@ def upload_and_predict():
                     with conn.cursor() as cursor:
                         cursor.execute(
                             "INSERT INTO task_results (task_id, user_id, api_key_id, status, result) "
-                            "VALUES (%s, %s, %s, 'pending', NULL) "
+                            "VALUES (%s, %s, %s, 'pending', %s) "
                             "ON DUPLICATE KEY UPDATE user_id=VALUES(user_id), api_key_id=VALUES(api_key_id), status='pending'",
-                            (task_id, api_key_data["user_id"], api_key_data["key_id"]),
+                            (task_id, api_key_data["user_id"], api_key_data["key_id"],
+                             json.dumps(initial_payload, ensure_ascii=False)),
                         )
                         conn.commit()
             except Exception as e:
@@ -227,16 +262,40 @@ def upload_and_predict():
                 if conn:
                     conn.close()
 
-            result = dispatch_task(
-                None,
-                image_data,
-                task_id,
-                image_filename=image_filename,
-                recognition_type=recognition_type,
-            )
-            logger.info("任务 %s 调度结果: %s", task_id, result)
+            # 多通道扇出：每个需要节点推理的通道各发一次（多通道时用 "<父id>:<通道>" 作子任务 id）
+            dispatched = []
+            for channel in node_channels:
+                sub_id = channel_service.sub_task_id(task_id, channel, len(node_channels))
+                channel_recognition = channel_service.CHANNEL_TO_RECOGNITION.get(channel, recognition_type)
+                res = dispatch_task(
+                    None,
+                    image_data,
+                    sub_id,
+                    image_filename=image_filename,
+                    recognition_type=channel_recognition,
+                )
+                dispatched.append((channel, res))
+                logger.info("任务 %s 通道 %s 调度结果: %s", task_id, channel, res)
 
-            status = result.get("status")
+            if not dispatched:
+                # 只请求了人工通道：等标注即可，任务行已就绪
+                logger.info("任务 %s 仅请求人工通道，等待标注", task_id)
+                return
+
+            failed = [(ch, res) for ch, res in dispatched if res.get("status") in ("failed", "error")]
+            waiting = [ch for ch, res in dispatched if res.get("status") == "waiting"]
+            for channel, res in failed:
+                section = initial_payload.setdefault(channel, {})
+                section["status"] = "failed"
+                section["error"] = res.get("message") or "分发失败"
+            if failed or waiting:
+                _patch_result_row(task_id, initial_payload,
+                                  channel_service.overall_status(initial_payload))
+
+            result = dispatched[0][1]
+            status = "failed" if len(failed) == len(dispatched) else (
+                "waiting" if len(waiting) == len(dispatched) else "dispatched"
+            )
 
             if status in ("failed", "error"):
                 try:
@@ -331,26 +390,21 @@ def upload_and_predict():
 
         # === 非流式模式：启动 dispatch 线程后返回 JSON ===
         threading.Thread(target=dispatch, daemon=True).start()
-        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
-            return jsonify(
-                {
-                    "type": "dispatch_task",
-                    "timestamp": int(datetime.now().timestamp()),
-                    "status": "queued",
-                    "message": "图片已上传，等待推理...",
-                    "task_id": task_id,
-                    "model": model,
-                }
-            )
-
-        return jsonify({
+        response_payload = {
             "type": "dispatch_task",
             "timestamp": int(datetime.now().timestamp()),
             "status": "queued",
             "message": "图片已上传，等待推理...",
             "task_id": task_id,
             "model": model,
-        })
+            # 新增：本次请求的通道与各通道初始状态（前端按通道分区展示）
+            "channels": channels,
+            "channel_status": {
+                channel: (initial_payload.get(channel) or {}).get("status", "queued")
+                for channel in channels
+            },
+        }
+        return jsonify(response_payload)
 
     # GET 请求：返回 API 说明
     return jsonify({
@@ -363,12 +417,150 @@ def upload_and_predict():
             "body": {
                 "file": "image_file (multipart)",
                 "image_base64": "可选，JSON/表单里的 base64 图片（multipart 优先）",
-                "model": "37ac | llm | auto",
+                "model": "37ac | llm | auto（旧参数，等价单通道）",
+                "channels": "可选，多通道逗号分隔：37ac,llm,human（不给则按 model 推导）",
+                "human_name": "可选，上传时内联提交人工答案（会自动加入 human 通道）",
+                "human_character_index": "可选，人工答案对应的人物序号（对应 37ac 结果的 characters[i]）",
+                "human_note": "可选备注",
             },
+            "channels": "结果按通道分段存放在 result 里：result['37ac'] / result['llm'] / result['human']；顶层仍保留旧字段（37ac 优先，其次 llm）",
+            "human_endpoint": "POST /upload/human —— 匿名提交/修改人工标注（{task_id, name, character_index?}，按 IP 限流，同 IP 同任务重复提交=改票）",
+            "result_endpoint": "GET /tasks/<task_id>（含 channel_status 与各通道结果）",
             "models_endpoint": "GET /models（无鉴权，拉取可选识别模型）",
             "streaming": "设置 Accept: text/event-stream 或 X-Stream-Response: true 获取流式响应",
         },
     }), 200
+
+
+@upload_bp.route("/upload/human", methods=["POST"])
+def submit_human_label():
+    """人工识别通道：提交/修改某张图的人工标注（匿名可用，按 IP 限流）。
+
+    请求体（JSON 或表单）：{task_id, name, character_index?, note?}
+    规则：同一 IP 对同一 task 重复提交视为**改票**；每 IP 每小时上限见 HUMAN_VOTE_LIMIT_PER_HOUR。
+    结果写入 result["human"]，前端与 37ac / llm 分区展示。
+    """
+    data = request.get_json(silent=True) or request.form or {}
+    task_id = str(data.get("task_id") or "").strip()
+    name = str(data.get("name") or data.get("human_name") or "").strip()
+    if not task_id or not name:
+        return jsonify({
+            "success": False,
+            "code": CODE_INVALID_PARAMS,
+            "message": "缺少 task_id 或 name",
+        }), 400
+
+    ip = _client_ip()
+    if not channel_service.vote_allowed(ip, HUMAN_VOTE_LIMIT_PER_HOUR):
+        return jsonify({
+            "success": False,
+            "code": CODE_RATE_LIMITED,
+            "message": f"提交过于频繁（每 IP 每小时 {HUMAN_VOTE_LIMIT_PER_HOUR} 次）",
+        }), 429
+
+    payload = _load_result_payload(task_id)
+    if payload is None:
+        return jsonify({
+            "success": False,
+            "code": CODE_NOT_FOUND,
+            "message": "任务不存在或已被清理",
+        }), 404
+
+    channel_service.add_human_vote(
+        payload,
+        channel_service.human_entry(
+            name,
+            character_index=data.get("character_index"),
+            note=data.get("note"),
+            source="human",
+            voter=f"ip:{ip}",
+        ),
+        voter_key=f"ip:{ip}",
+    )
+    channels = list(dict.fromkeys((payload.get("requested_channels") or []) + [channel_service.CHANNEL_HUMAN]))
+    payload["requested_channels"] = channels
+    channel_service.resolve_human_bbox(payload)
+
+    status = channel_service.overall_status(payload)
+    _patch_result_row(task_id, payload, status)
+    channel_status = {c: channel_service.channel_status(payload, c) for c in channels}
+    sse_bus.publish(task_id, {
+        "status": "human_submitted",
+        "message": "收到人工标注",
+        "task_id": task_id,
+        "human": payload.get(channel_service.CHANNEL_HUMAN),
+        "channel_status": channel_status,
+        "result": payload.get("characters") or [],
+    })
+
+    return jsonify({
+        "success": True,
+        "message": "标注已记录",
+        "data": {
+            "task_id": task_id,
+            "status": status,
+            "human": payload.get(channel_service.CHANNEL_HUMAN),
+            "channel_status": channel_status,
+        },
+    }), 200
+
+
+def _patch_result_row(task_id, payload, status):
+    """把 result JSON 与状态写回任务行（多通道合并、人工投票都用它）。"""
+    conn = None
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return False
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "INSERT INTO task_results (task_id, result, status) VALUES (%s, %s, %s) "
+                "ON DUPLICATE KEY UPDATE result=VALUES(result), status=VALUES(status)",
+                (task_id, json.dumps(payload or {}, ensure_ascii=False), status or "pending"),
+            )
+            conn.commit()
+        return True
+    except Exception as e:
+        logger.error("更新任务结果失败 task_id=%s: %s", task_id, e)
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+
+def _load_result_payload(task_id):
+    """读取任务的 result JSON（不存在返回 None，解析失败返回 {}）。"""
+    conn = None
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return None
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT result FROM task_results WHERE task_id = %s", (task_id,))
+            row = cursor.fetchone()
+        if not row:
+            return None
+        raw = row[0]
+        if not raw:
+            return {}
+        try:
+            payload = json.loads(raw) if isinstance(raw, str) else raw
+        except Exception:
+            return {}
+        return payload if isinstance(payload, dict) else {}
+    except Exception as e:
+        logger.error("读取任务结果失败 task_id=%s: %s", task_id, e)
+        return None
+    finally:
+        if conn:
+            conn.close()
+
+
+def _client_ip():
+    forwarded = request.headers.get("X-Forwarded-For", "")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.remote_addr or "unknown"
 
 
 def _image_info(task_id):
@@ -544,6 +736,18 @@ def get_task_result(task_id):
             except json.JSONDecodeError:
                 result = {"raw_result": result_json_str}
 
+            # 多通道：补全人工标注的框（只给了 character_index 时从模型通道取），并给出各通道状态
+            requested = []
+            channel_status = {}
+            if isinstance(result, dict):
+                requested = result.get("requested_channels") or []
+                if requested:
+                    channel_service.resolve_human_bbox(result)
+                    channel_status = {
+                        channel: channel_service.channel_status(result, channel)
+                        for channel in requested
+                    }
+
             return (
                 jsonify(
                     {
@@ -553,6 +757,8 @@ def get_task_result(task_id):
                         "message": "任务完成，结果已返回",
                         "task_id": task_id,
                         "result": result,
+                        "channels_requested": requested,
+                        "channel_status": channel_status,
                         "image": _image_info(task_id),
                     }
                 ),

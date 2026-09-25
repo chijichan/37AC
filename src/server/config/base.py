@@ -81,3 +81,7 @@ IMAGE_CLEAN_INTERVAL_SEC = int(os.getenv("IMAGE_CLEAN_INTERVAL_SEC", "300"))
 IMAGE_TMP_PROTECT_SEC = int(os.getenv("IMAGE_TMP_PROTECT_SEC", "300"))
 # 服务端清理图片后，是否允许向处理该任务的节点补拉
 IMAGE_NODE_REFETCH = os.getenv("IMAGE_NODE_REFETCH", "True").lower() == "true"
+
+# - 人工识别通道（趣味性玩法）
+# 匿名投票：单 IP 每小时允许的提交次数（0 = 不限）；同一 IP 对同一任务重复提交视为改票
+HUMAN_VOTE_LIMIT_PER_HOUR = int(os.getenv("HUMAN_VOTE_LIMIT_PER_HOUR", "60"))

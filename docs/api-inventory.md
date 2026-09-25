@@ -148,8 +148,9 @@ Werkzeug 默认的 HTML 错误页（404/405/413/500…）也换成了同款 JSON
 | 方法 | 路径 | 鉴权 | 入参 | 成功响应 | 状态码 |
 |---|---|---|---|---|---|
 | GET | `/upload` | 无 | 无 | `{type:"info",message,usage:{...}}` | 200 |
-| POST | `/upload` | `X-API-Key` + 限流 | multipart `file`/`image` 或 `image_base64`，`model=37ac\|llm\|auto` | `{type:"dispatch_task",status:"queued",task_id,model}`；或 SSE 流 | **200**（语义应为 202）/ 400 / 401 / 429 |
-| GET | `/tasks/<task_id>` | `X-API-Key` | 无 | `{type:"task_result",status,result,image:{...},...}` | 200 / **202**（未完成）/ 401 / 503 |
+| POST | `/upload` | `X-API-Key` + 限流 | multipart `file`/`image` 或 `image_base64`；`channels=37ac,llm,human`（或旧 `model=37ac\|llm\|auto`）；人工可内联 `human_name`/`human_character_index`/`human_note` | `{type:"dispatch_task",status:"queued",task_id,model,channels,channel_status}`；或 SSE 流 | **200**（语义应为 202）/ 400 / 401 / 429 |
+| POST | `/upload/human` | **匿名**（按 IP 限流） | `{task_id, name, character_index?, note?}` | `{success,message,data:{task_id,status,human,channel_status}}` | 200 / 400 / 404 / 429 |
+| GET | `/tasks/<task_id>` | `X-API-Key` | 无 | `{type:"task_result",status,result,channels_requested,channel_status,image:{...},...}` | 200 / **202**（未完成）/ 401 / 503 |
 | GET | `/tasks/<task_id>/image` | `X-API-Key` 或 Bearer | `original=1`、`max_side=N` | 图片二进制（响应头 `X-Image-Source: cache\|tmp\|node`） | 200 / 401 / **410**（本地与节点都没有） |
 | GET | `/tasks/<task_id>/stream` | `X-API-Key` | 无 | SSE：`data: {status,result,...}` | 200（流）/ 401 |
 
@@ -196,6 +197,31 @@ Werkzeug 默认的 HTML 错误页（404/405/413/500…）也换成了同款 JSON
 - 开关：服务端 `IMAGE_NODE_REFETCH`（默认 true）、节点侧 `IMAGE_RETAIN_SEC`（0 = 恢复"推理完即删"）。
 - 命中补拉时响应头是 `X-Image-Source: node`（写回本地后下一次即为 `cache`）。
 - 依赖列 `task_results.node_id`（迁移见 `scripts/alter_tables.sql`）；列不存在时服务端自动退回旧 SQL，仅补拉不可用。
+
+### 2.11 多通道结果：37ac / llm / human（2026-09-25）
+
+一次上传可请求多个通道（`channels=37ac,llm,human`），结果**按通道分段**存放在 `task_results.result` 里，前端分区域展示（不做加权融合）：
+
+    POST /upload  channels=37ac,llm,human&human_name=原神/荧&human_character_index=0
+      -> 任务 id 只建一次；需要节点推理的通道各发一次（多通道时子任务 id = "<父id>:<通道>"）
+      -> result = {
+           "task_id": "...", "requested_channels": ["37ac","llm","human"],
+           "37ac":  {"status":"completed","crop_method":"yolo","characters":[...],"class_probs":[...]},
+           "llm":   {"status":"completed","class_probs":[...]},
+           "human": {"status":"completed","count":2,"votes":[
+                       {"name":"原神/荧","character_index":0,"bbox":{...},"bbox_percent":{...},
+                        "source":"upload","voter":"api:19","at":1790345251}]},
+           # 兼容旧前端：顶层仍是旧字段（success/class_probs/characters/...），37ac 优先、其次 llm
+         }
+
+- **人工通道两条入口**：上传时内联（`human_name`，voter=`api:<key_id>`）；或 `POST /upload/human` 匿名补投
+  （voter=`ip:<ip>`，可跨设备玩，按 IP 限流 `HUMAN_VOTE_LIMIT_PER_HOUR` 默认 60/小时）。
+- **改票**：同一 voter 对同一任务重复提交视为改票；不同 voter 各留一条。
+- **人员位置**：人工票只给 `character_index` 时，读取接口会从模型通道的 `characters[i]` 复制 `bbox`/`bbox_percent`
+  （并附 `model_guess`，便于前端显示「人 vs 模型」）。
+- **部分完成**：37ac/llm 几秒回来、人工可能永远不来；`channel_status` 给出每通道状态，
+  任务整体 status ∈ pending / partial / completed / failed。
+- 匿名端点限流时 429 + `RATE_LIMITED`；任务不存在 404 + `NOT_FOUND`。
 
 ## 3. 规范性问题清单（按严重度）
 

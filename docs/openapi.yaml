@@ -718,20 +718,57 @@ paths:
               properties:
                 file: {type: string, format: binary, description: png/jpg/jpeg/webp}
                 image: {type: string, format: binary, description: 等价于 file}
-                model: {type: string, enum: [37ac, llm, auto], default: 37ac, description: 非法值会被静默改写为 37ac}
+                model: {type: string, enum: [37ac, llm, auto], default: 37ac, description: 旧参数（单通道）；非法值会被静默改写为 37ac}
+                channels: {type: string, example: "37ac,llm,human", description: 多通道逗号分隔；不给则按 model 推导}
+                human_name: {type: string, description: 上传时内联提交人工答案（自动加入 human 通道）}
+                human_character_index: {type: integer, description: 人工答案对应的人物序号（characters[i]）}
+                human_note: {type: string}
           application/json:
             schema:
               type: object
               properties:
                 image_base64: {type: string}
                 model: {type: string, enum: [37ac, llm, auto]}
+                channels: {type: string, example: "37ac,llm,human"}
+                human_name: {type: string}
+                human_character_index: {type: integer}
+                human_note: {type: string}
       responses:
         "200":
           description: 已受理（JSON 模式）
-          content: {application/json: {example: {type: dispatch_task, timestamp: 1789267716, status: queued, message: 图片已上传，等待推理..., task_id: 52213b03-6a5c-48ef-8413-1aac63bf9be8, model: 37ac}}}
+          content: {application/json: {example: {type: dispatch_task, timestamp: 1789267716, status: queued, message: 图片已上传，等待推理..., task_id: 52213b03-6a5c-48ef-8413-1aac63bf9be8, model: 37ac, channels: [37ac, llm, human], channel_status: {37ac: queued, llm: queued, human: completed}}}}
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
         "429": {description: 触发限流, content: {application/json: {example: {success: false, message: 请求过于频繁，请在 1 秒后重试}}}}
+
+  /upload/human:
+    post:
+      tags: [识别任务]
+      summary: 人工识别通道（匿名提交/修改标注）
+      description: |
+        给已存在的任务提交人工答案，写入 result["human"]，与 37ac / llm 分区展示。
+        - 无需鉴权（匿名玩法），按 IP 限流（HUMAN_VOTE_LIMIT_PER_HOUR，默认 60/小时）-> 429 RATE_LIMITED
+        - 同一 IP 对同一 task 重复提交 = 改票；不同 IP 各留一条
+        - 只给 character_index 时，读取接口会从模型通道的 characters[i] 复制 bbox/bbox_percent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [task_id, name]
+              properties:
+                task_id: {type: string, format: uuid}
+                name: {type: string, example: 原神/荧}
+                character_index: {type: integer, description: 对应 37ac 结果的 characters[i]，可选}
+                note: {type: string, description: 可选备注}
+      responses:
+        "200":
+          description: 已记录
+          content: {application/json: {example: {success: true, message: 标注已记录, data: {task_id: "52213b03-6a5c-48ef-8413-1aac63bf9be8", status: partial, human: {status: completed, count: 1, votes: [{name: 原神/荧, character_index: 0, voter: "ip:127.0.0.1"}]}, channel_status: {37ac: completed, llm: waiting, human: completed}}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "429": {description: 触发按 IP 的提交限流, content: {application/json: {example: {success: false, code: RATE_LIMITED, message: 提交过于频繁（每 IP 每小时 60 次）}}}}
 
   /tasks/{task_id}:
     get:

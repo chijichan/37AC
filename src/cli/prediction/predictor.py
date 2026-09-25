@@ -6,6 +6,7 @@ from PIL import Image
 import os
 import json
 import re
+import shutil
 import time
 import threading
 from common.constants import IMAGE_EXTENSIONS_BASIC
@@ -18,6 +19,8 @@ from config.base import (
     CLASSES_JSON_PATH,
     MODEL_LOAD_PATH,
     YOLO_ENABLED,
+    MULTI_CHARACTER_ENABLED,
+    MAX_CHARACTERS,
     LLM_RECOGNITION_ENABLED,
     LLM_DB_RECOGNITION,
     LLM_API_KEY,
@@ -41,6 +44,15 @@ try:
 except ImportError:
     YOLO_AVAILABLE = False
     logger.debug("YOLO 检测模块不可用，使用全图分类")
+
+# 多人物裁剪入口（yolo / mediapipe / auto，见 detection/cropper.py）
+try:
+    from detection.cropper import crop_characters_by_method
+    CROP_AVAILABLE = True
+except ImportError:
+    CROP_AVAILABLE = False
+    crop_characters_by_method = None
+    logger.debug("裁剪模块不可用，使用整图分类")
 
 # 数据预处理
 PREDICT_TRANSFORMS = transforms.Compose(
@@ -253,6 +265,9 @@ def predict_image(image_path, model_path=None, classes_file=None, use_cache=True
         "class_probs": [],
         "image_path": image_path,
         "error": None,
+        # 多人物结果（需求1）：无人物时为空数组，crop_method 说明用了哪条裁剪路径
+        "characters": [],
+        "crop_method": "full",
     }
 
     try:
@@ -353,20 +368,14 @@ def predict_image(image_path, model_path=None, classes_file=None, use_cache=True
         # ======================
         transform = PREDICT_TRANSFORMS
 
-        try:
-            # 使用 YOLO 裁剪后的图片（如有）进行分类
-            with Image.open(effective_image) as img:
+        def _classify(path):
+            """对单张图（裁剪图或原图）做一次分类，返回 class_probs（已附加元数据）。"""
+            with Image.open(path) as img:
                 image = img.convert("RGB")
             image_tensor = transform(image).unsqueeze(0).to(get_device())
-
             with torch.no_grad():
                 outputs = model(image_tensor)
                 probs = torch.softmax(outputs, dim=1)
-                confidence, predicted_idx = torch.max(probs, 1)
-
-                label = CLASS_NAMES[predicted_idx.item()]
-                confidence_value = confidence.item() * 100
-
                 # 构建各类别概率列表，按概率降序排列，只保留前10个
                 sorted_probs = sorted(
                     [
@@ -376,26 +385,95 @@ def predict_image(image_path, model_path=None, classes_file=None, use_cache=True
                     key=lambda x: x["prob"],
                     reverse=True,
                 )
-                class_probs = [p for p in sorted_probs if p["prob"] > 0][:10]
+            class_probs = [p for p in sorted_probs if p["prob"] > 0][:10]
+            _enrich_probs_with_metadata(class_probs)
+            return class_probs
 
-                # 成功返回结果（class_probs 已按概率降序，第一项即最佳结果）
-                # 类别名 = 整个对象：从 classes.json 附加 name_zh/ip/features_used/tags
-                _enrich_probs_with_metadata(class_probs)
-                result.update(
-                    {
-                        "success": True,
-                        "class_probs": class_probs,
-                        "features_used": [],  # 本地模型无可解释文本特征，留空
-                        "yolo_detected": yolo_info is not None,
-                    }
-                )
+        try:
+            # ======================
+            # === 多人物识别（需求1）===
+            # ======================
+            # 一张图里可能有多个角色：逐个人物裁剪 + 逐个识别，
+            # 返回 characters[]（含原图百分比坐标）；顶层 class_probs 取置信度最高的人物
+            if MULTI_CHARACTER_ENABLED and CROP_AVAILABLE:
+                found = None
+                try:
+                    # auto: YOLO 优先，未命中回落 mediapipe，再没有则是整图
+                    found = crop_characters_by_method(image_path)
+                    crops = found.get("characters") or []
+                    characters = []
+                    for item in crops:
+                        try:
+                            probs = _classify(item["crop_path"])
+                        except Exception as e:
+                            logger.warning("第 %s 个人物识别失败: %s", item.get("index"), e)
+                            continue
+                        if not probs:
+                            continue
+                        characters.append({
+                            "index": item["index"],
+                            "bbox": item.get("bbox_norm"),
+                            "bbox_percent": item.get("bbox_percent"),
+                            "detector_confidence": item.get("detector_confidence"),
+                            "confidence": probs[0]["prob"],
+                            "class_probs": probs,
+                        })
 
-                logger.info(
-                    "预测成功: %s -> %s (%.2f%%)%s",
-                    image_path, label, confidence_value,
-                    " [YOLO定位]" if yolo_info else "",
-                )
+                    if characters:
+                        best = max(characters, key=lambda c: c["confidence"] or 0)
+                        result.update({
+                            "success": True,
+                            "class_probs": best["class_probs"],   # 兼容旧客户端：顶层=最佳人物
+                            "features_used": [],
+                            "characters": characters,
+                            "character_count": len(characters),
+                            "crop_method": found.get("crop_method") or "yolo",
+                            "image": {
+                                "width": found["image_size"][0],
+                                "height": found["image_size"][1],
+                            },
+                            "yolo_detected": True,
+                        })
+                        logger.info(
+                            "多人物识别: %s -> %d 个人物，最佳 %s (%.2f%%)",
+                            image_path, len(characters),
+                            best["class_probs"][0]["name"], best["confidence"],
+                        )
+                        return result
+                    logger.info("多人物检测未命中，回退单品/整图分类")
+                except Exception as e:
+                    logger.warning("多人物识别异常（回退单品/整图分类）: %s", e)
+                finally:
+                    if isinstance(found, dict) and found.get("tmp_dir"):
+                        shutil.rmtree(found["tmp_dir"], ignore_errors=True)
+
+            # ======================
+            # === 单品分类（原有路径） ===
+            # ======================
+            class_probs = _classify(effective_image)
+            if not class_probs:
+                result["error"] = "图像处理或预测失败: 分类结果为空"
                 return result
+            with Image.open(image_path) as raw_img:
+                original_size = raw_img.size
+            result.update(
+                {
+                    "success": True,
+                    "class_probs": class_probs,
+                    "features_used": [],  # 本地模型无可解释文本特征，留空
+                    "characters": [],
+                    "crop_method": "yolo" if yolo_info else "full",
+                    "image": {"width": original_size[0], "height": original_size[1]},
+                    "yolo_detected": yolo_info is not None,
+                }
+            )
+
+            logger.info(
+                "预测成功: %s -> %s (%.2f%%)%s",
+                image_path, class_probs[0]["name"], class_probs[0]["prob"],
+                " [YOLO定位]" if yolo_info else "",
+            )
+            return result
 
         except Exception as e:
             result["error"] = f"图像处理或预测失败: {str(e)}"

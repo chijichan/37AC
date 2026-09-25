@@ -12,6 +12,11 @@ torchvision==0.28.0
 ultralytics>=8.0.0
 opencv-python>=4.8.0  # ultralytics 依赖
 
+# 第二种裁剪方式：MediaPipe 关键点（CROP_METHOD=mediapipe / auto 的兜底，见 detection/mediapipe_detector.py）
+# 模型文件（.tflite，约 28MB）随 wheel 分发，无需额外下载；
+# 未安装时 auto 模式会自动跳过它、只走 YOLO，不影响主链路。
+mediapipe==0.10.14
+
 # Web服务器框架（仅 src/server 使用，CLI 不需要，已注释）
 # Flask==3.1.3
 # flask-cors==6.0.5

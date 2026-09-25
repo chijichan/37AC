@@ -5,6 +5,13 @@ import shutil
 import threading
 
 from config.log_config import get_logger
+from detection.bbox import (
+    bbox_area,
+    expand_bbox,
+    normalize_bbox,
+    percent_bbox,
+    scale_bbox,
+)
 
 logger = get_logger("yolo_detector")
 
@@ -194,6 +201,98 @@ class YoloDetector:
         except Exception as e:
             logger.error("YOLO 裁剪失败: %s", e)
             return None, None
+
+
+    def detect_all(self, image_path, max_size: int = 0, target_classes=("person",)):
+        """多目标检测，并把检测框映射回**原图**坐标系（需求1）。
+
+        与 detect() 的区别：
+        - 检测前可选缩放（max_size）加速；返回的坐标已换算回原图
+          （detect() 返回的是缩放后坐标系，直接用会让百分比坐标全错）
+        - 只保留 target_classes（默认 person），按检测框**面积降序**（大的人物优先）
+
+        Returns:
+            dict: {
+                "image_size": (w, h),      # 原图尺寸（百分比坐标的分母）
+                "detected_size": (w, h),   # 实际送入 YOLO 的尺寸
+                "detections": [{"bbox": (x1,y1,x2,y2) 原图坐标, "area", "confidence",
+                                "class_id", "class_name"}, ...],
+            }
+        """
+        from PIL import Image
+
+        empty = {"image_size": (0, 0), "detected_size": (0, 0), "detections": []}
+        try:
+            with Image.open(image_path) as raw:
+                original_size = raw.size
+                work = raw.convert("RGB")
+        except Exception as e:
+            logger.error("多目标检测失败（图片无法读取）: %s", e)
+            return empty
+
+        if max_size and max(work.size) > max_size:
+            width, height = work.size
+            ratio = max_size / float(max(width, height))
+            work = work.resize(
+                (max(1, int(width * ratio)), max(1, int(height * ratio))),
+                Image.LANCZOS,
+            )
+
+        detections = self.detect(work)
+        if target_classes:
+            detections = [d for d in detections if d.get("class_name") in target_classes]
+        if not detections:
+            return {"image_size": original_size, "detected_size": work.size, "detections": []}
+
+        results = []
+        for det in detections:
+            box = scale_bbox(det["bbox"], work.size, original_size)
+            results.append({
+                "bbox": box,
+                "area": bbox_area(box),
+                "confidence": det["confidence"],
+                "class_id": det["class_id"],
+                "class_name": det["class_name"],
+            })
+        results.sort(key=lambda item: item["area"], reverse=True)
+        logger.info(
+            "多目标检测: %d 个目标（原图 %s，检测用图 %s）",
+            len(results), original_size, work.size,
+        )
+        return {"image_size": original_size, "detected_size": work.size, "detections": results}
+
+    def crop_all(self, image_path, detections, output_dir, margin_ratio: float = 0.0,
+                 suffix: str = CROP_SUFFIX, ext: str = ".jpg"):
+        """按原图坐标逐个裁剪并保存，返回 [{"index", "crop_path", "bbox", ...}]。"""
+        from PIL import Image
+
+        crops = []
+        try:
+            with Image.open(image_path) as raw:
+                img = raw.convert("RGB")
+                size = img.size
+        except Exception as e:
+            logger.error("多目标裁剪失败（图片无法读取）: %s", e)
+            return crops
+
+        os.makedirs(output_dir, exist_ok=True)
+        name = os.path.splitext(os.path.basename(image_path))[0]
+        for index, det in enumerate(detections):
+            box = expand_bbox(det["bbox"], size, margin_ratio)
+            try:
+                crop = img.crop(box)
+                path = os.path.join(output_dir, f"{name}_{index}{suffix}{ext}")
+                crop.save(path)
+                crops.append({
+                    "index": index,
+                    "crop_path": path,
+                    "bbox": box,
+                    "detector_confidence": det.get("confidence"),
+                    "class_name": det.get("class_name"),
+                })
+            except Exception as e:
+                logger.warning("裁剪第 %d 个目标失败: %s", index, e)
+        return crops
 
 
 # 模块级便捷函数
@@ -418,6 +517,49 @@ def crop_dataset(source_dir: str, output_dir: str, target_classes=None, max_imag
 def detect_characters(image_path: str) -> list:
     """检测图片中的人物区域（快捷入口）"""
     return get_detector().detect(image_path)
+
+
+def crop_characters(image_path: str, max_characters: int = None, max_size: int = None,
+                    margin_ratio: float = None, output_dir: str = None) -> dict:
+    """多人物检测 + 逐个裁剪（需求1 的节点侧入口）。
+
+    Returns:
+        dict: {
+            "image_size": (w, h), "detected_size": (w, h),
+            "characters": [{"index", "crop_path", "bbox"(原图像素),
+                            "bbox_norm"(0-1), "bbox_percent"(0-100),
+                            "detector_confidence", "class_name"}, ...],
+        }
+    调用方负责清理 crop_path 所在的临时目录。
+    """
+    import tempfile
+
+    from config.base import CROP_MARGIN_RATIO, MAX_CHARACTERS, YOLO_DETECT_MAX_SIZE
+
+    max_characters = MAX_CHARACTERS if max_characters is None else max_characters
+    margin_ratio = CROP_MARGIN_RATIO if margin_ratio is None else margin_ratio
+    max_size = YOLO_DETECT_MAX_SIZE if max_size is None else max_size
+
+    detector = get_detector()
+    found = detector.detect_all(image_path, max_size=max_size, target_classes=["person"])
+    detections = found["detections"][:max(1, int(max_characters))]
+    if not detections:
+        # 人物类别没命中时放宽一次（兼容非人物主体的老用例）
+        found = detector.detect_all(image_path, max_size=max_size, target_classes=None)
+        detections = found["detections"][:max(1, int(max_characters))]
+
+    tmp_dir = output_dir or tempfile.mkdtemp(prefix="37ac_multi_")
+    crops = detector.crop_all(image_path, detections, tmp_dir, margin_ratio=margin_ratio)
+    size = found["image_size"]
+    for item in crops:
+        item["bbox_norm"] = normalize_bbox(item["bbox"], size)
+        item["bbox_percent"] = percent_bbox(item["bbox"], size)
+    return {
+        "image_size": size,
+        "detected_size": found["detected_size"],
+        "characters": crops,
+        "tmp_dir": tmp_dir,      # 调用方用完请 rmtree 清理
+    }
 
 
 def crop_best_character(image_path: str) -> tuple:

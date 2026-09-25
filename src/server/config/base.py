@@ -62,3 +62,22 @@ TASK_MAX_RETRIES = int(os.getenv("TASK_MAX_RETRIES", "3"))
 RATE_LIMIT_ENABLED = os.getenv("RATE_LIMIT_ENABLED", "True").lower() == "true"
 RATE_LIMIT_REQUESTS = int(os.getenv("RATE_LIMIT_REQUESTS", "5"))
 RATE_LIMIT_WINDOW_SEC = int(os.getenv("RATE_LIMIT_WINDOW_SEC", "1"))
+
+# - 图片缓存与临时文件（需求3/4）
+#   tmp：在途/短期原图（任务完成或超时后按 TTL 清理）
+#   cache：留存副本（压缩后的 JPEG，供前端回看）
+# 下列值都是**默认值**，后台「系统设置」里的同名键可覆盖（见 services/settings_service.py）
+IMAGE_TMP_PATH = Path(os.getenv("IMAGE_TMP_DIR", str(ROOT_PATH / "saves" / "tmp")))
+IMAGE_CACHE_PATH = Path(os.getenv("IMAGE_CACHE_DIR", str(ROOT_PATH / "saves" / "cache")))
+IMAGE_TMP_MAX_MB = int(os.getenv("IMAGE_TMP_MAX_MB", "2048"))
+IMAGE_CACHE_MAX_MB = int(os.getenv("IMAGE_CACHE_MAX_MB", "2048"))
+IMAGE_TMP_TTL_SEC = int(os.getenv("IMAGE_TMP_TTL_SEC", "3600"))
+IMAGE_CACHE_TTL_SEC = int(os.getenv("IMAGE_CACHE_TTL_SEC", "604800"))
+# 压缩：最长边大于该值时压缩（0 表示不压缩）
+IMAGE_COMPRESS_MAX_SIDE = int(os.getenv("IMAGE_COMPRESS_MAX_SIDE", "512"))
+IMAGE_COMPRESS_QUALITY = int(os.getenv("IMAGE_COMPRESS_QUALITY", "85"))
+# 回收线程扫描间隔；tmp 中该秒数内的新文件不参与淘汰（保护在途任务）
+IMAGE_CLEAN_INTERVAL_SEC = int(os.getenv("IMAGE_CLEAN_INTERVAL_SEC", "300"))
+IMAGE_TMP_PROTECT_SEC = int(os.getenv("IMAGE_TMP_PROTECT_SEC", "300"))
+# 服务端清理图片后，是否允许向处理该任务的节点补拉
+IMAGE_NODE_REFETCH = os.getenv("IMAGE_NODE_REFETCH", "True").lower() == "true"

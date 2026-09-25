@@ -64,6 +64,7 @@ Werkzeug 默认的 HTML 错误页（404/405/413/500…）也换成了同款 JSON
 | `PERMISSION_DENIED` | 非管理员访问 `/admin/*`、模型写接口 |
 | `API_KEY_MISSING` / `API_KEY_INVALID` | `POST /upload`、`GET /tasks/*` |
 | `DB_UNAVAILABLE` | `/tasks/<id>` 查库失败（503） |
+| `IMAGE_EXPIRED` | `GET /tasks/<id>/image` 图片已被回收或不存在（410） |
 | `MAINTENANCE_MODE` | 维护模式拦截（503，带 `maintenance: true`） |
 
 > 前端灰度建议：新代码只判 `code`，旧代码继续判 `success`/`message`，两者当前完全兼容。
@@ -148,8 +149,41 @@ Werkzeug 默认的 HTML 错误页（404/405/413/500…）也换成了同款 JSON
 |---|---|---|---|---|---|
 | GET | `/upload` | 无 | 无 | `{type:"info",message,usage:{...}}` | 200 |
 | POST | `/upload` | `X-API-Key` + 限流 | multipart `file`/`image` 或 `image_base64`，`model=37ac\|llm\|auto` | `{type:"dispatch_task",status:"queued",task_id,model}`；或 SSE 流 | **200**（语义应为 202）/ 400 / 401 / 429 |
-| GET | `/tasks/<task_id>` | `X-API-Key` | 无 | `{type:"task_result",status,result,...}` | 200 / **202**（未完成）/ 401 / 503 |
+| GET | `/tasks/<task_id>` | `X-API-Key` | 无 | `{type:"task_result",status,result,image:{...},...}` | 200 / **202**（未完成）/ 401 / 503 |
+| GET | `/tasks/<task_id>/image` | `X-API-Key` 或 Bearer | `original=1`、`max_side=N` | 图片二进制（响应头 `X-Image-Source: cache\|tmp`） | 200 / 401 / **410**（已回收） |
 | GET | `/tasks/<task_id>/stream` | `X-API-Key` | 无 | SSE：`data: {status,result,...}` | 200（流）/ 401 |
+
+### 2.9 识别结果结构（多人物，2026-09-13 起）
+
+节点侧开始返回**多个人物**的识别结果（YOLO 检测到几个人物就识别几次），结果存在 `task_results.result` 里：
+
+```json
+{
+  "success": true,
+  "recognition_type": "local",
+  "crop_method": "yolo",
+  "image": {"width": 1024, "height": 1536},
+  "characters": [
+    {
+      "index": 0,
+      "bbox":         {"x": 0.3125, "y": 0.1042, "w": 0.2100, "h": 0.6320},
+      "bbox_percent": {"x": 31.25,  "y": 10.42,  "w": 21.00,  "h": 63.20},
+      "detector_confidence": 0.91,
+      "confidence": 96.06,
+      "class_probs": [{"name": "原神/荧", "prob": 96.06}]
+    }
+  ],
+  "character_count": 1,
+  "class_probs": [{"name": "原神/荧", "prob": 96.06}]
+}
+```
+
+- 坐标分母是**原图**尺寸（检测前的缩放会换算回来，见 `src/cli/detection/bbox.py`）。
+- 两种坐标都给（`bbox` 0-1、`bbox_percent` 0-100），避免「百分比（小数）」的歧义。
+- `characters` 按检测框面积降序，最多 `MAX_CHARACTERS`（默认 10）；顶层 `class_probs` = 置信度最高的人物（旧前端零改动）。
+- 未检出人物时 `characters: []`、`crop_method: "full"`，顶层回落整图识别（老行为）。
+- 裁剪方式（env `CROP_METHOD`）：`yolo` / `mediapipe` / `auto`；auto = YOLO 优先，未命中回落 mediapipe，再没有则整图。
+- 图片文件：上传后服务端在 `saves/tmp`（原图）与 `saves/cache`（压缩副本）各留一份，节点一份；回收策略见 `docs/design-image-pipeline.md`。
 
 ## 3. 规范性问题清单（按严重度）
 

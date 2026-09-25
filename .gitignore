@@ -45,3 +45,7 @@ logs/
 
 # Agent 临时工作区（会话恢复导出、时间线等，不入库）
 .dsh-scratch/
+
+# 测试用临时目录
+.pytest-tmp/
+.tmp-tests/

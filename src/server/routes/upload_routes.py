@@ -21,11 +21,14 @@ from services.api_key_service import verify_api_key
 from services.sse_bus import sse_bus
 from services.task_manager import task_manager
 from services import settings_service
+from services import storage_service
 from middleware.rate_limiter import rate_limit
+from middleware.auth_middleware import _extract_token, _verify_access_token
 from utils.api_response import (
     CODE_API_KEY_INVALID,
     CODE_API_KEY_MISSING,
     CODE_DB_UNAVAILABLE,
+    CODE_IMAGE_EXPIRED,
 )
 from common.constants import ALLOWED_IMAGE_EXTENSIONS as _ALLOWED_IMAGE_EXTENSIONS
 from config.log_config import get_logger
@@ -188,6 +191,14 @@ def upload_and_predict():
 
         # 生成任务ID
         task_id = str(uuid.uuid4())
+
+        # 服务端留存（需求3）：tmp 存原图、cache 存压缩副本；
+        # 节点那一份由 dispatch_task 里的 base64 下发（同一份数据，两处落地）
+        try:
+            storage_service.save_temp(task_id, image_data, detected_ext)
+            storage_service.save_cache(task_id, image_data, detected_ext)
+        except Exception as e:
+            logger.warning("保存上传图片失败 task_id=%s: %s", task_id, e)
 
         # 判断客户端是否期望流式响应
         wants_stream = (
@@ -360,6 +371,92 @@ def upload_and_predict():
     }), 200
 
 
+def _image_info(task_id):
+    """任务图片的可取性信息（只加字段，旧客户端无感）。"""
+    url = f"/tasks/{task_id}/image"
+    try:
+        path, source = storage_service.find_image(task_id)
+    except Exception as e:
+        logger.debug("查询任务图片失败 %s: %s", task_id, e)
+        return {"available": False, "url": url}
+    if not path:
+        return {"available": False, "url": url}
+    try:
+        size = path.stat().st_size
+    except OSError:
+        size = None
+    return {
+        "available": True,
+        "url": url,
+        "source": source,
+        "ext": path.suffix,
+        "bytes": size,
+    }
+
+
+def _image_expired_response(task_id):
+    """图片已被回收（或从未落盘）：410 + 元数据，前端可显示占位。"""
+    return jsonify({
+        "success": False,
+        "code": CODE_IMAGE_EXPIRED,
+        "message": "图片已过期或不存在（服务端已回收临时文件）",
+        "task_id": task_id,
+        "image": {"available": False, "url": f"/tasks/{task_id}/image"},
+    }), 410
+
+
+def _require_image_auth():
+    """取图鉴权：X-API-Key（与 /tasks 一致）或 Bearer JWT（前端用）。返回 (error_response, status)。"""
+    api_key = request.headers.get("X-API-Key", "")
+    if api_key:
+        result = verify_api_key(api_key)
+        if result.get("success"):
+            return None, None
+        result.setdefault("code", CODE_API_KEY_INVALID)
+        return jsonify(result), 401
+
+    token = _extract_token()
+    if token:
+        payload, error, status = _verify_access_token(token)
+        if payload:
+            return None, None
+        return jsonify(error or {"success": False, "message": "令牌无效"}), status or 401
+
+    return jsonify({
+        "success": False,
+        "code": CODE_API_KEY_MISSING,
+        "message": "缺少凭证：请提供 X-API-Key 请求头或 Bearer 令牌",
+    }), 401
+
+
+@upload_bp.route("/tasks/<task_id>/image", methods=["GET"])
+def get_task_image(task_id):
+    """获取任务图片（需求4）。
+
+    - 默认返回 cache 里的留存副本；?original=1 优先返回 tmp 里的原图
+    - ?max_side=N 服务端即时缩放（不落盘）
+    - 图片已被回收 -> 410 + IMAGE_EXPIRED（前端据此显示占位）
+    """
+    error_response, status_code = _require_image_auth()
+    if error_response:
+        return error_response, status_code
+
+    prefer = "tmp" if str(request.args.get("original", "")).lower() in ("1", "true", "yes") else "cache"
+    max_side = request.args.get("max_side", type=int)
+    if max_side is not None:
+        max_side = max(16, min(4096, max_side))
+
+    data, source, mimetype = storage_service.read_bytes(task_id, prefer=prefer, max_side=max_side)
+    if not data:
+        return _image_expired_response(task_id)
+
+    response = Response(data, mimetype=mimetype)
+    response.headers["X-Image-Source"] = source
+    response.headers["Cache-Control"] = "private, max-age=3600"
+    response.headers["Content-Length"] = str(len(data))
+    return response
+
+
 @upload_bp.route("/tasks/<task_id>", methods=["GET"])
 def get_task_result(task_id):
     _api_key_data, error_response, status_code = _require_api_key()
@@ -373,6 +470,7 @@ def get_task_result(task_id):
         "message": "结果尚未返回",
         "task_id": task_id,
         "result": [],
+        "image": _image_info(task_id),
     }
 
     conn = None
@@ -410,6 +508,7 @@ def get_task_result(task_id):
                         "message": "任务完成，结果已返回",
                         "task_id": task_id,
                         "result": result,
+                        "image": _image_info(task_id),
                     }
                 ),
                 200,

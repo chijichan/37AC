@@ -12,6 +12,7 @@ import threading
 import time
 
 from utils.db_utils import get_connection
+from config import base as cfg
 from config.log_config import get_logger
 
 logger = get_logger("settings_service")
@@ -21,6 +22,13 @@ DEFAULTS = {
     "rate_limit_enabled": "1",
     "task_max_retries": "3",
     "maintenance_mode": "0",
+    # 图片缓存/临时文件参数：默认值来自 .env，可在后台「系统设置」在线覆盖
+    "image_tmp_max_mb": str(cfg.IMAGE_TMP_MAX_MB),
+    "image_cache_max_mb": str(cfg.IMAGE_CACHE_MAX_MB),
+    "image_tmp_ttl_sec": str(cfg.IMAGE_TMP_TTL_SEC),
+    "image_cache_ttl_sec": str(cfg.IMAGE_CACHE_TTL_SEC),
+    "image_compress_max_side": str(cfg.IMAGE_COMPRESS_MAX_SIDE),
+    "image_compress_quality": str(cfg.IMAGE_COMPRESS_QUALITY),
 }
 ALLOWED_KEYS = set(DEFAULTS.keys())
 

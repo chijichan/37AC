@@ -164,6 +164,10 @@ if __name__ == "__main__":
         tcp_thread = threading.Thread(target=start_tcp_server, daemon=True)
         tcp_thread.start()
         logger.info("TCP 节点管理服务已启动")
+
+        # 图片缓存/临时目录的后台回收线程（需求3）
+        from services import storage_service
+        storage_service.start_cleanup_thread()
     else:
         logger.info("reloader 父进程，TCP 服务将由子进程接管")
 

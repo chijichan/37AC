@@ -351,6 +351,31 @@ YOLO_MODEL_PATH = os.getenv("YOLO_MODEL_PATH", _DEFAULT_YOLO_MODEL)
 # 检测置信度阈值（低于此值的目标被忽略）
 YOLO_CONFIDENCE = float(os.getenv("YOLO_CONFIDENCE", "0.25"))
 
+# ==================== 多人物识别配置（需求1） ====================
+# 一张图里检测到多个人物时，对**每个人物**分别裁剪+识别，返回 characters[]
+MULTI_CHARACTER_ENABLED = os.getenv("MULTI_CHARACTER_ENABLED", "True").lower() == "true"
+# 单张图最多返回多少个人物结果（按检测框面积降序取前 N）
+MAX_CHARACTERS = int(os.getenv("MAX_CHARACTERS", "10"))
+# 裁剪时按检测框宽高的比例向四周外扩（0.08 = 各方向扩 8%）
+CROP_MARGIN_RATIO = float(os.getenv("CROP_MARGIN_RATIO", "0.08"))
+# 检测前的缩放上限（0=不缩放）；多人物检测时用于加速，坐标会按比例映射回原图
+YOLO_DETECT_MAX_SIZE = int(os.getenv("YOLO_DETECT_MAX_SIZE", "1024"))
+
+# ==================== 裁剪方式配置（需求2） ====================
+# yolo | mediapipe | auto
+#   yolo      : 只用 YOLO 人物检测
+#   mediapipe : 只用关键点（脸/人体）估计裁剪区域（未安装则回退 yolo）
+#   auto      : YOLO 有框用 YOLO，没有则 mediapipe，再没有则整图
+CROP_METHOD = (os.getenv("CROP_METHOD", "auto") or "auto").strip().lower()
+# mediapipe 人脸检测置信度下限，以及"脸框 -> 角色区域"的扩展倍数（宽/高）
+MEDIAPIPE_MIN_CONFIDENCE = float(os.getenv("MEDIAPIPE_MIN_CONFIDENCE", "0.4"))
+MEDIAPIPE_FACE_EXPAND_W = float(os.getenv("MEDIAPIPE_FACE_EXPAND_W", "2.4"))
+MEDIAPIPE_FACE_EXPAND_H = float(os.getenv("MEDIAPIPE_FACE_EXPAND_H", "3.2"))
+
+# ==================== 节点本地图片保留（需求3，供服务端补拉） ====================
+# 推理完成后本地图片保留的秒数（0 = 立即删除，保持旧行为）
+IMAGE_RETAIN_SEC = int(os.getenv("IMAGE_RETAIN_SEC", "900"))
+
 # ==================== 路径配置 ====================
 # 暂存
 IMAGE_PATH = ROOT_PATH / "saves" / "uploads"

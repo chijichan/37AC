@@ -737,7 +737,11 @@ paths:
     get:
       tags: [识别任务]
       summary: 查询任务结果（轮询）
-      description: 注意：当前实现只校验 API Key 有效性，未校验任务归属（可读取他人任务结果，见 docs/api-inventory.md 3.1）。
+      description: |
+        注意：当前实现只校验 API Key 有效性，未校验任务归属（见 docs/api-inventory.md 3.1，按需求保留为特性）。
+        2026-09-13 起 result 可能包含多人物结果 characters[]（每人一组 bbox/bbox_percent + class_probs），
+        顶层 class_probs 保持旧语义（= 置信度最高的人物）；响应新增 image 元数据（可用性 + 取图 URL）。
+        结构详见 docs/api-inventory.md 2.9。
       security:
         - apiKeyAuth: []
       parameters:
@@ -751,6 +755,37 @@ paths:
           content: {application/json: {example: {type: task_result, timestamp: 1789267737, status: pending, message: 结果尚未返回, task_id: 52213b03-..., result: []}}}
         "401": {$ref: "#/components/responses/Unauthorized"}
         "503": {description: 数据库不可用}
+
+  /tasks/{task_id}/image:
+    get:
+      tags: [识别任务]
+      summary: 获取任务图片（上传原图 / 留存副本）
+      description: |
+        上传后在 saves/tmp 存原图、saves/cache 存压缩副本；
+        默认返回 cache（压缩图），?original=1 返回 tmp 原图，?max_side=N 即时缩放（不落盘）。
+        图片已被回收 -> 410 + code=IMAGE_EXPIRED（image.available=false，前端可显示占位）。
+        鉴权：X-API-Key（与 /tasks 一致）或 Bearer JWT。
+      security:
+        - apiKeyAuth: []
+        - bearerAuth: []
+      parameters:
+        - {name: task_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: original, in: query, schema: {type: string, enum: ["1", "true"]}, description: 优先返回未压缩的原图}
+        - {name: max_side, in: query, schema: {type: integer, minimum: 16, maximum: 4096}, description: 服务端即时缩放到该最长边}
+      responses:
+        "200":
+          description: 图片二进制
+          headers:
+            X-Image-Source:
+              schema: {type: string, enum: [cache, tmp]}
+              description: 实际命中的目录（cache=压缩副本 / tmp=原图）
+          content:
+            image/png: {schema: {type: string, format: binary}}
+            image/jpeg: {schema: {type: string, format: binary}}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "410":
+          description: 图片已被回收或不存在
+          content: {application/json: {example: {success: false, code: IMAGE_EXPIRED, message: 图片已过期或不存在（服务端已回收临时文件）, task_id: "52213b03-6a5c-48ef-8413-1aac63bf9be8", image: {available: false, url: "/tasks/52213b03-6a5c-48ef-8413-1aac63bf9be8/image"}}}}
 
   /tasks/{task_id}/stream:
     get:
@@ -823,4 +858,4 @@ components:
              PAYLOAD_TOO_LARGE, RATE_LIMITED, INTERNAL_ERROR, NOT_IMPLEMENTED, SERVICE_UNAVAILABLE,
              AUTH_TOKEN_MISSING, AUTH_TOKEN_INVALID, AUTH_TOKEN_TYPE_INVALID, AUTH_INVALID_CREDENTIALS,
              AUTH_REFRESH_TOKEN_INVALID, PERMISSION_DENIED, API_KEY_MISSING, API_KEY_INVALID,
-             DB_UNAVAILABLE, MAINTENANCE_MODE]
+             DB_UNAVAILABLE, IMAGE_EXPIRED, MAINTENANCE_MODE]

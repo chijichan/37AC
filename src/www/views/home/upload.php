@@ -335,6 +335,14 @@ require_once ROOT_PATH . '/views/layout.php';
         display: block;
     }
 
+    /* 预览下面的一行：尺寸 + 体积（顺便让"最小尺寸"这条规则可感知） */
+    .preview-meta {
+        margin-top: .5rem;
+        font-family: var(--ac-font-mono);
+        font-size: .78rem;
+        color: var(--ac-ink-500);
+    }
+
     .preview-box img {
         max-width: 260px;
         border-radius: var(--ac-radius-input);
@@ -1398,7 +1406,7 @@ require_once ROOT_PATH . '/views/layout.php';
 <div class="upload-page ac-container">
     <div class="page-head">
         <h2>上传识别</h2>
-        <p>支持 JPG / PNG，最大 50MB，可拖拽上传。</p>
+        <p>支持 JPG / PNG：最大 50MB、最短边 ≥128px，可拖拽上传。</p>
     </div>
 
     <!-- 三个入口：上传识别 / 历史识别 / 能工智人 -->
@@ -1485,6 +1493,7 @@ require_once ROOT_PATH . '/views/layout.php';
             </form>
             <div class="preview-box" id="previewWrap">
                 <img id="previewImage" alt="识别预览" />
+                <p class="preview-meta" id="previewMeta"></p>
             </div>
         </div>
 
@@ -1616,6 +1625,15 @@ require_once ROOT_PATH . '/views/layout.php';
 
     /** 前端可选图片体积上限：50MB —— 提交前会压到最长边 512px，实际上传体积远小于此 */
     const MAX_SELECT_BYTES = 50 * 1024 * 1024;
+    /**
+     * 前端可选图片的下限：模型输入是 224、检测器也要有足够像素，
+     * 图标 / 表情包 / 头像这种小图识别出来纯属噪声，直接在入口挡掉。
+     * 两条同时满足才收：最短边 ≥ 128px、最长边 ≥ 256px。
+     */
+    const MIN_IMAGE_SHORT_SIDE = 128;
+    const MIN_IMAGE_LONG_SIDE = 256;
+    /** 下限提示里的数字（改上面两个常量即可，文案自动跟着走） */
+    const MIN_IMAGE_HINT = '短边至少 ' + MIN_IMAGE_SHORT_SIDE + 'px、长边至少 ' + MIN_IMAGE_LONG_SIDE + 'px';
     /** 后端 /api/upload 的请求体上限（Flask MAX_CONTENT_LENGTH = 10MB），压缩异常时用于兜底提示 */
     const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 
@@ -1674,6 +1692,7 @@ require_once ROOT_PATH . '/views/layout.php';
             this.resultWrap = document.getElementById('resultWrap');
             this.previewWrap = document.getElementById('previewWrap');
             this.previewImage = document.getElementById('previewImage');
+            this.previewMetaEl = document.getElementById('previewMeta');
             this.loadingWrap = document.getElementById('loadingWrap');
             this.loadingIndicator = document.getElementById('dashboard-loading');
             this.submitWrap = document.getElementById('submitWrap');
@@ -1953,10 +1972,58 @@ require_once ROOT_PATH . '/views/layout.php';
             }
         }
 
+        /**
+         * 读图片像素尺寸（选择 / 拖拽 / 链接三条入口都要过下限这道闸）
+         * @returns {Promise<{width:number,height:number}|null>} 读不出来返回 null（不拦，交给后面的压缩兜底）
+         */
+        async readImageSize(file) {
+            if (typeof createImageBitmap === 'function') {
+                try {
+                    const bitmap = await createImageBitmap(file);
+                    const size = {
+                        width: bitmap.width,
+                        height: bitmap.height
+                    };
+                    if (bitmap.close) bitmap.close();
+                    return size;
+                } catch (e) {
+                    // 解不开：退回 <img> 方式再试一次
+                }
+            }
+            if (typeof Image !== 'function' || typeof URL.createObjectURL !== 'function') return null;
+            return new Promise((resolve) => {
+                const url = URL.createObjectURL(file);
+                const img = new Image();
+                img.onload = () => {
+                    URL.revokeObjectURL(url);
+                    resolve({
+                        width: img.naturalWidth,
+                        height: img.naturalHeight
+                    });
+                };
+                img.onerror = () => {
+                    URL.revokeObjectURL(url);
+                    resolve(null);
+                };
+                img.src = url;
+            });
+        }
+
+        /* 尺寸下限：不满足就给出明确提示（含实际尺寸），返回 false 表示不收这张图 */
+        checkImageSize(size) {
+            if (!size || !size.width || !size.height) return true;   // 读不到尺寸就不拦
+            const shortSide = Math.min(size.width, size.height);
+            const longSide = Math.max(size.width, size.height);
+            if (shortSide >= MIN_IMAGE_SHORT_SIDE && longSide >= MIN_IMAGE_LONG_SIDE) return true;
+            Notify.error('图片太小了（' + size.width + '×' + size.height + '）：需要 ' + MIN_IMAGE_HINT +
+                ' 才能识别出角色，小图只会出噪声，换张大点的吧');
+            return false;
+        }
+
         /* 处理文件选择 */
         handleFileSelect(event) {
             const file = event.target.files[0];
-            if (file) this.handleFile(file);
+            if (file) this.handleFile(file).catch((e) => Notify.error('图片处理失败：' + (e.message || e)));
         }
 
         /* 处理拖拽 */
@@ -1974,21 +2041,26 @@ require_once ROOT_PATH . '/views/layout.php';
             event.preventDefault();
             this.uploadArea.classList.remove('drag-over');
             const files = event.dataTransfer.files;
-            if (files.length > 0) this.handleFile(files[0]);
+            if (files.length > 0) this.handleFile(files[0]).catch((e) => Notify.error('图片处理失败：' + (e.message || e)));
         }
 
-        /* 处理图片文件 */
-        handleFile(file) {
+        /* 处理图片文件（返回 true 表示已收下） */
+        async handleFile(file) {
             if (!file.type.match('image.*')) {
                 Notify.error('请选择 JPG 或 PNG 格式的图片');
-                return;
+                return false;
             }
 
             if (file.size > MAX_SELECT_BYTES) {
                 Notify.error(`图片大小不能超过 ${MAX_SELECT_BYTES / 1024 / 1024}MB`);
-                return;
+                return false;
             }
 
+            // 下限：太小（图标/表情包/头像）直接不收，别浪费一次识别
+            const size = await this.readImageSize(file);
+            if (!this.checkImageSize(size)) return false;
+
+            file.__size = size;          // 预览那行要显示尺寸
             this.state.tempFile = file;
             this.resetCropState();
 
@@ -2011,6 +2083,7 @@ require_once ROOT_PATH . '/views/layout.php';
 
             // 更新提交按钮状态
             this.updateSubmitButton();
+            return true;
         }
 
         /* 更新裁剪模式 */
@@ -2075,6 +2148,14 @@ require_once ROOT_PATH . '/views/layout.php';
         handleCropImage() {
             if (!this.state.cropInstance) return;
 
+            // 裁剪出来的图就是最终提交的图：太小同样没意义
+            const picked = this.state.cropInstance.getData();
+            if (picked && Math.min(picked.width, picked.height) < MIN_IMAGE_SHORT_SIDE) {
+                Notify.error('框选区域太小了（' + Math.round(picked.width) + '×' + Math.round(picked.height) +
+                    '）：短边至少要 ' + MIN_IMAGE_SHORT_SIDE + 'px，框大一点再裁');
+                return;
+            }
+
             // 仅指定宽度，高度按选框实际宽高比计算，避免自由形状裁剪时变形
             const canvas = this.state.cropInstance.getCroppedCanvas({
                 width: 800,
@@ -2101,6 +2182,10 @@ require_once ROOT_PATH . '/views/layout.php';
                 this.state.croppedFile = new File([blob], fileName, {
                     type: 'image/png'
                 });
+                this.state.croppedFile.__size = {
+                    width: canvas.width,
+                    height: canvas.height
+                };
                 this.state.hasCroppedImage = true;
 
                 // 更新预览
@@ -2181,6 +2266,7 @@ require_once ROOT_PATH . '/views/layout.php';
 
             const longest = Math.max(bitmap.width, bitmap.height);
             if (longest <= maxSide) {
+                file.__size = { width: bitmap.width, height: bitmap.height };
                 if (bitmap.close) bitmap.close();
                 return file;
             }
@@ -2211,11 +2297,12 @@ require_once ROOT_PATH . '/views/layout.php';
             const compressed = new File([blob], file.name.replace(/\.[^.]+$/, '') + '.jpg', {
                 type: 'image/jpeg'
             });
+            compressed.__size = { width, height };
             console.log(`[upload] 图片压缩: ${srcWidth}×${srcHeight} ${(file.size / 1024).toFixed(0)}KB → ${width}×${height} ${(compressed.size / 1024).toFixed(0)}KB`);
             return compressed;
         }
 
-        /* 更新预览 */
+        /* 更新预览（顺带把尺寸/体积写在下面） */
         updatePreview(file) {
             if (this.state.originalImageURL) {
                 URL.revokeObjectURL(this.state.originalImageURL);
@@ -2223,6 +2310,16 @@ require_once ROOT_PATH . '/views/layout.php';
             this.state.originalImageURL = URL.createObjectURL(file);
             this.previewImage.src = this.state.originalImageURL;
             this.previewWrap.classList.add('active');
+            this.renderPreviewMeta(file);
+        }
+
+        renderPreviewMeta(file) {
+            const el = this.previewMetaEl;
+            if (!el || !file) return;
+            const kb = (file.size || 0) / 1024;
+            const sizeText = kb >= 1024 ? (kb / 1024).toFixed(1) + ' MB' : Math.max(1, Math.round(kb)) + ' KB';
+            const dim = file.__size ? (file.__size.width + ' × ' + file.__size.height + ' · ') : '';
+            el.textContent = dim + sizeText;
         }
 
         /* 图片加载完成后，将页面滚动到合适位置（手动裁剪时滚动到裁剪器，否则滚动到预览） */
@@ -2785,8 +2882,8 @@ require_once ROOT_PATH . '/views/layout.php';
                 });
 
                 // 复用统一的图片加载流程（预览 / 裁剪器刷新 / 滚动 / 选项启用）
-                this.handleFile(file);
-                Notify.success('图片加载完成');
+                const accepted = await this.handleFile(file);
+                if (accepted) Notify.success('图片加载完成');
             } catch (err) {
                 console.error('从链接加载图片失败:', err);
                 Notify.error('无法从链接加载图片: ' + err.message);

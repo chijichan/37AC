@@ -335,6 +335,18 @@ require_once ROOT_PATH . '/views/layout.php';
         display: block;
     }
 
+    /* 裁剪面板里的尺寸提示：太小变警示色 */
+    .crop-size-hint {
+        margin: 0 0 .2rem;
+        font-size: .78rem;
+        color: var(--ac-ink-500);
+    }
+
+    .crop-size-hint.warn {
+        color: var(--ac-danger, #d64545);
+        font-weight: 700;
+    }
+
     /* 预览下面的一行：尺寸 + 体积（顺便让"最小尺寸"这条规则可感知） */
     .preview-meta {
         margin-top: .5rem;
@@ -1480,6 +1492,7 @@ require_once ROOT_PATH . '/views/layout.php';
                 </div>
                 <div id="preview"></div>
                 <div class="cropper-actions">
+                    <p class="hint crop-size-hint" id="cropSizeHint"></p>
                     <button type="button" class="btn btn-primary btn-sm" id="btnCropImage">裁剪图片</button>
                     <button type="button" class="btn btn-ghost btn-sm" id="btnCropReset">重置选框</button>
                 </div>
@@ -1701,6 +1714,8 @@ require_once ROOT_PATH . '/views/layout.php';
             this.enableCropCheckbox = document.getElementById('enableCrop');
             this.cropSubOptions = document.getElementById('cropSubOptions');
             this.cropModeSelect = document.getElementById('cropMode');
+            this.btnCropImage = document.getElementById('btnCropImage');
+            this.cropSizeHint = document.getElementById('cropSizeHint');
 
             // 链接上传
             this.linkInput = document.getElementById('linkInput');
@@ -2009,15 +2024,63 @@ require_once ROOT_PATH . '/views/layout.php';
             });
         }
 
-        /* 尺寸下限：不满足就给出明确提示（含实际尺寸），返回 false 表示不收这张图 */
-        checkImageSize(size) {
+        /**
+         * 尺寸下限：不满足就给出明确提示（含实际尺寸），返回 false 表示这张图不能用。
+         * 选图 / 裁剪 / 提交三处共用，context 只影响提示措辞。
+         * @param {{width:number,height:number}|null} size
+         * @param {string} context 'upload'（默认）| 'crop' | 'submit'
+         */
+        checkImageSize(size, context) {
             if (!size || !size.width || !size.height) return true;   // 读不到尺寸就不拦
             const shortSide = Math.min(size.width, size.height);
             const longSide = Math.max(size.width, size.height);
             if (shortSide >= MIN_IMAGE_SHORT_SIDE && longSide >= MIN_IMAGE_LONG_SIDE) return true;
-            Notify.error('图片太小了（' + size.width + '×' + size.height + '）：需要 ' + MIN_IMAGE_HINT +
-                ' 才能识别出角色，小图只会出噪声，换张大点的吧');
+            const what = context === 'crop' ? '框选区域太小了' : (context === 'submit' ? '要提交的图太小了' : '图片太小了');
+            const tail = context === 'crop' ? '，框大一点再裁' :
+                (context === 'submit' ? '，换张大点的图或把框拉大一点' : '，小图只会出噪声，换张大点的吧');
+            Notify.error(what + '（' + size.width + '×' + size.height + '）：需要 ' + MIN_IMAGE_HINT +
+                ' 才能识别出角色' + tail);
             return false;
+        }
+
+        /* 框选区域的源像素尺寸（Cropper.getData() 给的是原图坐标） */
+        cropBoxSize() {
+            const inst = this.state.cropInstance;
+            if (!inst || typeof inst.getData !== 'function') return null;
+            try {
+                const d = inst.getData();
+                if (!d) return null;
+                return {
+                    width: Math.round(d.width),
+                    height: Math.round(d.height)
+                };
+            } catch (e) {
+                return null;
+            }
+        }
+
+        /* 裁剪面板里的实时提示 + 按钮可用性（框太小就别让人白点一次） */
+        updateCropHint() {
+            const el = this.cropSizeHint;
+            const btn = this.btnCropImage;
+            const size = this.cropBoxSize();
+            if (!size) {
+                if (el) {
+                    el.textContent = '';
+                    el.classList.remove('warn');
+                }
+                if (btn) btn.disabled = false;
+                return;
+            }
+            const tooSmall = Math.min(size.width, size.height) < MIN_IMAGE_SHORT_SIDE ||
+                Math.max(size.width, size.height) < MIN_IMAGE_LONG_SIDE;
+            if (el) {
+                el.classList.toggle('warn', tooSmall);
+                el.textContent = tooSmall ?
+                    ('框选 ' + size.width + '×' + size.height + ' 太小：需要 ' + MIN_IMAGE_HINT) :
+                    ('框选 ' + size.width + '×' + size.height + '，可以裁剪');
+            }
+            if (btn) btn.disabled = tooSmall;
         }
 
         /* 处理文件选择 */
@@ -2119,6 +2182,9 @@ require_once ROOT_PATH . '/views/layout.php';
             this.state.cropInstance = new Cropper(cropperImage, {
                 // 不锁定宽高比，允许自由调整选框形状
                 preview: '#preview',
+                // 框一动就提示尺寸够不够，太小直接把「裁剪图片」禁掉
+                ready: () => this.updateCropHint(),
+                cropend: () => this.updateCropHint(),
                 viewMode: 1,
                 guides: true,
                 center: true,
@@ -2148,13 +2214,8 @@ require_once ROOT_PATH . '/views/layout.php';
         handleCropImage() {
             if (!this.state.cropInstance) return;
 
-            // 裁剪出来的图就是最终提交的图：太小同样没意义
-            const picked = this.state.cropInstance.getData();
-            if (picked && Math.min(picked.width, picked.height) < MIN_IMAGE_SHORT_SIDE) {
-                Notify.error('框选区域太小了（' + Math.round(picked.width) + '×' + Math.round(picked.height) +
-                    '）：短边至少要 ' + MIN_IMAGE_SHORT_SIDE + 'px，框大一点再裁');
-                return;
-            }
+            // 裁剪出来的图就是最终提交的图：和选图用同一道闸（短边/长边都要够）
+            if (!this.checkImageSize(this.cropBoxSize(), 'crop')) return;
 
             // 仅指定宽度，高度按选框实际宽高比计算，避免自由形状裁剪时变形
             const canvas = this.state.cropInstance.getCroppedCanvas({
@@ -2236,6 +2297,10 @@ require_once ROOT_PATH . '/views/layout.php';
                     Notify.error(`压缩后仍有 ${(processedFile.size / 1024 / 1024).toFixed(1)}MB，超过后台上限，请换一张更小的图片`);
                     return null;
                 }
+
+                // 提交前最后一道闸：真正要上传的这张图（裁剪结果/压缩结果）也要够大
+                const finalSize = processedFile.__size || await this.readImageSize(processedFile);
+                if (!this.checkImageSize(finalSize, 'submit')) return null;
 
                 return processedFile;
             } catch (err) {

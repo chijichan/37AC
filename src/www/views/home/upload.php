@@ -1056,6 +1056,267 @@ require_once ROOT_PATH . '/views/layout.php';
         font-size: .78rem;
     }
 
+    /* ---------- 结果详情弹层：把检测框坐标用起来 ---------- */
+    .channel-card[data-channel] {
+        cursor: pointer;
+        transition: box-shadow var(--ac-dur-fast) var(--ac-ease-out), transform var(--ac-dur-fast) var(--ac-ease-out);
+    }
+
+    .channel-card[data-channel]:hover {
+        box-shadow: var(--ac-shadow-float);
+        transform: translateY(-1px);
+    }
+
+    .channel-card[data-channel]:focus-visible {
+        outline: 2px solid var(--ac-pink-400);
+        outline-offset: 2px;
+    }
+
+    .channel-detail-hint {
+        margin-left: auto;
+        font-size: .72rem;
+        font-weight: 700;
+        color: var(--ac-pink-700);
+        background: var(--ac-pink-50);
+        border-radius: var(--ac-radius-pill);
+        padding: .1rem .5rem;
+        white-space: nowrap;
+    }
+
+    .char-block[data-index] {
+        cursor: pointer;
+        border-radius: var(--ac-radius-input);
+        transition: background var(--ac-dur-fast) var(--ac-ease-out);
+    }
+
+    .char-block[data-index]:hover {
+        background: var(--ac-pink-50);
+    }
+
+    .detail-modal {
+        width: min(1040px, calc(100vw - 2rem));
+        max-height: 90vh;
+        padding: 1.15rem 1.25rem;
+    }
+
+    .detail-head {
+        flex: 0 0 auto;
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+        margin-bottom: .5rem;
+    }
+
+    .detail-title {
+        margin-right: auto;
+        font-family: var(--ac-font-display);
+        font-weight: 800;
+        font-size: 1.05rem;
+    }
+
+    .detail-tabs {
+        display: flex;
+        gap: .2rem;
+        padding: .2rem;
+        border-radius: var(--ac-radius-pill);
+        background: var(--ac-surface-2);
+    }
+
+    .detail-tab {
+        border: none;
+        background: transparent;
+        color: var(--ac-ink-500);
+        font: inherit;
+        font-size: .82rem;
+        font-weight: 700;
+        padding: .22rem .7rem;
+        border-radius: var(--ac-radius-pill);
+        cursor: pointer;
+        transition: background var(--ac-dur-fast) var(--ac-ease-out), color var(--ac-dur-fast) var(--ac-ease-out);
+    }
+
+    .detail-tab.active {
+        background: var(--ac-surface);
+        color: var(--ac-pink-700);
+        box-shadow: var(--ac-shadow-card);
+    }
+
+    .detail-close {
+        border: none;
+        background: transparent;
+        color: var(--ac-ink-500);
+        font-size: 1rem;
+        line-height: 1;
+        padding: .3rem .45rem;
+        border-radius: var(--ac-radius-pill);
+        cursor: pointer;
+    }
+
+    .detail-close:hover {
+        background: var(--ac-surface-2);
+        color: var(--ac-ink-900);
+    }
+
+    .detail-meta {
+        flex: 0 0 auto;
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+        flex-wrap: wrap;
+        margin-bottom: .7rem;
+        font-size: .8rem;
+        color: var(--ac-ink-500);
+    }
+
+    .detail-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+        gap: 1rem;
+        align-items: start;
+    }
+
+    .detail-stage {
+        position: relative;
+        border-radius: var(--ac-radius-input);
+        background: var(--ac-surface-2);
+        overflow: hidden;
+    }
+
+    .detail-stage img {
+        display: block;
+        width: 100%;
+        height: auto;
+    }
+
+    .detail-stage.is-empty {
+        min-height: 240px;
+    }
+
+    .detail-box {
+        position: absolute;
+        border: 2px solid var(--ac-pink-500);
+        border-radius: 8px;
+        background: rgba(222, 79, 141, .1);
+        cursor: pointer;
+        transition: background var(--ac-dur-fast) var(--ac-ease-out), box-shadow var(--ac-dur-fast) var(--ac-ease-out);
+    }
+
+    .detail-box.is-vote {
+        border-color: var(--ac-mint);
+        background: rgba(61, 189, 180, .12);
+    }
+
+    .detail-box.is-active {
+        background: rgba(222, 79, 141, .24);
+        box-shadow: 0 0 0 3px rgba(222, 79, 141, .22);
+        z-index: 2;
+    }
+
+    .detail-box.is-vote.is-active {
+        background: rgba(61, 189, 180, .26);
+        box-shadow: 0 0 0 3px rgba(61, 189, 180, .22);
+    }
+
+    .detail-box .box-tag {
+        position: absolute;
+        left: -2px;
+        top: -1.4rem;
+        display: inline-block;
+        max-width: 240px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        padding: .08rem .45rem;
+        border-radius: var(--ac-radius-pill);
+        background: var(--ac-pink-500);
+        color: #fff;
+        font-size: .7rem;
+        font-weight: 700;
+        font-style: normal;
+    }
+
+    .detail-box .box-tag.inside {
+        top: .2rem;
+        left: .25rem;
+    }
+
+    .detail-box.is-vote .box-tag {
+        background: var(--ac-mint);
+    }
+
+    .detail-list {
+        display: flex;
+        flex-direction: column;
+        gap: .5rem;
+        max-height: 62vh;
+        overflow-y: auto;
+        padding-right: .2rem;
+    }
+
+    .detail-row {
+        border: 1px solid var(--ac-line, #f0e6ea);
+        border-radius: var(--ac-radius-input);
+        padding: .55rem .7rem;
+        cursor: pointer;
+        transition: border-color var(--ac-dur-fast) var(--ac-ease-out), background var(--ac-dur-fast) var(--ac-ease-out);
+    }
+
+    .detail-row.is-active {
+        border-color: var(--ac-pink-400);
+        background: var(--ac-pink-50);
+    }
+
+    .detail-row-head {
+        display: flex;
+        align-items: center;
+        gap: .45rem;
+        flex-wrap: wrap;
+    }
+
+    .detail-row-head strong {
+        color: var(--ac-ink-900);
+    }
+
+    .detail-idx {
+        font-family: var(--ac-font-mono);
+        font-size: .74rem;
+        font-weight: 700;
+        color: var(--ac-pink-700);
+        background: var(--ac-pink-100);
+        border-radius: var(--ac-radius-pill);
+        padding: .05rem .4rem;
+    }
+
+    .detail-bbox {
+        margin-top: .3rem;
+        font-family: var(--ac-font-mono);
+        font-size: .72rem;
+        color: var(--ac-ink-500);
+    }
+
+    .detail-sub {
+        margin-top: .3rem;
+        font-size: .78rem;
+        color: var(--ac-ink-500);
+    }
+
+    .detail-note,
+    .detail-empty {
+        font-size: .84rem;
+        color: var(--ac-ink-500);
+        padding: .3rem 0;
+    }
+
+    @media (max-width: 860px) {
+        .detail-grid {
+            grid-template-columns: minmax(0, 1fr);
+        }
+
+        .detail-list {
+            max-height: none;
+        }
+    }
+
     @media (max-width: 720px) {
         .history-item {
             grid-template-columns: 56px 1fr;
@@ -1454,6 +1715,26 @@ require_once ROOT_PATH . '/views/layout.php';
             document.addEventListener('click', (e) => {
                 const btn = e.target.closest('button[data-role="goto-human"]');
                 if (btn) this.selectHumanTask(btn.getAttribute('data-task'));
+            });
+
+            // 结果卡片：点开详情（检测框坐标 + 完整候选）；
+            // 点到卡片里某个角色行，就在详情里直接聚焦那一项
+            document.addEventListener('click', (e) => {
+                if (e.target.closest('a')) return; // 萌娘百科等链接照旧
+                const card = e.target.closest('.result-wrap .channel-card[data-channel]');
+                if (!card) return;
+                const wrap = card.closest('.result-wrap');
+                const row = e.target.closest('[data-index]');
+                this.openResultDetail(card.getAttribute('data-channel'),
+                    row ? Number(row.getAttribute('data-index')) : null, wrap);
+            });
+            // 键盘可达：卡片聚焦后回车/空格也能打开
+            document.addEventListener('keydown', (e) => {
+                if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
+                const card = e.target && e.target.closest ? e.target.closest('.result-wrap .channel-card[data-channel]') : null;
+                if (!card) return;
+                e.preventDefault();
+                this.openResultDetail(card.getAttribute('data-channel'), null, card.closest('.result-wrap'));
             });
 
             // 能工智人：待标注列表（点「标注这张」）+ 刷新 + 清除选框 + 点候选双填
@@ -2187,6 +2468,30 @@ require_once ROOT_PATH . '/views/layout.php';
             this.setBusy(show);
         }
 
+        /* 把三通道结果渲染进某个结果区；原始 payload 挂在元素上，供详情弹层取用 */
+        renderChannelsInto(wrap, result, status, taskId) {
+            if (!wrap) return;
+            wrap.__detailPayload = {
+                result: result || {},
+                status: status || {},
+                taskId: taskId || ''
+            };
+            this.lastResultPayload = wrap.__detailPayload;
+            wrap.innerHTML = this.generateChannelsHTML(result, status, {
+                taskId: taskId
+            });
+            wrap.classList.add('active');
+            this.refreshDetailIfOpen(taskId);
+        }
+
+        /* 详情弹层开着、且是同一条任务：跟着刷新（新通道/新人工票到了，框也要跟着更新） */
+        refreshDetailIfOpen(taskId) {
+            if (this.detailDialog && this.detailDialog.open && this.detailState &&
+                (this.detailState.taskId || '') === (taskId || '')) {
+                this.renderDetail();
+            }
+        }
+
         /* 显示结果：按通道分区（37ac / 大模型 / 能工智人） */
         showResult(data, channelStatus) {
             // 节点结果失败（模型缺失、图片损坏等）：只有所有通道都失败才算整体失败
@@ -2196,9 +2501,13 @@ require_once ROOT_PATH . '/views/layout.php';
             }
             const taskId = this.currentTaskId;
             const status = channelStatus || (data && data.channel_status) || {};
-            this.resultWrap.innerHTML = this.generateChannelsHTML(data, status, {
+            // 详情弹层要用：整份结果（含 characters[].bbox 检测框）+ 通道状态 + task_id
+            this.lastResultPayload = {
+                result: data,
+                status: status,
                 taskId: taskId
-            });
+            };
+            this.renderChannelsInto(this.resultWrap, data, status, taskId);
             this.resultWrap.classList.add('active');
             if (taskId) {
                 this.updateHistoryEntry(taskId, {
@@ -2468,10 +2777,13 @@ require_once ROOT_PATH . '/views/layout.php';
             return 'run';
         }
 
-        channelCard(title, state, bodyHtml, metaHtml) {
-            let html = '<div class="card channel-card">';
+        channelCard(title, state, bodyHtml, metaHtml, key) {
+            // data-channel：整张卡片可点开详情（检测框坐标就画在详情里）
+            const attr = key ? ' data-channel="' + escapeHtml(key) + '" role="button" tabindex="0" title="点开看检测框与完整候选"' : '';
+            let html = '<div class="card channel-card"' + attr + '>';
             html += '<div class="channel-head">';
             html += '<span class="channel-title">' + title + '</span>';
+            if (key) html += '<span class="channel-detail-hint">详情</span>';
             html += '<span class="channel-chip ' + this.stateClass(state) + '">' + this.stateLabel(state) + '</span>';
             html += '</div>';
             html += bodyHtml || '<div class="channel-empty">暂无结果</div>';
@@ -2554,7 +2866,7 @@ require_once ROOT_PATH . '/views/layout.php';
                 section.characters.slice(0, 5).forEach((c) => {
                     const top = (c.class_probs && c.class_probs[0]) || {};
                     const label = this.splitLabel(top);
-                    body += '<div class="char-block">';
+                    body += '<div class="char-block" data-index="' + (Number(c.index) || 0) + '">';
                     body += '<div class="char-head">';
                     body += '<span class="char-index">#' + (Number(c.index) + 1) + '</span>';
                     body += '<span class="char-name">' + escapeHtml(label.name || '未知') + '</span>';
@@ -2572,7 +2884,7 @@ require_once ROOT_PATH . '/views/layout.php';
             }
             body += this.channelErrorHtml(section, state);
 
-            return this.channelCard('37ac 模型', state, body);
+            return this.channelCard('37ac 模型', state, body, null, '37ac');
         }
 
         /* 大模型通道：候选列表 */
@@ -2588,7 +2900,7 @@ require_once ROOT_PATH . '/views/layout.php';
                 }
             }
             body += this.channelErrorHtml(section, state);
-            return this.channelCard('大模型（LLM）', state, body);
+            return this.channelCard('大模型（LLM）', state, body, null, 'llm');
         }
 
         /* 能工智人通道：人工票列表 */
@@ -2602,7 +2914,7 @@ require_once ROOT_PATH . '/views/layout.php';
             } else {
                 body += '<div class="channel-empty">还没有人工票 —— 切到「能工智人」投一票</div>';
             }
-            return this.channelCard('能工智人（人工）', state, body);
+            return this.channelCard('能工智人（人工）', state, body, null, 'human');
         }
 
         votesHtml(votes) {
@@ -2657,6 +2969,308 @@ require_once ROOT_PATH . '/views/layout.php';
                 html += '</div></div>';
             }
             return html;
+        }
+
+        /* ==================== 结果详情弹层（把检测框坐标用起来） ==================== */
+        /* 统一成百分比框：服务端 bbox 是 0-1，bbox_percent 是 0-100 */
+        boxPercentOf(entry) {
+            const src = entry || {};
+            const pct = src.bbox_percent;
+            if (this.validBox(pct)) {
+                return {
+                    x: Number(pct.x),
+                    y: Number(pct.y),
+                    w: Number(pct.w),
+                    h: Number(pct.h)
+                };
+            }
+            const bbox = src.bbox;
+            if (this.validBox(bbox)) {
+                return {
+                    x: Number(bbox.x) * 100,
+                    y: Number(bbox.y) * 100,
+                    w: Number(bbox.w) * 100,
+                    h: Number(bbox.h) * 100
+                };
+            }
+            return null;
+        }
+
+        validBox(box) {
+            if (!box || typeof box !== 'object') return false;
+            const nums = ['x', 'y', 'w', 'h'].map((k) => Number(box[k]));
+            if (nums.some((n) => !isFinite(n))) return false;
+            return nums[2] > 0 && nums[3] > 0;
+        }
+
+        /* 摊平某个通道的结果为详情行（带框的才有 box） */
+        detailEntries(key, result) {
+            const section = ((result || {})[key]) || {};
+            const rows = [];
+            if (key === 'human') {
+                ((section.votes) || []).forEach((v) => {
+                    const label = this.splitLabel(v);
+                    rows.push({
+                        i: rows.length,
+                        no: rows.length + 1,
+                        title: label.name || '?',
+                        ip: label.ip === label.name ? '' : label.ip,
+                        prob: null,
+                        box: this.boxPercentOf(v),
+                        vote: true,
+                        voter: v.voter || v.source || '',
+                        note: v.note || '',
+                        ref: (v.character_index === undefined || v.character_index === null) ? null : (Number(v.character_index) + 1),
+                        cands: [],
+                    });
+                });
+                return rows;
+            }
+            const chars = (key === '37ac' && Array.isArray(section.characters)) ? section.characters : [];
+            if (chars.length) {
+                chars.forEach((c, i) => {
+                    const list = c.class_probs || [];
+                    const top = list[0] || {};
+                    const label = this.splitLabel(top);
+                    rows.push({
+                        i: rows.length,
+                        no: (Number(c.index) || 0) + 1 || (i + 1),
+                        title: label.name || '未知',
+                        ip: label.ip === label.name ? '' : label.ip,
+                        prob: Number(top.prob) || 0,
+                        box: this.boxPercentOf(c),
+                        detector: Number(c.detector_confidence) || 0,
+                        cands: list.slice(0, 5),
+                    });
+                });
+                return rows;
+            }
+            // 大模型 / 没有 characters 的 37ac：只有候选，没有框
+            ((section.class_probs) || []).slice(0, 8).forEach((p) => {
+                const label = this.splitLabel(p);
+                rows.push({
+                    i: rows.length,
+                    no: rows.length + 1,
+                    title: label.name || '未知',
+                    ip: label.ip === label.name ? '' : label.ip,
+                    prob: Number(p.prob) || 0,
+                    box: null,
+                    cands: [],
+                });
+            });
+            return rows;
+        }
+
+        detailRowHtml(row) {
+            let html = '<div class="detail-row" data-row="' + row.i + '">';
+            html += '<div class="detail-row-head">';
+            html += '<span class="detail-idx">#' + row.no + '</span>';
+            html += '<strong>' + escapeHtml(row.title) + '</strong>';
+            if (row.ip) html += '<span class="badge badge-neutral cand-ip">' + escapeHtml(row.ip) + '</span>';
+            if (row.prob !== null && row.prob !== undefined) {
+                html += '<span class="mono" style="margin-left:auto">' + row.prob.toFixed(2) + '%</span>';
+            }
+            html += '</div>';
+            if (row.box) {
+                html += '<div class="detail-bbox">框 x ' + row.box.x.toFixed(1) + '% · y ' + row.box.y.toFixed(1) +
+                    '% · w ' + row.box.w.toFixed(1) + '% · h ' + row.box.h.toFixed(1) + '%</div>';
+            } else {
+                html += '<div class="detail-bbox">' + (row.vote ? '整图（这票没框）' : '无检测框') + '</div>';
+            }
+            if (row.cands && row.cands.length > 1) {
+                html += '<div class="detail-sub">其它候选：' + row.cands.slice(1).map((p) => {
+                    const l = this.splitLabel(p);
+                    return escapeHtml((l.ip ? l.ip + '/' : '') + (l.name || '?')) + ' ' + (Number(p.prob) || 0).toFixed(1) + '%';
+                }).join(' · ') + '</div>';
+            }
+            if (row.vote) {
+                const extra = [];
+                if (row.voter) extra.push(row.voter);
+                if (row.note) extra.push(row.note);
+                if (row.ref) extra.push('沿用模型框 #' + row.ref);
+                if (extra.length) html += '<div class="detail-sub">' + escapeHtml(extra.join(' · ')) + '</div>';
+            } else if (row.detector) {
+                html += '<div class="detail-sub">检测器置信度 ' + row.detector.toFixed(3) + '</div>';
+            }
+            html += '</div>';
+            return html;
+        }
+
+        ensureDetailDialog() {
+            if (this.detailDialog) return this.detailDialog;
+            const dialog = document.createElement('dialog');
+            dialog.className = 'ac-modal detail-modal';
+            dialog.setAttribute('aria-label', '识别详情');
+            document.body.appendChild(dialog);
+            // 点四周空白处关闭；Esc 由 <dialog> 原生处理
+            dialog.addEventListener('click', (e) => {
+                if (e.target === dialog) dialog.close();
+            });
+            dialog.addEventListener('close', () => {
+                this.detailState = null;
+            });
+            this.detailDialog = dialog;
+            return dialog;
+        }
+
+        /**
+         * 打开详情弹层
+         * @param {string} channelKey 37ac / llm / human
+         * @param {number|null} index 聚焦第几项（点卡片里的某个角色行时传）
+         * @param {Element|null} wrap 结果区元素（payload 挂在它上面）
+         */
+        openResultDetail(channelKey, index, wrap) {
+            const payload = (wrap && wrap.__detailPayload) || this.lastResultPayload;
+            if (!payload || !payload.result) {
+                Notify.info('这条记录还没有结果，先识别一次');
+                return;
+            }
+            const dialog = this.ensureDetailDialog();
+            // 切通道重渲染时仍用同一份 payload（点的是哪个结果区就用哪份）
+            dialog.__payload = payload;
+            const fallback = payload.result['37ac'] ? '37ac' : CHANNELS[0];
+            const key = CHANNELS.indexOf(channelKey) >= 0 ? channelKey : fallback;
+            this.detailState = {
+                key: key,
+                focus: (index === null || index === undefined || isNaN(Number(index))) ? null : String(index),
+                taskId: payload.taskId || '',
+            };
+            this.renderDetail();
+            if (!dialog.open) {
+                if (typeof dialog.showModal === 'function') dialog.showModal();
+                else dialog.setAttribute('open', '');
+            }
+        }
+
+        renderDetail() {
+            const dialog = this.detailDialog;
+            const state = this.detailState;
+            if (!dialog || !state) return;
+            const payload = (dialog.__payload || this.lastResultPayload) || {};
+            const result = payload.result || {};
+            const status = payload.status || {};
+            const key = state.key;
+            const meta = CHANNEL_META.find((m) => m.key === key) || CHANNEL_META[0];
+            const stateName = this.channelState(status, key, result);
+            const rows = this.detailEntries(key, result);
+            const boxes = rows.filter((r) => r.box);
+            const taskId = payload.taskId || state.taskId || '';
+
+            let html = '';
+            html += '<div class="detail-head">';
+            html += '<div class="detail-title">' + escapeHtml(meta.label) + ' · 详情</div>';
+            html += '<div class="detail-tabs">' + CHANNEL_META.map((m) =>
+                '<button type="button" class="detail-tab' + (m.key === key ? ' active' : '') +
+                '" data-detail-channel="' + m.key + '">' + escapeHtml(m.short) + '</button>').join('') + '</div>';
+            html += '<button type="button" class="detail-close" data-detail-close aria-label="关闭">✕</button>';
+            html += '</div>';
+
+            html += '<div class="detail-meta">';
+            html += '<span class="channel-chip ' + this.stateClass(stateName) + '">' + this.stateLabel(stateName) + '</span>';
+            if (taskId) html += '<span class="mono">' + escapeHtml(String(taskId).slice(0, 8)) + '…</span>';
+            html += '<span>' + (rows.length ? ('共 ' + rows.length + ' 项' + (boxes.length ? ' · 带检测框 ' + boxes.length + ' 个' : ' · 无检测框')) : '暂无结果') + '</span>';
+            html += '</div>';
+
+            html += '<div class="modal-body">';
+            if (!rows.length) {
+                html += '<div class="detail-empty">这个通道还没有结果（' + escapeHtml(this.stateLabel(stateName)) + '）</div>';
+            } else {
+                html += '<div class="detail-grid">';
+                html += '<div class="detail-stage-wrap">';
+                if (taskId) {
+                    // 图片没尺寸前用占位高度撑住，否则百分比定位的框会塌在一起；加载完就交给图片本身
+                    html += '<div class="detail-stage is-empty" id="detailStage">';
+                    html += '<img id="detailImage" class="flow-empty" alt="原图" src="/api/tasks/' + encodeURIComponent(taskId) + '/image?max_side=1280">';
+                    boxes.forEach((r) => {
+                        const b = r.box;
+                        const inside = b.y < 8 ? ' inside' : '';
+                        html += '<span class="detail-box' + (r.vote ? ' is-vote' : '') + '" data-box="' + r.i +
+                            '" style="left:' + b.x.toFixed(2) + '%;top:' + b.y.toFixed(2) + '%;width:' + b.w.toFixed(2) +
+                            '%;height:' + b.h.toFixed(2) + '%">' +
+                            '<i class="box-tag' + inside + '">#' + r.no + ' ' + escapeHtml(r.title) + '</i></span>';
+                    });
+                    html += '</div>';
+                }
+                if (!boxes.length) {
+                    html += '<div class="detail-note">' + (key === 'llm' ?
+                        '大模型通道只给候选、不给检测框；切到「37ac」看模型框，或切到「能工智人」看人工框。' :
+                        '这个通道没有检测框（整图提交或没跑检测）。') + '</div>';
+                }
+                html += '</div>';
+                html += '<div class="detail-list">' + rows.map((r) => this.detailRowHtml(r)).join('') + '</div>';
+                html += '</div>';
+            }
+            html += '</div>';
+
+            dialog.innerHTML = html;
+            this.bindDetailEvents();
+        }
+
+        bindDetailEvents() {
+            const dialog = this.detailDialog;
+            if (!dialog) return;
+            const stage = dialog.querySelector('#detailStage');
+            const img = dialog.querySelector('#detailImage');
+            if (img) {
+                img.addEventListener('load', () => {
+                    // 图有尺寸了：撤掉占位高度，百分比框才对得上图
+                    if (stage) stage.classList.remove('is-empty');
+                    img.classList.remove('flow-empty');
+                });
+                img.addEventListener('error', () => {
+                    img.removeAttribute('src');
+                    if (stage) stage.classList.add('is-empty');
+                    Notify.error('原图读取失败，可能已过期或被清理');
+                });
+            }
+            dialog.querySelectorAll('[data-detail-channel]').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    this.detailState.key = btn.getAttribute('data-detail-channel');
+                    this.detailState.focus = null;
+                    this.renderDetail();
+                });
+            });
+            const closer = dialog.querySelector('[data-detail-close]');
+            if (closer) closer.addEventListener('click', () => dialog.close());
+            dialog.querySelectorAll('[data-box]').forEach((el) => {
+                const i = el.getAttribute('data-box');
+                el.addEventListener('mouseenter', () => this.highlightDetail(i, true));
+                el.addEventListener('mouseleave', () => this.highlightDetail(i, false));
+                el.addEventListener('click', () => this.highlightDetail(i, true, true));
+            });
+            dialog.querySelectorAll('[data-row]').forEach((el) => {
+                const i = el.getAttribute('data-row');
+                el.addEventListener('mouseenter', () => this.highlightDetail(i, true));
+                el.addEventListener('mouseleave', () => this.highlightDetail(i, false));
+                el.addEventListener('click', () => this.highlightDetail(i, true));
+            });
+            // 从卡片里点具体角色进来的：直接把那一项点亮并滚到视野内
+            if (this.detailState && this.detailState.focus !== null && this.detailState.focus !== undefined) {
+                this.highlightDetail(String(this.detailState.focus), true, true);
+            }
+        }
+
+        /* 高亮第 i 项：框和列表行一起亮 */
+        highlightDetail(i, on, scrollRow) {
+            const dialog = this.detailDialog;
+            if (!dialog) return;
+            ['[data-box="' + i + '"]', '[data-row="' + i + '"]'].forEach((sel) => {
+                const el = dialog.querySelector(sel);
+                if (el) el.classList.toggle('is-active', !!on);
+            });
+            if (on && scrollRow) {
+                const row = dialog.querySelector('[data-row="' + i + '"]');
+                if (row && typeof row.scrollIntoView === 'function') {
+                    try {
+                        row.scrollIntoView({
+                            block: 'nearest',
+                            behavior: 'smooth'
+                        });
+                    } catch (e) {
+                        row.scrollIntoView();
+                    }
+                }
+            }
         }
 
         /* ==================== 历史识别（保存在本机） ==================== */
@@ -2762,9 +3376,7 @@ require_once ROOT_PATH . '/views/layout.php';
                 });
                 this.renderHistory();
                 if (wrap) {
-                    wrap.innerHTML = this.generateChannelsHTML(result, status, {
-                        taskId: taskId
-                    });
+                    this.renderChannelsInto(wrap, result, status, taskId);
                 }
             } catch (e) {
                 if (wrap) {

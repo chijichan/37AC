@@ -1099,6 +1099,12 @@ require_once ROOT_PATH . '/views/layout.php';
         padding: 1.15rem 1.25rem;
     }
 
+    /* 关掉之后必须真的看不见：.ac-modal 的 display:flex 是作者样式，
+       会盖掉浏览器自带的 dialog:not([open]){display:none}（作者样式优先级高于 UA） */
+    dialog.detail-modal:not([open]) {
+        display: none;
+    }
+
     .detail-head {
         flex: 0 0 auto;
         display: flex;
@@ -3108,6 +3114,9 @@ require_once ROOT_PATH . '/views/layout.php';
             });
             dialog.addEventListener('close', () => {
                 this.detailState = null;
+                // 关掉就从 DOM 里摘掉：不留着（也就不会出现"关了还显示"）
+                dialog.remove();
+                if (this.detailDialog === dialog) this.detailDialog = null;
             });
             this.detailDialog = dialog;
             return dialog;
@@ -3137,9 +3146,33 @@ require_once ROOT_PATH . '/views/layout.php';
             };
             this.renderDetail();
             if (!dialog.open) {
-                if (typeof dialog.showModal === 'function') dialog.showModal();
-                else dialog.setAttribute('open', '');
+                if (typeof dialog.showModal === 'function') {
+                    try {
+                        dialog.showModal();
+                    } catch (e) {
+                        // 已经是模态状态等异常：退回普通打开方式
+                        dialog.setAttribute('open', '');
+                    }
+                } else {
+                    dialog.setAttribute('open', '');
+                }
             }
+        }
+
+        /* 手动关闭（供 Esc 之外的自定义入口使用） */
+        closeResultDetail() {
+            const dialog = this.detailDialog;
+            if (!dialog) return;
+            dialog.classList.remove('is-fallback-open');
+            if (dialog.open && typeof dialog.close === 'function') {
+                dialog.close();
+                return;
+            }
+            // 兜底路径：没有原生 close 时自己摘掉
+            dialog.removeAttribute('open');
+            dialog.remove();
+            this.detailDialog = null;
+            this.detailState = null;
         }
 
         renderDetail() {

@@ -104,6 +104,8 @@ curl.exe -s -N --max-time 480 -H "X-Stream-Response: true" -H "X-Requested-With:
 
 ```bash
 sudo apt install -y nginx php-fpm php-mysql mysql-server python3 python3-venv python3-pip git
+# 节点侧 YOLO/opencv 需要的系统库（无桌面的服务器必装，否则 import cv2 会报 libGL.so.1 缺失）
+sudo apt install -y libgl1 libglib2.0-0
 sudo git clone <仓库地址> /opt/37AC && cd /opt/37AC
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r src/server/requirements.txt

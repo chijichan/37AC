@@ -17,9 +17,16 @@ python -m venv .venv
 ### 3. 安装依赖
 
 ```bash
+# 无桌面的 Linux 服务器：opencv 预编译包需要这两个系统库，否则 import cv2 报 libGL.so.1
+#   sudo apt install -y libgl1 libglib2.0-0
+# （不想装系统库可改用无界面版：pip uninstall -y opencv-python opencv-contrib-python
+#   && pip install opencv-python-headless==5.0.0.93）
 pip install -r src/cli/requirements.txt
 pip install -r src/server/requirements.txt
 ```
+
+> 装完可以自检：`python -c "import cv2, ultralytics; print(cv2.__version__, ultralytics.__version__)"`
+> 报 libGL 就按上面的注释装系统库；节点启动时也会把 YOLO 不可用的真实原因打进日志。
 
 > **AMD GPU (RX 580) 用户**：额外安装 DirectML 加速：
 > ```bash

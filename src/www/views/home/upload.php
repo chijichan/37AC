@@ -1242,6 +1242,22 @@ require_once ROOT_PATH . '/views/layout.php';
         min-height: 240px;
     }
 
+    /* 骨架 → 真内容：淡入一下，别"啪"地跳出来 */
+    .detail-stage img,
+    .detail-stage .detail-box {
+        animation: detail-fade .18s var(--ac-ease-out);
+    }
+
+    @keyframes detail-fade {
+        from {
+            opacity: 0;
+        }
+
+        to {
+            opacity: 1;
+        }
+    }
+
     .detail-box {
         position: absolute;
         border: 2px solid var(--ac-pink-500);
@@ -2544,6 +2560,14 @@ require_once ROOT_PATH . '/views/layout.php';
             this.setBusy(show);
         }
 
+        /* 记住某条任务的最新 payload（详情弹层按 task_id 取最新那份，避免看到旧快照） */
+        rememberDetailPayload(payload) {
+            if (!payload || !payload.taskId) return;
+            const all = (this.detailPayloads = this.detailPayloads || {});
+            all[payload.taskId] = payload;
+            this.lastResultPayload = payload;
+        }
+
         /* 把三通道结果渲染进某个结果区；原始 payload 挂在元素上，供详情弹层取用 */
         renderChannelsInto(wrap, result, status, taskId) {
             if (!wrap) return;
@@ -2552,20 +2576,27 @@ require_once ROOT_PATH . '/views/layout.php';
                 status: status || {},
                 taskId: taskId || ''
             };
-            this.lastResultPayload = wrap.__detailPayload;
+            this.rememberDetailPayload(wrap.__detailPayload);
             wrap.innerHTML = this.generateChannelsHTML(result, status, {
                 taskId: taskId
             });
             wrap.classList.add('active');
+            // 结果一出来就后台把详情要用的原图拉下来：点开时基本已就绪，不用等
+            if (taskId) this.preloadDetailImage(this.detailImageUrl(taskId), null);
             this.refreshDetailIfOpen(taskId);
         }
 
         /* 详情弹层开着、且是同一条任务：跟着刷新（新通道/新人工票到了，框也要跟着更新） */
         refreshDetailIfOpen(taskId) {
-            if (this.detailDialog && this.detailDialog.open && this.detailState &&
-                (this.detailState.taskId || '') === (taskId || '')) {
-                this.renderDetail();
-            }
+            if (!this.detailDialog || !this.detailDialog.open || !this.detailState) return;
+            if ((this.detailState.taskId || '') !== (taskId || '')) return;
+            // 关键：换成最新那份 payload。以前 dialog.__payload 是打开那一刻的快照，
+            // 结果更新了详情还一直显示旧数据（"信息没更新"就是这么来的）
+            const fresh = ((this.detailPayloads || {})[taskId]) ||
+                (this.resultWrap && this.resultWrap.__detailPayload &&
+                    this.resultWrap.__detailPayload.taskId === taskId ? this.resultWrap.__detailPayload : null);
+            if (fresh) this.detailDialog.__payload = fresh;
+            this.renderDetail();
         }
 
         /* 显示结果：按通道分区（37ac / 大模型 / 能工智人） */
@@ -2768,6 +2799,8 @@ require_once ROOT_PATH . '/views/layout.php';
         beginUpdate() {
             this.updateEpoch = (this.updateEpoch || 0) + 1;
             this.stopChannelRefresh();
+            // 新识别开始：旧任务的详情弹层收掉（它显示的是上一条任务）
+            if (this.detailDialog && this.detailDialog.open) this.closeResultDetail();
             if (this.abortController) {
                 try {
                     this.abortController.abort();
@@ -3333,7 +3366,16 @@ require_once ROOT_PATH . '/views/layout.php';
         }
 
         openResultDetail(channelKey, index, wrap) {
-            const payload = (wrap && wrap.__detailPayload) || this.lastResultPayload;
+            // 点的是哪个结果区就取哪个；结果区被轮询直接重绘过（没有 __detailPayload）时，
+            // 用卡片上带的 task_id 去取这条任务最新的那份，别串到别的任务上
+            let domTaskId = '';
+            if (wrap && wrap.querySelector) {
+                const btn = wrap.querySelector('[data-role="goto-human"]');
+                if (btn && btn.getAttribute) domTaskId = btn.getAttribute('data-task') || '';
+            }
+            const payload = (wrap && wrap.__detailPayload) ||
+                ((this.detailPayloads || {})[domTaskId]) ||
+                this.lastResultPayload;
             if (!payload || !payload.result) {
                 Notify.info('这条记录还没有结果，先识别一次');
                 return;
@@ -3348,14 +3390,21 @@ require_once ROOT_PATH . '/views/layout.php';
                 focus: (index === null || index === undefined || isNaN(Number(index))) ? null : String(index),
                 taskId: payload.taskId || '',
             };
-            // 先把原图预加载好（鼠标悬停卡片时已经开始拉了，通常是缓存命中），
-            // 图就绪后再渲染 + 弹出：弹出来就是完整的，不会闪一下
+            // 原图通常已经预取好了（结果一渲染就后台拉 + 鼠标扫过也拉），那种情况直接出完整内容；
+            // 还没就绪就先弹骨架、拿到图再换成真内容 —— 既不闪，也不像"点了没反应"
             const url = this.detailImageUrl(payload.taskId);
+            const state = this.detailState;
+            state.loading = !!url && this.detailImageReady !== url;
+            this.renderDetail();
+            this.showDetailDialog(dialog);
+            if (!state.loading) return;
+
             this.setBusy(true);
             this.preloadDetailImage(url, () => {
                 this.setBusy(false);
+                if (this.detailState !== state) return;   // 已经关掉/换任务了
+                state.loading = false;
                 this.renderDetail();
-                this.showDetailDialog(dialog);
             });
         }
 
@@ -3375,10 +3424,40 @@ require_once ROOT_PATH . '/views/layout.php';
             this.detailState = null;
         }
 
+        /* 详情骨架：弹层立刻出现（有反馈），原图就绪后再换成真内容（不闪） */
+        detailSkeletonHtml() {
+            const state = this.detailState || {};
+            const meta = CHANNEL_META.find((m) => m.key === state.key) || CHANNEL_META[0];
+            const rowSkeleton = '<div class="detail-row">' +
+                '<span class="sk-line flow-empty" style="width:58%"></span>' +
+                '<span class="sk-line flow-empty" style="width:36%;margin-top:.45rem"></span>' +
+                '</div>';
+            let html = '';
+            html += '<div class="detail-head">';
+            html += '<div class="detail-title">' + escapeHtml(meta.label) + ' · 详情</div>';
+            html += '<div class="detail-tabs">' + CHANNEL_META.map((m) =>
+                '<button type="button" class="detail-tab' + (m.key === state.key ? ' active' : '') +
+                '" data-detail-channel="' + m.key + '">' + escapeHtml(m.short) + '</button>').join('') + '</div>';
+            html += '<button type="button" class="detail-close" data-detail-close aria-label="关闭">✕</button>';
+            html += '</div>';
+            html += '<div class="detail-meta"><span class="channel-chip">正在加载原图…</span></div>';
+            html += '<div class="modal-body"><div class="detail-grid">';
+            html += '<div class="detail-stage is-empty flow-empty"></div>';
+            html += '<div class="detail-list">' + new Array(3).fill(rowSkeleton).join('') + '</div>';
+            html += '</div></div>';
+            return html;
+        }
+
         renderDetail() {
             const dialog = this.detailDialog;
             const state = this.detailState;
             if (!dialog || !state) return;
+            // 原图还没就绪：先给骨架（弹层已经弹出来了，别让人以为没反应）
+            if (state.loading) {
+                dialog.innerHTML = this.detailSkeletonHtml();
+                this.bindDetailEvents();
+                return;
+            }
             const payload = (dialog.__payload || this.lastResultPayload) || {};
             const result = payload.result || {};
             const status = payload.status || {};
@@ -3672,10 +3751,7 @@ require_once ROOT_PATH . '/views/layout.php';
                             channel_status: status
                         });
                         if (self.currentTab === 'history') self.renderHistory();
-                        self.resultWrap.innerHTML = self.generateChannelsHTML(result, status, {
-                            taskId: taskId
-                        });
-                        self.resultWrap.classList.add('active');
+                        self.renderChannelsInto(self.resultWrap, result, status, taskId);
 
                         const pendingNode = Object.keys(status).filter((c) => c !== 'human' && status[c] !== 'completed');
                         const wantsHuman = Object.prototype.hasOwnProperty.call(status, 'human');
@@ -4080,6 +4156,20 @@ require_once ROOT_PATH . '/views/layout.php';
                 });
                 const data = resp.data || {};
                 this.humanTaskData = data;
+                // 这条任务的数据可能变了（刚投票 / 别的通道刚回来）：
+                // 登记成最新 payload，结果区和详情弹层跟着更新，别让详情停在上一次的快照
+                const freshPayload = {
+                    result: data.result || {},
+                    status: data.channel_status || {},
+                    taskId: taskId
+                };
+                this.rememberDetailPayload(freshPayload);
+                if (this.resultWrap && this.resultWrap.__detailPayload &&
+                    this.resultWrap.__detailPayload.taskId === taskId) {
+                    this.renderChannelsInto(this.resultWrap, freshPayload.result, freshPayload.status, taskId);
+                } else {
+                    this.refreshDetailIfOpen(taskId);
+                }
 
                 if (image) {
                     // 加时间戳避免浏览器复用上次的图

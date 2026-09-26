@@ -2307,7 +2307,7 @@ require_once ROOT_PATH . '/views/layout.php';
         /* 停掉结果轮询 */
         stopChannelRefresh() {
             if (this.channelTimer) {
-                clearInterval(this.channelTimer);
+                clearTimeout(this.channelTimer);
                 this.channelTimer = null;
             }
         }
@@ -2327,10 +2327,7 @@ require_once ROOT_PATH . '/views/layout.php';
             }
             this.destroyCropper();
             this.cancelRequest();
-            if (this.channelTimer) {
-                clearInterval(this.channelTimer);
-                this.channelTimer = null;
-            }
+            this.stopChannelRefresh();
         }
 
         /* ==================== 标签页：上传识别 / 历史识别 / 能工智人 ==================== */
@@ -2372,6 +2369,7 @@ require_once ROOT_PATH . '/views/layout.php';
             if (name === 'history') {
                 this.renderHistory();
                 this.loadPublicFeed();
+                this.refreshHistoryStatuses();
             }
             if (name === 'human') this.renderHumanPanel();
         }
@@ -2737,22 +2735,26 @@ require_once ROOT_PATH . '/views/layout.php';
             }
         }
 
-        /* 结果自动刷新：多通道/人工票是陆续到的，渲染后再轮询几次把卡片更新掉 */
+        /* 结果自动刷新：多通道/人工票是陆续到的，渲染后继续轮询把卡片更新掉
+         * - 节点通道（37ac/llm）还在跑：5 秒一问
+         * - 节点通道都完成、但人工通道还没票：放慢到 10 秒一问，继续等人工票
+         * - 人工有票 / 没有人工通道 / 超过上限 / 换任务 / 有新识别：停
+         */
         startChannelRefresh(taskId) {
             if (!taskId) return;
-            if (this.channelTimer) {
-                clearInterval(this.channelTimer);
-                this.channelTimer = null;
-            }
+            this.stopChannelRefresh();
             const self = this;
             const epoch = this.updateEpoch;
             let attempts = 0;
+            const MAX_ATTEMPTS = 90;
+
             const tick = async () => {
                 attempts += 1;
-                if (attempts > 24 || epoch !== self.updateEpoch || self.currentTaskId !== taskId) {
+                if (attempts > MAX_ATTEMPTS || epoch !== self.updateEpoch || self.currentTaskId !== taskId) {
                     self.stopChannelRefresh();
                     return;
                 }
+                let delay = 5000;
                 try {
                     const resp = await fetch('/api/tasks/' + encodeURIComponent(taskId), {
                         headers: {
@@ -2764,33 +2766,83 @@ require_once ROOT_PATH . '/views/layout.php';
                         self.stopChannelRefresh();
                         return;
                     }
-                    if (!resp.ok) return;
-                    const data = await resp.json();
-                    if (epoch !== self.updateEpoch) {
-                        self.stopChannelRefresh();
-                        return;
-                    }
-                    const status = data.channel_status || {};
-                    const result = data.result || {};
-                    self.updateHistoryEntry(taskId, {
-                        channel_status: status
-                    });
-                    if (self.currentTab === 'history') self.renderHistory();
-                    self.resultWrap.innerHTML = self.generateChannelsHTML(result, status, {
-                        taskId: taskId
-                    });
-                    self.resultWrap.classList.add('active');
-                    const pendingNode = Object.keys(status).filter((c) => c !== 'human' && status[c] !== 'completed');
-                    if (!pendingNode.length) {
-                        clearInterval(self.channelTimer);
-                        self.channelTimer = null;
+                    if (resp.ok) {
+                        const data = await resp.json();
+                        if (epoch !== self.updateEpoch) {
+                            self.stopChannelRefresh();
+                            return;
+                        }
+                        const status = data.channel_status || {};
+                        const result = data.result || {};
+                        self.updateHistoryEntry(taskId, {
+                            channel_status: status
+                        });
+                        if (self.currentTab === 'history') self.renderHistory();
+                        self.resultWrap.innerHTML = self.generateChannelsHTML(result, status, {
+                            taskId: taskId
+                        });
+                        self.resultWrap.classList.add('active');
+
+                        const pendingNode = Object.keys(status).filter((c) => c !== 'human' && status[c] !== 'completed');
+                        const wantsHuman = Object.prototype.hasOwnProperty.call(status, 'human');
+                        const humanVotes = ((result.human || {}).votes || []).length;
+                        if (!pendingNode.length && (!wantsHuman || humanVotes > 0)) {
+                            self.stopChannelRefresh();
+                            return;
+                        }
+                        // 节点通道都好了就放慢节奏，单纯等人工票
+                        delay = pendingNode.length ? 5000 : 10000;
                     }
                 } catch (e) {
                     // 网络抖动忽略，等下一轮
                 }
+                if (epoch !== self.updateEpoch) {
+                    self.stopChannelRefresh();
+                    return;
+                }
+                self.channelTimer = setTimeout(tick, delay);
             };
-            this.channelTimer = setInterval(tick, 5000);
             tick();
+        }
+
+        /* 进历史页时把本机记录里还没跑完的通道状态补一次（列表卡片不再是旧状态） */
+        async refreshHistoryStatuses() {
+            const list = this.loadHistory();
+            const pending = list.filter((item) => {
+                const st = item.channel_status || {};
+                const keys = Object.keys(st);
+                if (!keys.length) return true;
+                return keys.some((k) => st[k] !== 'completed' && st[k] !== 'failed');
+            }).slice(0, 6);
+            if (!pending.length) return;
+
+            this.setBusy(true);
+            let changed = false;
+            try {
+                await Promise.all(pending.map(async (item) => {
+                    try {
+                        const resp = await fetch('/api/tasks/' + encodeURIComponent(item.task_id), {
+                            headers: {
+                                'X-Requested-With': 'XMLHttpRequest'
+                            },
+                        });
+                        if (!resp.ok) return;
+                        const data = await resp.json();
+                        const st = data.channel_status || {};
+                        if (Object.keys(st).length) {
+                            this.updateHistoryEntry(item.task_id, {
+                                channel_status: st
+                            });
+                            changed = true;
+                        }
+                    } catch (e) {
+                        // 单条失败不影响其他
+                    }
+                }));
+            } finally {
+                this.setBusy(false);
+            }
+            if (changed) this.renderHistory();
         }
 
         /* ==================== 公共 feed：大家最近在识别 ==================== */
@@ -3049,7 +3101,7 @@ require_once ROOT_PATH . '/views/layout.php';
                 html += '<div class="vote-group">' +
                     '<div class="vote-group-head">' + escapeHtml(key) + ' · ' + groups[key].length + ' 个角色</div>' +
                     this.votesHtml(groups[key]) +
-                '</div>';
+                    '</div>';
             });
             this.humanVotes.innerHTML = html;
         }
@@ -3177,20 +3229,24 @@ require_once ROOT_PATH . '/views/layout.php';
                     wrap.innerHTML = '';
                 } else {
                     wrap.innerHTML = '<h4>待提交（' + list.length + ' 个角色）</h4>' + list.map((v, i) => {
-                        const label = this.splitLabel({ name: v.name, ip: v.ip, name_zh: v.name_zh });
+                        const label = this.splitLabel({
+                            name: v.name,
+                            ip: v.ip,
+                            name_zh: v.name_zh
+                        });
                         const pct = v.bbox_percent || {};
                         return '<div class="pending-item" data-i="' + i + '">' +
                             (v.thumb ? '<img class="pending-thumb" src="' + v.thumb + '" alt="">' : '<span class="pending-thumb"></span>') +
                             '<div class="pending-body">' +
-                                '<div class="pending-name">' + escapeHtml(label.name) +
-                                (label.ip ? '<span class="badge badge-neutral cand-ip">' + escapeHtml(label.ip) + '</span>' : '') +
-                                '</div>' +
-                                '<div class="channel-meta">框选 ' + (Number(pct.x) || 0).toFixed(0) + '%,' + (Number(pct.y) || 0).toFixed(0) +
-                                '% · ' + (Number(pct.w) || 0).toFixed(0) + '%×' + (Number(pct.h) || 0).toFixed(0) + '%' +
-                                (v.note ? ' · ' + escapeHtml(v.note) : '') + '</div>' +
+                            '<div class="pending-name">' + escapeHtml(label.name) +
+                            (label.ip ? '<span class="badge badge-neutral cand-ip">' + escapeHtml(label.ip) + '</span>' : '') +
+                            '</div>' +
+                            '<div class="channel-meta">框选 ' + (Number(pct.x) || 0).toFixed(0) + '%,' + (Number(pct.y) || 0).toFixed(0) +
+                            '% · ' + (Number(pct.w) || 0).toFixed(0) + '%×' + (Number(pct.h) || 0).toFixed(0) + '%' +
+                            (v.note ? ' · ' + escapeHtml(v.note) : '') + '</div>' +
                             '</div>' +
                             '<button type="button" class="btn btn-ghost btn-sm" data-role="remove-pending">移除</button>' +
-                        '</div>';
+                            '</div>';
                     }).join('');
                 }
             }

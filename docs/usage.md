@@ -272,3 +272,19 @@ python src/cli/main.py node
 > 推荐启动顺序：Flask 服务端 -> PHP 仪表盘 -> 边缘节点
 
 ---
+
+### 7. 运行测试
+
+```bash
+python -m pytest tests/cli -q --no-cov      # CLI（src/cli）
+python -m pytest tests/server -q --no-cov   # 服务端（src/server）
+```
+
+两套必须**分开进程**运行（各自持有独立的 `config` 包，同进程会互相串）。当前状态：CLI 196 通过、服务端 194 通过。
+
+受限环境（系统 TEMP 不可写、`mkdir(mode=0o700)` 建出的目录后续连列举/写入都被拒）下，`tests/conftest.py` 会自动：
+
+- 把临时根目录切到仓库内 `.tmp-tests/pytest-<pid>/`（按进程隔离，CLI/SERVER 并发跑也不冲突），跑完自动清理；
+- 在测试进程内忽略 `os.mkdir` 的 `mode` 参数（pytest 的 basetemp / `tmp_path` / `tempfile.mkdtemp` 全用 `0o700` 建目录，正是被拒的根源）。
+
+普通开发机上不受影响，无需额外配置。

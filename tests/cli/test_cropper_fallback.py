@@ -153,7 +153,8 @@ def test_mediapipe_only_skips_yolo(scene, monkeypatch):
     monkeypatch.setattr(mediapipe_detector, "is_available", lambda: True)
     monkeypatch.setattr(mediapipe_detector, "detect_persons", lambda *a, **k: {
         "image_size": (800, 600), "detected_size": (800, 600),
-        "detections": [{"bbox": (10, 10, 100, 200), "area": 10000, "confidence": 0.5,
+        # 框要够大：裁剪门控默认要求面积占比 >= 6%（过小视为误检碎片被丢弃）
+        "detections": [{"bbox": (10, 10, 400, 560), "area": 214500, "confidence": 0.5,
                         "class_id": -1, "class_name": "mediapipe_face"}],
     })
 

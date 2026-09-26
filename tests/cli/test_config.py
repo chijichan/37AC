@@ -128,8 +128,13 @@ class TestCLIConfig:
         # MODEL_PATH 应使用自定义文件名
         assert MODEL_PATH.name == "custom_model.pth"
 
+    @patch.dict(os.environ, {"LLM_RECOGNITION_ENABLED": "False"})
     def test_capabilities_local_only(self):
-        """验证默认能力列表（仅 local）"""
+        """验证默认能力列表（仅 local）
+
+        显式置 False：本地 src/cli/.env 常开着 LLM，而 load_dotenv 不覆盖
+        已存在的环境变量，这样断言才是确定性的。
+        """
         from importlib import reload
         import config.base as cfg
         reload(cfg)

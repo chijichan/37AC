@@ -568,6 +568,18 @@ def start_node_service(auto_update_model=None):
                         logger.warning("推理任务 %s 等待超时 (%ds)", tid, timeout_sec)
                         result = {"success": False, "class_probs": [], "error": f"inference timeout after {timeout_sec} seconds"}
                     result["recognition_type"] = info["effective_type"]
+                    requested_type = info.get("requested_type") or "local"
+                    if info["effective_type"] != requested_type:
+                        # 节点做不了服务端要的那种推理（例如要求 llm 但本节点没启用）：
+                        # 结果仍然给，但明确标出"这是回退结果"，别让上层当成该通道自己的输出
+                        result["fallback"] = {
+                            "requested": requested_type,
+                            "actual": info["effective_type"],
+                        }
+                        logger.warning(
+                            "推理任务 %s 回退了：要求 %s，实际 %s（结果会带 fallback 标记）",
+                            tid, requested_type, info["effective_type"],
+                        )
 
                     response_msg = {
                         "type": "task_result",
@@ -576,6 +588,8 @@ def start_node_service(auto_update_model=None):
                             "node_id": NODE_ID,
                             "task_id": tid,
                             "result": result,
+                            "channel": info.get("channel"),
+                            "requested_recognition_type": requested_type,
                             "processed_image_path": info["local_image_path"],
                         },
                     }
@@ -690,6 +704,11 @@ def start_node_service(auto_update_model=None):
                         timestamp = msg.get("timestamp")
                         # 识别方式类型：local / llm / auto，默认 local
                         recognition_type = msg_data.get("recognition_type", "local")
+                        # 多通道扇出时服务端用 "<父id>:<通道>" 作子任务 id：
+                        # 原样回传通道，服务端就不用靠猜（猜错会把 37ac 的结果写进 llm）
+                        task_channel = None
+                        if ":" in str(task_id):
+                            task_channel = str(task_id).rsplit(":", 1)[1].strip().lower() or None
 
                         if not all([task_id, image_filename, image_data_b64]):
                             logger.warning("任务数据不完整")
@@ -781,6 +800,8 @@ def start_node_service(auto_update_model=None):
                                     "store": store,
                                     "local_image_path": local_image_path,
                                     "effective_type": effective_type,
+                                    "requested_type": recognition_type,
+                                    "channel": task_channel,
                                     "start_time": time.time(),
                                     "timeout_sec": timeout_sec,
                                 }

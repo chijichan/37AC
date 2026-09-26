@@ -220,14 +220,31 @@ def async_handle_task_result(conn, addr, msg):
                 if not isinstance(payload, dict):
                     payload = {}
 
-                # 2) 合并本通道结果（无后缀时按节点上报的 recognition_type 归到 37ac / llm）
-                if channel:
-                    channel_service.merge_channel_result(payload, channel, result)
-                else:
-                    guessed = (result or {}).get("recognition_type")
-                    fallback = (channel_service.CHANNEL_LLM if guessed == "llm"
-                                else channel_service.CHANNEL_37AC)
-                    channel_service.merge_channel_result(payload, fallback, result)
+                # 2) 判定通道并合并（后缀 → 节点上报的 channel → 该节点分配记录 → 请求的通道 → 推断）
+                target = channel_service.resolve_result_channel(
+                    parent_id,
+                    task_id,
+                    payload,
+                    reported_channel=msg["data"].get("channel"),
+                    assigned_tasks=node_manager.get_assigned_tasks(node_id),
+                    inferred_type=(result or {}).get("recognition_type"),
+                )
+                if not target:
+                    # 判不出来就丢弃：宁可这条通道继续等，也不能把结果塞进别的通道
+                    logger.warning(
+                        "无法判定结果的通道，已丢弃: node_id=%s task_id=%s requested=%s recognition=%s",
+                        node_id, task_id, payload.get("requested_channels"),
+                        (result or {}).get("recognition_type"),
+                    )
+                    return
+                if channel_service.is_duplicate_channel_result(payload, target, result):
+                    logger.warning(
+                        "重复的通道结果，已忽略: task_id=%s channel=%s（节点重试/网络重发）",
+                        parent_id, target,
+                    )
+                    return
+                channel_service.merge_channel_result(payload, target, result)
+                channel = target
 
                 status = channel_service.overall_status(payload) or "completed"
                 sql = """

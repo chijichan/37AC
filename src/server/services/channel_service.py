@@ -24,7 +24,11 @@ NODE_CHANNELS = (CHANNEL_37AC, CHANNEL_LLM)
 ALL_CHANNELS = (CHANNEL_37AC, CHANNEL_LLM, CHANNEL_HUMAN)
 
 CHANNEL_TO_RECOGNITION = {CHANNEL_37AC: "local", CHANNEL_LLM: "llm"}
+RECOGNITION_TO_CHANNEL = {"local": CHANNEL_37AC, "llm": CHANNEL_LLM}
 CHANNEL_TO_MODEL = {CHANNEL_37AC: "37ac", CHANNEL_LLM: "llm"}
+
+# 结果里的「回退」标记：节点被要求走某个通道，但实际用的是另一种推理方式
+FALLBACK_KEY = "fallback"
 
 _ALIASES = {
     "37ac": CHANNEL_37AC,
@@ -190,12 +194,105 @@ def set_human_votes(payload, entries, voter_key=None):
     return payload
 
 
+def expected_recognition(channel):
+    """该通道本来应该用哪种推理方式（37ac→local，llm→llm）。"""
+    return CHANNEL_TO_RECOGNITION.get(channel)
+
+
+def resolve_result_channel(parent_id, raw_task_id, payload=None, reported_channel=None,
+                           assigned_tasks=None, inferred_type=None):
+    """判定节点回传的结果属于哪个通道。
+
+    生产环境里网络抖动可能让节点回传的 id 丢掉 "<父id>:<通道>" 后缀，或把同一个结果
+    重复回传；以前是直接按 recognition_type 猜通道，猜错就会把 37ac 的结果写进 llm
+    （表现为两个通道一模一样的概率）。这里按可靠性依次判定，并且**任何一步都必须落在
+    requested_channels 里**，否则返回 None —— 调用方应当丢弃并记日志，绝不能硬塞。
+
+    判定顺序：
+      1) task_id 自带的后缀（最可靠，节点原样回传）
+      2) 节点消息里显式上报的 channel
+      3) 该节点上分配给这个父任务的子任务（只对应唯一通道时）
+      4) 父任务只请求了一个节点通道
+      5) 最后才按 recognition_type 推断，且必须是唯一对应的通道
+    """
+    payload = payload if isinstance(payload, dict) else {}
+    requested_all = payload.get("requested_channels")
+    requested = [c for c in (requested_all or []) if c in NODE_CHANNELS]
+    if isinstance(requested_all, list) and requested_all and not requested:
+        # 只请求了人工通道：节点结果没有归属，直接丢弃
+        return None
+
+    def accept(channel):
+        if not channel or channel not in NODE_CHANNELS:
+            return None
+        if requested and channel not in requested:
+            return None
+        return channel
+
+    _, suffix_channel = split_task_id(raw_task_id)
+    if suffix_channel:
+        return accept(suffix_channel)
+
+    reported = _ALIASES.get(str(reported_channel or "").strip().lower())
+    if reported:
+        return accept(reported)
+
+    found = set()
+    for tid in (assigned_tasks or []):
+        pid, ch = split_task_id(tid)
+        if pid == parent_id and ch:
+            found.add(ch)
+    if len(found) == 1:
+        return accept(next(iter(found)))
+
+    if len(requested) == 1:
+        return requested[0]
+
+    if inferred_type:
+        wanted = str(inferred_type).strip().lower()
+        matches = [c for c in (requested or list(NODE_CHANNELS))
+                   if CHANNEL_TO_RECOGNITION.get(c) == wanted]
+        if len(matches) == 1:
+            return accept(matches[0])
+    return None
+
+
+def is_duplicate_channel_result(payload, channel, node_result):
+    """同一通道的结果重复回传（节点重试/网络重发）→ 视为重复。
+
+    已经 completed 且识别方式与结果完全一致时返回 True，调用方应忽略这次回传，
+    避免重复合并（更避免重复结果被误判到别的通道）。
+    """
+    section = (payload or {}).get(channel)
+    if not isinstance(section, dict) or section.get("status") != "completed":
+        return False
+    incoming = node_result or {}
+    if (incoming.get("recognition_type") or None) != (section.get("recognition_type") or None):
+        return False
+    if bool(incoming.get("success")) != bool(section.get("success")):
+        return False
+    return ((incoming.get("class_probs") or []) == (section.get("class_probs") or [])
+            and (incoming.get("characters") or []) == (section.get("characters") or []))
+
+
 def merge_channel_result(payload, channel, node_result):
     """把节点回传的通道结果写进 payload，并维护顶层兼容字段。"""
     payload = payload if isinstance(payload, dict) else {}
     section = dict(node_result or {})
     section["status"] = "completed"
     section["submitted_at"] = int(time.time())
+
+    # 节点实际用的推理方式与通道本来该用的不一致 → 记下回退，别让人以为是这个通道自己的结果
+    expected = expected_recognition(channel)
+    actual = str(section.get("recognition_type") or "").strip().lower() or None
+    if expected and actual and actual != expected:
+        section[FALLBACK_KEY] = {
+            "requested": expected,
+            "actual": actual,
+        }
+    else:
+        section.pop(FALLBACK_KEY, None)
+
     payload[channel] = section
 
     requested = payload.get("requested_channels") or []

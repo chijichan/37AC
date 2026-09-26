@@ -206,6 +206,17 @@ class NodeManager:
                 return True
             return False
 
+    def get_assigned_tasks(self, node_id):
+        """该节点当前被分配的任务 id 列表（多通道时含 "<父id>:<通道>" 后缀）。
+
+        回传结果时用来判定通道：节点如果没带后缀，可以靠这里分配过的子任务反查。
+        """
+        with self.lock:
+            info = self.nodes.get(node_id)
+            if not info:
+                return []
+            return sorted(info.get("assigned_tasks", set()))
+
     def get_node_current_tasks(self, node_id):
         """获取节点当前任务数量"""
         with self.lock:
@@ -343,11 +354,18 @@ class NodeManager:
                 return node["socket"]
         return None
 
-    def allocate_node_for_task(self, recognition_type="local"):
+    def allocate_node_for_task(self, recognition_type="local", allow_fallback=False):
         """原子性地分配一个可用于执行任务的节点。
 
         在锁内同时完成：选择节点、校验 socket 有效性、增加任务计数、
         并在必要时将节点置为忙碌状态。返回 (node_id, socket_obj) 或 (None, None)。
+
+        allow_fallback=False（默认）：**只**分给 能力列表里含该 recognition_type 的节点。
+        没有匹配节点时返回 (None, None)，交给 task_manager 重试等待。
+        之前这里会"降级"到任意空闲节点，导致 llm 任务被发到只启用本地模型的节点上，
+        节点只能回退本地模型，结果顶着 llm 通道存下来 —— 看起来就是 37ac 的结果
+        溢出到了 llm（生产网络下 LLM 节点繁忙/掉线时最明显）。
+        auto 不受影响：它本来就接受任意节点。
         """
         with self.lock:
             candidates = []
@@ -366,12 +384,18 @@ class NodeManager:
                     candidates.append((node_id, info))
 
             if not candidates and recognition_type != "local":
-                # 降级：尝试任意可用节点
-                for node_id, info in self.nodes.items():
-                    if (info.get("socket") is not None
-                            and info["status"] == "idle"
-                            and info["current_tasks"] < info["max_tasks"]):
-                        candidates.append((node_id, info))
+                if allow_fallback:
+                    # 显式允许时才降级到任意可用节点（默认关闭：跨能力分发会污染通道结果）
+                    for node_id, info in self.nodes.items():
+                        if (info.get("socket") is not None
+                                and info["status"] == "idle"
+                                and info["current_tasks"] < info["max_tasks"]):
+                            candidates.append((node_id, info))
+                else:
+                    self._logger.warning(
+                        "没有支持 %s 的空闲节点：不降级到其它能力的节点（任务转等待重试）",
+                        recognition_type,
+                    )
 
             for node_id, info in candidates:
                 sock = info.get("socket")

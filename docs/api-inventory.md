@@ -228,6 +228,15 @@ Werkzeug 默认的 HTML 错误页（404/405/413/500…）也换成了同款 JSON
   代价：N 个人物 = N 次 LLM 调用，耗时与 token 随人数线性增长（可用 `LLM_MAX_CHARACTERS` 封顶）。
 - **部分完成**：37ac/llm 几秒回来、人工可能永远不来；`channel_status` 给出每通道状态，
   任务整体 status ∈ pending / partial / completed / failed。
+- **通道归属（2026-09-26 加固）**：结果落哪个通道由服务端按可靠性判定 ——
+  ① 子任务 id 后缀 `<父id>:<通道>` → ② 节点消息里的 `channel` → ③ 该节点分配记录里属于该父任务的子任务
+  → ④ 该父任务只请求了一个节点通道 → ⑤ 最后才按 `recognition_type` 推断。
+  **任何一步都必须落在 `requested_channels` 里，否则整条结果丢弃并记 warning**（宁可该通道继续等，
+  也不把结果塞进别的通道）。同一通道、同识别方式、结果完全一致的重复回传会被忽略（幂等）。
+- **回退标记**：节点被要求走 llm 但该节点未启用 LLM 时，会回退到本地模型 —— 结果里带
+  `fallback: {"requested":"llm","actual":"local"}`（节点侧同时上报 `channel` / `requested_recognition_type`）。
+  前端据此在卡片和详情里标「本机模型回退」，避免把 37ac 的数值当成 llm 的结果。
+  另外**分发不再跨能力降级**：没有 llm 节点的 llm 任务转 `waiting` 等待重试，不会发给只支持 local 的节点。
 - 匿名端点限流时 429 + `RATE_LIMITED`；任务不存在 404 + `NOT_FOUND`。
 
 ## 3. 规范性问题清单（按严重度）

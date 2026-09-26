@@ -923,6 +923,22 @@ require_once ROOT_PATH . '/views/layout.php';
         margin-top: .5rem;
     }
 
+    /* 通道回退：节点做不了请求的推理方式，这条其实是另一种模型给的（别当成该通道自己的结果） */
+    .channel-fallback {
+        margin-top: .5rem;
+        padding: .35rem .55rem;
+        border-radius: var(--ac-radius-input);
+        background: var(--ac-warning-bg, #FCF0DE);
+        color: #8a6100;
+        font-size: .78rem;
+        font-weight: 600;
+    }
+
+    .channel-chip.warn {
+        background: var(--ac-warning-bg, #FCF0DE);
+        color: #8a6100;
+    }
+
     .result-tools {
         display: flex;
         gap: .6rem;
@@ -2891,6 +2907,15 @@ require_once ROOT_PATH . '/views/layout.php';
             return html;
         }
 
+        /* 通道回退说明：节点被要求走 A 但实际用了 B，结果里带 fallback 标记 */
+        fallbackHtml(section) {
+            const fb = (section || {}).fallback;
+            if (!fb) return '';
+            const nameOf = (v) => (String(v || '').toLowerCase() === 'llm' ? '大模型' : '本机模型');
+            return '<div class="channel-fallback">⚠ 该节点没有' + escapeHtml(nameOf(fb.requested)) +
+                '能力，这条是' + escapeHtml(nameOf(fb.actual)) + '回退结果（数值可能和对应通道完全一样）</div>';
+        }
+
         /* 通道内部的失败信息（后端可能 status=completed 但 success=false + error） */
         channelErrorHtml(section, state) {
             if (!section) {
@@ -2930,6 +2955,7 @@ require_once ROOT_PATH . '/views/layout.php';
             } else if (section && Array.isArray(section.class_probs) && section.class_probs.length) {
                 body += this.candidatesHtml(section.class_probs, 5);
             }
+            body += this.fallbackHtml(section);
             body += this.channelErrorHtml(section, state);
 
             return this.channelCard('37ac 模型', state, body, null, '37ac');
@@ -2947,6 +2973,7 @@ require_once ROOT_PATH . '/views/layout.php';
                     body += '<div class="channel-meta">依据：' + escapeHtml(features.slice(0, 4).join('、')) + '</div>';
                 }
             }
+            body += this.fallbackHtml(section);
             body += this.channelErrorHtml(section, state);
             return this.channelCard('大模型（LLM）', state, body, null, 'llm');
         }
@@ -3300,8 +3327,13 @@ require_once ROOT_PATH . '/views/layout.php';
             html += '<button type="button" class="detail-close" data-detail-close aria-label="关闭">✕</button>';
             html += '</div>';
 
+            const fallback = (((result || {})[key]) || {}).fallback;
             html += '<div class="detail-meta">';
             html += '<span class="channel-chip ' + this.stateClass(stateName) + '">' + this.stateLabel(stateName) + '</span>';
+            if (fallback) {
+                const nameOf = (v) => (String(v || '').toLowerCase() === 'llm' ? '大模型' : '本机模型');
+                html += '<span class="channel-chip warn">' + escapeHtml(nameOf(fallback.actual)) + '回退</span>';
+            }
             if (taskId) html += '<span class="mono">' + escapeHtml(String(taskId).slice(0, 8)) + '…</span>';
             html += '<span>' + (rows.length ? ('共 ' + rows.length + ' 项' + (boxes.length ? ' · 带检测框 ' + boxes.length + ' 个' : ' · 无检测框')) : '暂无结果') + '</span>';
             html += '</div>';

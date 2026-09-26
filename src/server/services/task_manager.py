@@ -93,20 +93,63 @@ class TaskManager:
                 del self.pending_tasks[task_id]
 
     def _mark_task_failed(self, task_id, message):
-        """将任务标记为失败并推送 SSE，避免前端一直等待。"""
+        """将任务标记为失败并推送 SSE，避免前端一直等待。
+
+        多通道时 task_id 可能是 "<父id>:<通道>"（例如 llm 通道重试用尽）：这种情况必须写进
+        父任务那一行对应通道的 section —— 否则会新建一条 "<父id>:<通道>" 的幽灵记录，
+        父任务永远停在 pending。已经拿到结果的通道不会被失败覆盖。
+        """
+        from services import channel_service  # 延迟导入，避免循环依赖
+
+        parent_id, channel = channel_service.split_task_id(task_id)
+        target_id = parent_id if channel else task_id
+        skipped = False
         try:
             conn = get_db_connection()
             if conn:
                 with conn.cursor() as cursor:
-                    cursor.execute(
-                        """INSERT INTO task_results (task_id, result, status)
-                           VALUES (%s, %s, 'failed')
-                           ON DUPLICATE KEY UPDATE
-                               result = VALUES(result),
-                               status = 'failed',
-                               updated_at = CURRENT_TIMESTAMP""",
-                        (task_id, json.dumps({"error": message})),
-                    )
+                    if channel:
+                        payload = {}
+                        try:
+                            cursor.execute("SELECT result FROM task_results WHERE task_id = %s", (parent_id,))
+                            row = cursor.fetchone()
+                            if row and row[0]:
+                                payload = json.loads(row[0]) if isinstance(row[0], str) else row[0]
+                        except Exception as read_err:
+                            self._logger.debug("读取任务结果失败 task_id=%s: %s", parent_id, read_err)
+                        if not isinstance(payload, dict):
+                            payload = {}
+
+                        section = payload.get(channel)
+                        section = dict(section) if isinstance(section, dict) else {}
+                        if section.get("status") == "completed":
+                            # 这个通道已经有结果了（重复重试等）：不要把结果覆盖成失败
+                            skipped = True
+                        else:
+                            section["status"] = "failed"
+                            section["success"] = False
+                            section["error"] = message
+                            payload[channel] = section
+                            status = channel_service.overall_status(payload) or "failed"
+                            cursor.execute(
+                                """INSERT INTO task_results (task_id, result, status)
+                                   VALUES (%s, %s, %s)
+                                   ON DUPLICATE KEY UPDATE
+                                       result = VALUES(result),
+                                       status = VALUES(status),
+                                       updated_at = CURRENT_TIMESTAMP""",
+                                (parent_id, json.dumps(payload, ensure_ascii=False), status),
+                            )
+                    else:
+                        cursor.execute(
+                            """INSERT INTO task_results (task_id, result, status)
+                               VALUES (%s, %s, 'failed')
+                               ON DUPLICATE KEY UPDATE
+                                   result = VALUES(result),
+                                   status = 'failed',
+                                   updated_at = CURRENT_TIMESTAMP""",
+                            (task_id, json.dumps({"error": message})),
+                        )
                     conn.commit()
         except Exception as e:
             self._logger.error("标记任务失败失败: task_id=%s, error=%s", task_id, e)
@@ -114,10 +157,12 @@ class TaskManager:
             if "conn" in locals() and conn:
                 conn.close()
 
-        sse_bus.publish(task_id, {
+        if skipped:
+            return
+        sse_bus.publish(target_id, {
             "status": "failed",
             "message": message,
-            "task_id": task_id,
+            "task_id": target_id,
             "error": message,
             "result": [],
         })

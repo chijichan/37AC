@@ -1778,6 +1778,18 @@ require_once ROOT_PATH . '/views/layout.php';
                 this.openResultDetail(card.getAttribute('data-channel'),
                     row ? Number(row.getAttribute('data-index')) : null, wrap);
             });
+            // 页面切到后台就暂停轮询，切回来再继续（长时间挂着不再空打接口）
+            document.addEventListener('visibilitychange', () => {
+                if (document.hidden) {
+                    if (this.channelTimer && this.channelTimerTask) this.pausedRefreshTask = this.channelTimerTask;
+                    this.stopChannelRefresh();
+                } else if (this.pausedRefreshTask) {
+                    const id = this.pausedRefreshTask;
+                    this.pausedRefreshTask = null;
+                    this.startChannelRefresh(id);
+                }
+            });
+
             // 鼠标扫过结果卡片就先把原图拉下来（详情要用它），点开时就不用等
             document.addEventListener('mouseover', (e) => {
                 const card = (e.target && e.target.closest) ? e.target.closest('.result-wrap .channel-card[data-channel]') : null;
@@ -2611,7 +2623,71 @@ require_once ROOT_PATH . '/views/layout.php';
             this.resultWrap.classList.remove('active');
         }
 
-        /* 回退查询任务结果：SSE 完成事件丢失时，轮询 /api/tasks/{task_id} 获取已保存的结果 */
+        /**
+         * 统一的任务读取入口：同一 task_id 的并发请求合并成一次，
+         * 可选 maxAge 内的重复读取直接吃缓存。
+         * 之前结果区、历史列表、人工面板、回退查询各打各的，同一秒能发 3 个一样的请求。
+         * @returns {Promise<{ok:boolean,status:number,data:object}>}
+         */
+        async fetchTaskResult(taskId, options) {
+            const opts = options || {};
+            const id = String(taskId || '');
+            if (!id) throw new Error('缺少 task_id');
+            const inflight = (this.taskFetchInflight = this.taskFetchInflight || {});
+            const cache = (this.taskFetchCache = this.taskFetchCache || {});
+            const maxAge = Number(opts.maxAge) || 0;
+            const hit = cache[id];
+            if (hit && maxAge > 0 && (Date.now() - hit.at) < maxAge) {
+                return hit.result;
+            }
+            if (inflight[id]) return inflight[id];
+
+            const req = (async () => {
+                const resp = await fetch('/api/tasks/' + encodeURIComponent(id), {
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                });
+                let data = {};
+                try {
+                    data = await resp.json();
+                } catch (e) {
+                    data = {};
+                }
+                const result = {
+                    ok: resp.ok,
+                    status: resp.status,
+                    data: data
+                };
+                if (resp.ok) {
+                    cache[id] = {
+                        at: Date.now(),
+                        result: result
+                    };
+                }
+                if (!resp.ok && !opts.tolerant) {
+                    const err = new Error(data.message || ('读取失败 (' + resp.status + ')'));
+                    err.status = resp.status;
+                    err.data = data;
+                    throw err;
+                }
+                return result;
+            })();
+            inflight[id] = req;
+            try {
+                return await req;
+            } finally {
+                delete inflight[id];
+            }
+        }
+
+        /* 主动作废某条任务的读取缓存（自己刚提交了票/刚触发识别时用） */
+        invalidateTaskCache(taskId) {
+            const cache = this.taskFetchCache = this.taskFetchCache || {};
+            delete cache[String(taskId || '')];
+        }
+
+        /* 回退查询任务结果：SSE 完成事件丢失时，查一次 /api/tasks/{task_id}，没好就交给统一轮询 */
         async recoverResult() {
             if (!this.currentTaskId) {
                 throw new Error('未收到识别结果');
@@ -2619,41 +2695,35 @@ require_once ROOT_PATH . '/views/layout.php';
             const taskId = this.currentTaskId;
             this.updateProgressStatus('正在获取识别结果...');
 
-            // 最多轮询若干次，间隔递增：结果已在数据库，短时内即可查询到
-            const maxAttempts = 6;
-            for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-                try {
-                    const resp = await fetch(`/api/tasks/${encodeURIComponent(taskId)}`, {
-                        headers: {
-                            'X-Requested-With': 'XMLHttpRequest'
-                        },
-                    });
-                    if (resp.ok) {
-                        const data = await resp.json();
-                        const result = data && data.result;
-                        // 完成且带结果 → 展示
-                        if (result && data.status === 'completed') {
-                            this.showResult(result, data.channel_status);
-                            return;
-                        }
-                        // 明确失败 / 错误 → 直接抛出对应提示
-                        if (data.status === 'failed' || data.status === 'error') {
-                            throw new Error(data.message || '识别失败，请稍后重试');
-                        }
-                        // pending / 尚无结果 → 继续轮询
-                    }
-                } catch (e) {
-                    // 网络瞬时错误可重试；业务错误直接上抛
-                    if (e && e.message && e.message !== '未收到识别结果' && e.message !== 'Failed to fetch') {
-                        throw e;
-                    }
-                }
-                await new Promise(resolve => setTimeout(resolve, 1500 * attempt));
+            // 只查一次（并发还会被合并）：还没好就交给统一的轮询链去跟，
+            // 不再自己按 1.5s×N 循环 —— 那样会和轮询链同时打同一个接口
+            let resp;
+            try {
+                resp = await this.fetchTaskResult(taskId);
+            } catch (e) {
+                // 读取失败（任务不存在/被清理等）：按业务错误提示
+                throw e;
+            }
+            const data = resp.data || {};
+            const result = data.result;
+            if (result && data.status === 'completed') {
+                this.showResult(result, data.channel_status);
+                return;
+            }
+            if (data.status === 'failed' || data.status === 'error') {
+                throw new Error(data.message || '识别失败，请稍后重试');
             }
 
-            // 轮询结束仍未拿到结果：提示稍后刷新查询，而非误报失败
-            this.updateProgressStatus('识别时间较长，任务仍在后台处理中');
-            this.showError('识别结果暂未返回，任务可能仍在后台处理中，请稍后刷新页面查看结果。若长时间无结果，请检查节点是否在线。');
+            // 还没有最终结果：先把已有通道画出来，剩下交给轮询链自动更新
+            const status = data.channel_status || {};
+            if (result && Object.keys(result).length) {
+                this.currentTaskId = taskId;
+                this.renderChannelsInto(this.resultWrap, result, status, taskId);
+            }
+            this.startChannelRefresh(taskId, {
+                delayFirst: true
+            });
+            this.updateProgressStatus('识别仍在后台处理中，结果会自动更新…');
         }
 
         /* 从 URL 获取图片 */
@@ -2715,6 +2785,7 @@ require_once ROOT_PATH . '/views/layout.php';
                 clearTimeout(this.channelTimer);
             }
             this.channelTimer = null;
+            this.channelTimerTask = null;
         }
 
         /* 取消请求 */
@@ -3533,13 +3604,8 @@ require_once ROOT_PATH . '/views/layout.php';
             }
             this.setBusy(true);
             try {
-                const resp = await fetch('/api/tasks/' + encodeURIComponent(taskId), {
-                    headers: {
-                        'X-Requested-With': 'XMLHttpRequest'
-                    },
-                });
-                const data = await resp.json();
-                if (!resp.ok) throw new Error(data.message || ('读取失败 (' + resp.status + ')'));
+                const resp = await this.fetchTaskResult(taskId);
+                const data = resp.data || {};
                 const result = data.result || {};
                 const status = data.channel_status || {};
                 this.updateHistoryEntry(taskId, {
@@ -3565,9 +3631,13 @@ require_once ROOT_PATH . '/views/layout.php';
          * - 节点通道都完成、但人工通道还没票：放慢到 10 秒一问，继续等人工票
          * - 人工有票 / 没有人工通道 / 超过上限 / 换任务 / 有新识别：停
          */
-        startChannelRefresh(taskId) {
+        startChannelRefresh(taskId, options) {
             if (!taskId) return;
+            // 同一任务已经在轮询：直接沿用（每次结果事件都重建会立刻多发一次请求、还会重置节奏）
+            if (this.channelTimer && this.channelTimerTask === taskId) return;
+            const opts = options || {};
             this.stopChannelRefresh();
+            this.channelTimerTask = taskId;
             const self = this;
             const epoch = this.updateEpoch;
             let attempts = 0;
@@ -3581,10 +3651,9 @@ require_once ROOT_PATH . '/views/layout.php';
                 }
                 let delay = 5000;
                 try {
-                    const resp = await fetch('/api/tasks/' + encodeURIComponent(taskId), {
-                        headers: {
-                            'X-Requested-With': 'XMLHttpRequest'
-                        },
+                    // 统一入口：同一秒里历史列表/人工面板也读这条任务时会被合并成一次请求
+                    const resp = await self.fetchTaskResult(taskId, {
+                        tolerant: true
                     });
                     // 关键：请求往返期间可能已经有新的识别请求，回来后再校验一次
                     if (epoch !== self.updateEpoch) {
@@ -3592,7 +3661,7 @@ require_once ROOT_PATH . '/views/layout.php';
                         return;
                     }
                     if (resp.ok) {
-                        const data = await resp.json();
+                        const data = resp.data || {};
                         if (epoch !== self.updateEpoch) {
                             self.stopChannelRefresh();
                             return;
@@ -3627,13 +3696,24 @@ require_once ROOT_PATH . '/views/layout.php';
                 }
                 self.channelTimer = setTimeout(tick, delay);
             };
-            tick();
+            if (opts.delayFirst) {
+                // 调用方刚读过一次（比如回退查询），别紧接着再打一遍
+                self.channelTimer = setTimeout(tick, 5000);
+            } else {
+                tick();
+            }
         }
 
         /* 进历史页时把本机记录里还没跑完的通道状态补一次（列表卡片不再是旧状态） */
         async refreshHistoryStatuses() {
+            // 节流：8 秒内不重复刷（切来切去不再每次都打一遍接口）
+            const now = Date.now();
+            if (now - (this.historyStatusAt || 0) < 8000) return;
+            this.historyStatusAt = now;
+
             const list = this.loadHistory();
             const pending = list.filter((item) => {
+                if (item.task_id === this.channelTimerTask) return false;   // 正在轮询的那条由轮询链负责
                 const st = item.channel_status || {};
                 const keys = Object.keys(st);
                 if (!keys.length) return true;
@@ -3646,13 +3726,12 @@ require_once ROOT_PATH . '/views/layout.php';
             try {
                 await Promise.all(pending.map(async (item) => {
                     try {
-                        const resp = await fetch('/api/tasks/' + encodeURIComponent(item.task_id), {
-                            headers: {
-                                'X-Requested-With': 'XMLHttpRequest'
-                            },
+                        const resp = await this.fetchTaskResult(item.task_id, {
+                            maxAge: 3000,
+                            tolerant: true
                         });
                         if (!resp.ok) return;
-                        const data = await resp.json();
+                        const data = resp.data || {};
                         const st = data.channel_status || {};
                         if (Object.keys(st).length) {
                             this.updateHistoryEntry(item.task_id, {
@@ -3996,13 +4075,10 @@ require_once ROOT_PATH . '/views/layout.php';
             }
 
             try {
-                const resp = await fetch('/api/tasks/' + encodeURIComponent(taskId), {
-                    headers: {
-                        'X-Requested-With': 'XMLHttpRequest'
-                    },
+                const resp = await this.fetchTaskResult(taskId, {
+                    maxAge: 1500
                 });
-                const data = await resp.json();
-                if (!resp.ok) throw new Error(data.message || ('读取失败 (' + resp.status + ')'));
+                const data = resp.data || {};
                 this.humanTaskData = data;
 
                 if (image) {
@@ -4306,6 +4382,8 @@ require_once ROOT_PATH . '/views/layout.php';
                 Notify.success('已提交 ' + list.length + ' 个角色标注，感谢投喂！');
                 this.pendingVotes = [];
                 this.renderPending();
+                // 刚投完票：作废这条任务的读取缓存，避免立刻读到投票前的旧票
+                this.invalidateTaskCache(taskId);
                 await this.loadHumanTask(taskId);
                 this.loadHumanTaskList();
             } catch (e) {

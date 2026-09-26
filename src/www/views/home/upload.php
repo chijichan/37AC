@@ -1492,8 +1492,10 @@ require_once ROOT_PATH . '/views/layout.php';
                     if (this.humanCropPlaceholder) this.humanCropPlaceholder.style.display = 'none';
                     if (this.humanCropCanvas) this.humanCropCanvas.classList.remove('flow-empty');
                     this.initHumanCropper();
-                    // 图片撑开高度后校正一次滚动位置（不清 pending：列表可能还在渲染）
-                    this.scrollToAnnotateCard(0);
+                    // 图片只会把页面撑长，标注卡片自己在上面没动过位置：
+                    // 所以只有"上次因为页面不够长、没滚到位"时才补一次，
+                    // 否则就会看成"图片加载完又多滑了一段"。
+                    if (this.scrollAnim && this.scrollAnim.clamped) this.scrollToAnnotateCard(0);
                 });
                 this.humanCropImage.addEventListener('error', () => {
                     // 只有正在加载真实图片时才当错误（清空 src 会触发假 error）
@@ -2338,8 +2340,8 @@ require_once ROOT_PATH . '/views/layout.php';
         stopChannelRefresh() {
             if (this.channelTimer) {
                 clearTimeout(this.channelTimer);
-                this.channelTimer = null;
             }
+            this.channelTimer = null;
         }
 
         /* 取消请求 */
@@ -2372,6 +2374,8 @@ require_once ROOT_PATH . '/views/layout.php';
                 tab.addEventListener('click', () => this.switchTab(tab.getAttribute('data-tab')));
             });
             const params = new URLSearchParams(window.location.search || '');
+            // ?scrolldebug=1：把每一次滚动决策打到 console（排查"多滑一段 / 回弹"用）
+            this.scrollDebug = params.get('scrolldebug') === '1';
             const hash = (window.location.hash || '').replace('#', '');
             const wanted = params.get('tab') || hash;
             if (wanted && this.panels[wanted]) {
@@ -2948,7 +2952,9 @@ require_once ROOT_PATH . '/views/layout.php';
             // 骨架卡张数 + 最小高度都对齐上一次的真实列表：骨架态的布局高度≈真实高度，
             // 点「标注这张」时就能立刻算出准确的 Y 开始滑，不用等接口回来
             wrap.innerHTML = this.skeletonListHtml(this.lastTaskPoolSize || 3);
-            if (this.lastListHeight) wrap.style.minHeight = this.lastListHeight + 'px';
+            const reserve = this.pinnedListHeight || this.lastListHeight || 0;
+            if (reserve) wrap.style.minHeight = reserve + 'px';
+            this.listLoading = true;
             this.setBusy(true);
             try {
                 const resp = await fetch('/api/tasks/recent?limit=12', {
@@ -2973,13 +2979,22 @@ require_once ROOT_PATH . '/views/layout.php';
                 wrap.style.minHeight = '';
                 // 记下真实高度，下次骨架态直接占住同样的高度
                 const measured = wrap.offsetHeight || wrap.getBoundingClientRect().height || 0;
-                if (measured) this.lastListHeight = Math.round(measured);
+                if (measured) {
+                    this.lastListHeight = Math.round(measured);
+                    // 正在标注时把列表高度钉住：投完票那张图会从待标注池里消失，
+                    // 上面的列表一矮，下面的标注卡片就会整体上跳（看着像滚动回弹）
+                    if (this.humanLoadedTask) {
+                        this.pinnedListHeight = Math.max(this.pinnedListHeight || 0, this.lastListHeight);
+                        wrap.style.minHeight = this.pinnedListHeight + 'px';
+                    }
+                }
             } catch (e) {
                 this.humanTaskPool = [];
                 wrap.style.minHeight = '';
                 wrap.innerHTML = '<div class="empty"><div class="empty-icon"><i class="ph ph-cloud-slash"></i></div><p>暂时拿不到待标注任务，点「刷新任务」重试</p></div>';
                 Notify.error('加载待标注任务失败：' + (e.message || e));
             } finally {
+                this.listLoading = false;
                 this.setBusy(false);
             }
         }
@@ -3020,16 +3035,38 @@ require_once ROOT_PATH . '/views/layout.php';
         /* 算好 Y 立刻滑一次，随后在几个高度会变的节点上各校正一次 */
         scheduleAnnotateScroll() {
             this.autoScrollPending = true;
-            // 列表高度已知（骨架已按上次真实高度占位）就立刻开滑，手感最快；
-            // 第一次来还不知道多高（骨架 3 张 vs 真实可能十几张），等渲染完再滑到准确位置，
-            // 免得滑到一半又改目标。
-            if (this.lastListHeight) this.scrollToAnnotateCard(0);
+            // 列表高度已知且没在请求中（骨架已按上次真实高度占位）就立刻开滑，手感最快；
+            // 否则（第一次来 / 正在重新拉列表，骨架 3 张 vs 真实可能十几张）等渲染完再滑到
+            // 准确位置，免得滑到一半又改目标，长距离下就是顿挫。
+            if (this.lastListHeight && !this.listLoading) this.scrollToAnnotateCard(0);
             setTimeout(() => this.scrollToAnnotateCard(0), 600);
             setTimeout(() => this.scrollToAnnotateCard(0), 1500);
             // 3s 后收工，之后不再抢滚动条
             setTimeout(() => {
                 this.autoScrollPending = false;
             }, 3000);
+        }
+
+        /* 页面当前最大可滚动距离（用来判断目标是不是被页面长度卡住了） */
+        maxScrollTop() {
+            try {
+                const doc = document.documentElement || {};
+                return Math.max(0, (doc.scrollHeight || 0) - (window.innerHeight || 0));
+            } catch (e) {
+                return 0;
+            }
+        }
+
+        /* ?scrolldebug=1 时把滚动决策打到 console，排查"多滑一段/回弹" */
+        scrollLog(kind, data) {
+            if (!this.scrollDebug) return;
+            const line = '[scroll] ' + kind + ' ' + JSON.stringify(data || {});
+            this.scrollLogLines = (this.scrollLogLines || []).concat(line).slice(-200);
+            try {
+                console.log(line);
+            } catch (e) {
+                // 忽略
+            }
         }
 
         /* 标注卡片当前应该滚到的 Y（扣掉 sticky 导航高度） */
@@ -3058,25 +3095,56 @@ require_once ROOT_PATH . '/views/layout.php';
             const ms = delay === undefined ? 60 : delay;
             const run = () => {
                 // 用户自己滚过（wheel/touch）就放弃：连已经排队的这次也不执行
-                if (!force && !this.autoScrollPending) return;
+                if (!force && !this.autoScrollPending) {
+                    this.scrollLog('skip', {
+                        why: '用户已经自己滚了'
+                    });
+                    return;
+                }
                 const top = this.annotateScrollTop();
-                if (top === null) return;
+                if (top === null) {
+                    this.scrollLog('skip', {
+                        why: '标注卡片还没展开'
+                    });
+                    return;
+                }
                 const cur = window.pageYOffset || window.scrollY || 0;
+                const maxScroll = this.maxScrollTop();
                 const anim = this.scrollAnim;
                 // 还在朝上一次的目标滑：目标只差一点点就别打断。
                 // 中途改目标会让浏览器从当前位置重新起一段动画，长距离下就是"冲过去再退回来"的顿挫。
                 if (anim && (Date.now() - anim.at) < 1600 && Math.abs(cur - anim.target) > 8) {
-                    if (Math.abs(top - anim.target) < 140) return;
+                    // 例外：上次是"页面还不够长、被浏览器卡住"，现在页面够长了，这种要立刻补上
+                    const unblocked = anim.clamped && top <= maxScroll + 2;
+                    if (!unblocked && Math.abs(top - anim.target) < 140) {
+                        this.scrollLog('skip', {
+                            why: '滑动中，目标只差 ' + Math.round(Math.abs(top - anim.target)) + 'px',
+                            cur: cur,
+                            top: top,
+                            target: anim.target
+                        });
+                        return;
+                    }
                 }
                 // 已经到位就不重复触发（多次校正时不抖）
                 if (Math.abs(cur - top) < 6) {
                     this.scrollAnim = null;
+                    this.scrollLog('settled', {
+                        top: top
+                    });
                     return;
                 }
                 this.scrollAnim = {
                     target: top,
-                    at: Date.now()
+                    at: Date.now(),
+                    clamped: top > maxScroll + 2
                 };
+                this.scrollLog('go', {
+                    top: top,
+                    cur: cur,
+                    maxScroll: maxScroll,
+                    clamped: this.scrollAnim.clamped
+                });
                 try {
                     window.scrollTo({
                         top: top,
@@ -3093,9 +3161,18 @@ require_once ROOT_PATH . '/views/layout.php';
             }
         }
 
+        /* 标注卡片收起后，列表不需要再钉着高度 */
+        releaseListPin() {
+            this.pinnedListHeight = 0;
+            if (this.humanTaskList) this.humanTaskList.style.minHeight = '';
+        }
+
         renderHumanPanel() {
             const taskId = this.humanLoadedTask;
-            if (!taskId && this.humanAnnotateCard) this.humanAnnotateCard.hidden = true;
+            if (!taskId && this.humanAnnotateCard) {
+                this.humanAnnotateCard.hidden = true;
+                this.releaseListPin();
+            }
             this.loadHumanTaskList().then(() => {
                 if (taskId) this.loadHumanTask(taskId); // 刷新列表时保持当前任务高亮
                 this.scrollToAnnotateCard(0); // 真实卡片渲染完，按新高度校正
@@ -3162,6 +3239,7 @@ require_once ROOT_PATH . '/views/layout.php';
                 this.humanTaskData = null;
                 this.humanLoadedTask = null;
                 if (this.humanAnnotateCard) this.humanAnnotateCard.hidden = true;
+                this.releaseListPin();
                 if (meta) meta.textContent = '';
                 if (this.humanVotes) this.humanVotes.innerHTML = '';
                 Notify.error('任务读取失败：' + (e.message || e));

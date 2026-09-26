@@ -2381,9 +2381,8 @@ require_once ROOT_PATH . '/views/layout.php';
             const taskParam = (params.get('task') || '').trim();
             if (taskParam) {
                 this.switchTab('human');
-                this.autoScrollPending = true;
                 this.loadHumanTask(taskParam);
-                this.scrollToAnnotateCard(120);
+                this.scheduleAnnotateScroll();
             }
         }
 
@@ -3021,7 +3020,10 @@ require_once ROOT_PATH . '/views/layout.php';
         /* 算好 Y 立刻滑一次，随后在几个高度会变的节点上各校正一次 */
         scheduleAnnotateScroll() {
             this.autoScrollPending = true;
-            this.scrollToAnnotateCard(0);
+            // 列表高度已知（骨架已按上次真实高度占位）就立刻开滑，手感最快；
+            // 第一次来还不知道多高（骨架 3 张 vs 真实可能十几张），等渲染完再滑到准确位置，
+            // 免得滑到一半又改目标。
+            if (this.lastListHeight) this.scrollToAnnotateCard(0);
             setTimeout(() => this.scrollToAnnotateCard(0), 600);
             setTimeout(() => this.scrollToAnnotateCard(0), 1500);
             // 3s 后收工，之后不再抢滚动条

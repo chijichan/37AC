@@ -3,6 +3,7 @@
 import os
 import shutil
 import threading
+import traceback
 
 from config.log_config import get_logger
 from detection.bbox import (
@@ -22,6 +23,91 @@ LEGACY_CROP_SUFFIXES = ("_37ac", "_yolo")
 # 全局缓存
 _detector_instance = None
 
+# ultralytics / opencv 可用性探测结果（只探一次，失败原因缓存下来）
+_AVAILABILITY = {
+    "checked": False,
+    "ok": False,
+    "reason": "",
+}
+
+# 服务器上最常见的两种失败：ultralytics 真的没装；装了但 opencv 缺系统库
+# （opencv-python 的预编译包依赖 libGL / libglib，纯命令行服务器上常常没有）
+_SYSTEM_LIB_HINTS = (
+    ("libGL.so.1", "libGL.so.1"),
+    ("libGL.so", "libGL.so"),
+    ("libglib-2.0.so.0", "libglib-2.0.so.0"),
+    ("libgthread-2.0.so.0", "libgthread-2.0.so.0"),
+)
+
+
+def _describe_import_error(exc):
+    """把导入异常翻译成"能直接照做"的一句话。
+
+    生产上出现过：ultralytics 明明装了，却因为 opencv 缺 libGL 而 import 失败，
+    旧代码统一报"ultralytics 未安装"，把人带偏。
+    """
+    name = getattr(exc, "name", None) or ""
+    text = str(exc)
+    missing = name
+    if not missing and "'" in text:
+        missing = text.split("'")[1]
+
+    for key, shown in _SYSTEM_LIB_HINTS:
+        if key in text:
+            return ("缺少系统库 %s（opencv 需要）：apt-get install -y libgl1 libglib2.0-0，"
+                    "或装无界面版 pip install opencv-python-headless" % shown)
+
+    if missing and missing not in ("cv2", "ultralytics", "opencv"):
+        return "缺少依赖 %s：pip install %s" % (missing, missing)
+
+    if missing == "cv2" or "cv2" in text:
+        return "opencv 不可用（YOLO 依赖 cv2）：检查 opencv-python 安装，服务器建议 opencv-python-headless"
+
+    if isinstance(exc, ImportError):
+        return "ultralytics 未安装或依赖不全：pip install -r src/cli/requirements.txt"
+
+    return "%s: %s" % (type(exc).__name__, exc)
+
+
+def check_yolo_available(force=False):
+    """探测 YOLO 是否可用，返回 (ok, 原因)。
+
+    只探一次（force=True 可重探）；结果缓存在模块级，避免"每张图 import 一次、
+    每张图刷一遍同样的 warning"。原因同时供注册消息 / 识别结果使用。
+    """
+    if _AVAILABILITY["checked"] and not force:
+        return _AVAILABILITY["ok"], _AVAILABILITY["reason"]
+
+    _AVAILABILITY.update({"checked": True, "ok": False, "reason": ""})
+
+    # 1) opencv：ultralytics 的硬依赖，也是服务器上最容易缺系统库的一环
+    try:
+        import cv2  # noqa: F401
+    except Exception as exc:
+        reason = "opencv 不可用（YOLO 依赖）：" + _describe_import_error(exc)
+        _AVAILABILITY["reason"] = reason
+        logger.warning("YOLO 不可用：%s", reason)
+        logger.debug("opencv 导入堆栈：\n%s", traceback.format_exc())
+        return False, reason
+
+    # 2) ultralytics 本体
+    try:
+        import ultralytics  # noqa: F401
+    except Exception as exc:
+        reason = "ultralytics 不可用：" + _describe_import_error(exc)
+        _AVAILABILITY["reason"] = reason
+        logger.warning("YOLO 不可用：%s", reason)
+        logger.debug("ultralytics 导入堆栈：\n%s", traceback.format_exc())
+        return False, reason
+
+    _AVAILABILITY["ok"] = True
+    return True, ""
+
+
+def yolo_available():
+    """给外部用：YOLO 能不能用 + 不能用是为什么（注册消息 / 识别结果里带上）。"""
+    return check_yolo_available()
+
 
 class YoloDetector:
     """基于 Ultralytics YOLOv8 的目标检测器。
@@ -36,11 +122,22 @@ class YoloDetector:
         self.device = device
         self._model = None
         self._loaded = False
+        # 失败过就不再重试：既不刷日志，也不重复付 import 的代价
+        self._load_failed = False
+        self.load_error = ""
 
     def _load_model(self):
         """加载 YOLO 模型（首次使用时延迟加载）"""
         if self._loaded:
             return True
+        if self._load_failed:
+            return False
+
+        ok, reason = check_yolo_available()
+        if not ok:
+            self._load_failed = True
+            self.load_error = reason
+            return False
 
         try:
             from ultralytics import YOLO
@@ -58,11 +155,18 @@ class YoloDetector:
             logger.info("YOLO 模型加载成功")
             return True
 
-        except ImportError:
-            logger.warning("ultralytics 未安装，YOLO 检测不可用 (pip install ultralytics)")
+        except ImportError as e:
+            # 注意：这里不是"没装"的同义词 —— cv2 缺系统库、子依赖缺失都会走这里
+            self._load_failed = True
+            self.load_error = _describe_import_error(e)
+            logger.warning("YOLO 检测不可用：%s", self.load_error)
+            logger.debug("YOLO 导入堆栈：\n%s", traceback.format_exc())
             return False
         except Exception as e:
-            logger.error("YOLO 模型加载失败: %s", e)
+            self._load_failed = True
+            self.load_error = "YOLO 模型加载失败：%s: %s" % (type(e).__name__, e)
+            logger.error("%s", self.load_error)
+            logger.debug("YOLO 加载堆栈：\n%s", traceback.format_exc())
             return False
 
     def detect(self, image):
@@ -359,10 +463,9 @@ def crop_dataset(source_dir: str, output_dir: str, target_classes=None, max_imag
     if target_classes is None:
         target_classes = ["person"]
 
-    try:
-        import ultralytics  # noqa: F401
-    except ImportError:
-        logger.warning("ultralytics 未安装，无法裁剪数据集")
+    ok, reason = check_yolo_available()
+    if not ok:
+        logger.warning("无法用 YOLO 裁剪数据集：%s", reason)
         return {"processed": 0, "skipped": 0, "failed": 0}
 
     from config.log_config import get_logger as _get_logger

@@ -460,6 +460,7 @@ def predict_image(image_path, model_path=None, classes_file=None, use_cache=True
 
                     if characters:
                         best = max(characters, key=lambda c: c["confidence"] or 0)
+                        _attach_yolo_note(result)
                         result.update({
                             "success": True,
                             "class_probs": best["class_probs"],   # 兼容旧客户端：顶层=最佳人物
@@ -495,6 +496,7 @@ def predict_image(image_path, model_path=None, classes_file=None, use_cache=True
                 return result
             with Image.open(image_path) as raw_img:
                 original_size = raw_img.size
+            _attach_yolo_note(result)
             result.update(
                 {
                     "success": True,
@@ -719,6 +721,22 @@ def _encode_image_for_llm(image_path, max_side=None, quality=85):
     except Exception as e:
         logger.error("LLM 图片编码失败 %s: %s", image_path, e)
         return None, ""
+
+
+def _attach_yolo_note(result):
+    """YOLO（人物检测框）不可用时，把真实原因塞进识别结果。
+
+    服务器上常见"ultralytics 装了但 opencv 缺 libGL" —— 以前只在节点日志里报一句
+    "ultralytics 未安装"，接口/前端完全看不出为什么没有检测框。
+    """
+    try:
+        from detection.yolo_detector import yolo_available
+        ok, reason = yolo_available()
+    except Exception as exc:
+        ok, reason = False, "检测器初始化失败：%s" % exc
+    if not ok and reason:
+        result["yolo_error"] = reason
+    return result
 
 
 def resolve_llm_crop_method() -> str:

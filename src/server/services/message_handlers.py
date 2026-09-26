@@ -40,6 +40,12 @@ def async_handle_register(conn, addr, msg):
     # 节点上报的 LLM 配置（用于任务重试间隔决策）
     llm_enabled = msg["data"].get("llm_enabled", False)
     llm_timeout_sec = msg["data"].get("llm_timeout_sec", 0)
+    # 节点上报的 YOLO（人物检测框）可用性：装是装了但 opencv 缺系统库是常见坑，
+    # 上报真实原因，服务端日志里就能看到，不用去翻节点日志
+    yolo_available = bool(msg["data"].get("yolo_available", True))
+    yolo_error = str(msg["data"].get("yolo_error") or "")[:300]
+    if not yolo_available:
+        logger.warning("节点 %s 的 YOLO 不可用，识别将退化为整图分类：%s", node_id, yolo_error or "原因未上报")
 
     if not node_id or not token or not isinstance(max_tasks, (int, float)):
         register_ack = {
@@ -89,6 +95,8 @@ def async_handle_register(conn, addr, msg):
                     node["models"] = models
                     node["llm_enabled"] = bool(llm_enabled)
                     node["llm_timeout_sec"] = int(llm_timeout_sec or 0)
+                    node["yolo_available"] = yolo_available
+                    node["yolo_error"] = yolo_error
                     node["assigned_tasks"] = set()
                 node_manager.update_db_node_capabilities(node_id, capabilities)
                 register_ack = {
@@ -112,6 +120,10 @@ def async_handle_register(conn, addr, msg):
                 node_id, addr, conn, max_tasks, capabilities,
                 models=models, llm_enabled=llm_enabled, llm_timeout_sec=llm_timeout_sec,
             )
+            with node_manager.lock:
+                if node_id in node_manager.nodes:
+                    node_manager.nodes[node_id]["yolo_available"] = yolo_available
+                    node_manager.nodes[node_id]["yolo_error"] = yolo_error
             node_manager.update_db_node_status(node_id, "online", addr=addr)
             node_manager.update_db_node_capabilities(node_id, capabilities)
             node_manager.set_node_idle(node_id)

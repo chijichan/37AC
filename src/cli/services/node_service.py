@@ -482,6 +482,19 @@ def start_node_service(auto_update_model=None):
             if not node_models:
                 node_models = ["37ac"]
 
+            # YOLO 可用性：服务器上常见"装是装了，但 opencv 缺系统库"，
+            # 旧代码只会打一句"ultralytics 未安装"，这里把真实原因一起带上，
+            # 方便在节点日志/管理页直接看出为什么没有检测框
+            yolo_ok, yolo_reason = True, ""
+            if LOCAL_RECOGNITION_ENABLED:
+                try:
+                    from detection.yolo_detector import yolo_available
+                    yolo_ok, yolo_reason = yolo_available()
+                except Exception as exc:
+                    yolo_ok, yolo_reason = False, "检测器初始化失败：%s" % exc
+                if not yolo_ok:
+                    logger.warning("本次注册将上报 YOLO 不可用：%s", yolo_reason)
+
             register_msg = {
                 "type": "register",
                 "timestamp": int(time.time()),
@@ -497,6 +510,9 @@ def start_node_service(auto_update_model=None):
                     # 附带 LLM 配置信息，供服务端决策任务重试间隔
                     "llm_enabled": LLM_RECOGNITION_ENABLED,
                     "llm_timeout_sec": LLM_TIMEOUT_SEC,
+                    # YOLO（人物检测框）可用性 + 不可用原因
+                    "yolo_available": yolo_ok,
+                    "yolo_error": yolo_reason,
                 },
             }
             json_protocol.send_json(s, register_msg)

@@ -175,6 +175,8 @@ curl -s -N --max-time 480 -H "X-Stream-Response: true" -H "X-Requested-With: XML
 | 502 Bad Gateway | PHP-FPM 未启动或 socket 路径不符 | `systemctl status php8.2-fpm`；核对 `fastcgi_pass` |
 | 403 权限不足 | Nginx 用户读不到站点目录 | `sudo chown -R www-data:www-data /opt/37AC` |
 | Flask 无法连库 | `.env` 未配置或 MySQL 未就绪 | 核对 `src/server/.env`；`systemctl status mysql` |
+| 节点日志反复出现「YOLO 不可用 / ultralytics 未安装」 | 多半不是没装，而是 **opencv 缺系统库**（纯命令行服务器没有桌面的 libGL/libglib） | 先看节点日志里那句真实原因（2026-09-26 起会带上）；修复：`apt-get install -y libgl1 libglib2.0-0`，或改装 `opencv-python-headless`。验证：用节点同一环境跑 `python -c "import cv2, ultralytics"` |
+| 识别结果没有人物检测框（`crop_method: full`） | 同上；服务端在节点注册时会警告一行，识别结果里也带 `yolo_error` | 按上一条修好后重启节点；前端 37ac 卡片与详情会标出「未跑人物检测框」并附原因 |
 
 ## 生产环境建议
 

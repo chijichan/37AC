@@ -9,8 +9,14 @@ torchvision==0.28.0
 # .env 中设置 USE_DIRECTML=True 启用
 
 # YOLO 人物检测（快速定位 + ResNet 分类）
-ultralytics==8.0.0
-opencv-python==4.8.0  # ultralytics 依赖
+# 纯命令行服务器（无桌面）上，opencv 的预编译包需要系统库才能 import：
+#     Debian/Ubuntu: apt-get install -y libgl1 libglib2.0-0
+#     或改用无界面版: pip install opencv-python-headless==5.0.0.93
+# 缺这些库时 import cv2 会失败，节点日志会报：
+#     "YOLO 不可用：opencv 不可用（YOLO 依赖）：缺少系统库 libGL.so.1 ..."
+# （旧版本一律报 "ultralytics 未安装 (pip install ultralytics)"，容易误判成没装）
+ultralytics==8.4.93
+opencv-python==5.0.0.93
 
 # 第二种裁剪方式：MediaPipe 关键点（CROP_METHOD=mediapipe / auto 的兜底，见 detection/mediapipe_detector.py）
 # 模型文件（.tflite，约 28MB）随 wheel 分发，无需额外下载；

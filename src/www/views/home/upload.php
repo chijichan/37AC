@@ -3177,6 +3177,15 @@ require_once ROOT_PATH . '/views/layout.php';
             return html;
         }
 
+        /* YOLO（人物检测框）不可用说明：只给整图分类时，解释一下为什么没有框 */
+        yoloHintHtml(section) {
+            const reason = (section || {}).yolo_error;
+            if (!reason) return '';
+            const short = String(reason).split('：')[0].slice(0, 40);
+            return '<div class="channel-fallback" title="' + escapeHtml(String(reason)) + '">⚠ 未跑人物检测框（' +
+                escapeHtml(short) + '），这次按整图分类</div>';
+        }
+
         /* 通道回退说明：节点被要求走 A 但实际用了 B，结果里带 fallback 标记 */
         fallbackHtml(section) {
             const fb = (section || {}).fallback;
@@ -3225,6 +3234,7 @@ require_once ROOT_PATH . '/views/layout.php';
             } else if (section && Array.isArray(section.class_probs) && section.class_probs.length) {
                 body += this.candidatesHtml(section.class_probs, 5);
             }
+            body += this.yoloHintHtml(section);
             body += this.fallbackHtml(section);
             body += this.channelErrorHtml(section, state);
 
@@ -3650,6 +3660,11 @@ require_once ROOT_PATH . '/views/layout.php';
                 const nameOf = (v) => (String(v || '').toLowerCase() === 'llm' ? '大模型' : '本机模型');
                 html += '<span class="channel-chip warn">' + escapeHtml(nameOf(fallback.actual)) + '回退</span>';
             }
+            // YOLO 不可用：说明为什么这个通道没有检测框（完整原因放 title 里）
+            const yoloErr = (((result || {})[key]) || {}).yolo_error;
+            if (yoloErr) {
+                html += '<span class="channel-chip warn" title="' + escapeHtml(String(yoloErr)) + '">无检测框</span>';
+            }
             if (taskId) html += '<span class="mono">' + escapeHtml(String(taskId).slice(0, 8)) + '…</span>';
             html += '<span>' + (rows.length ? ('共 ' + rows.length + ' 项' + (boxes.length ? ' · 带检测框 ' + boxes.length + ' 个' : ' · 无检测框')) : '暂无结果') + '</span>';
             html += '</div>';
@@ -3677,7 +3692,8 @@ require_once ROOT_PATH . '/views/layout.php';
                 if (!boxes.length) {
                     html += '<div class="detail-note">' + (key === 'llm' ?
                         '大模型通道只给候选、不给检测框；切到「37ac」看模型框，或切到「能工智人」看人工框。' :
-                        '这个通道没有检测框（整图提交或没跑检测）。') + '</div>';
+                        (yoloErr ? ('这个通道没有检测框：' + escapeHtml(String(yoloErr))) :
+                            '这个通道没有检测框（整图提交或没跑检测）。')) + '</div>';
                 }
                 html += '</div>';
                 html += '<div class="detail-list">' + rows.map((r) => this.detailRowHtml(r)).join('') + '</div>';

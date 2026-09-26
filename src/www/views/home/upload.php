@@ -347,9 +347,13 @@ require_once ROOT_PATH . '/views/layout.php';
         font-weight: 700;
     }
 
-    /* 预览下面的一行：尺寸 + 体积（顺便让"最小尺寸"这条规则可感知） */
+    /* 预览下面的一行：尺寸 + 体积（顺便让"最小尺寸"这条规则可感知）
+       注意：全局 p{max-width:65ch} 会把这一行压窄，靠左对齐看着像没居中 ——
+       这里显式放开 max-width 并自己居中 */
     .preview-meta {
-        margin-top: .5rem;
+        margin: .5rem auto 0;
+        max-width: none;
+        text-align: center;
         font-family: var(--ac-font-mono);
         font-size: .78rem;
         color: var(--ac-ink-500);

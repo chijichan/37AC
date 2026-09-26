@@ -594,6 +594,16 @@ require_once ROOT_PATH . '/views/layout.php';
         display: none !important;
     }
 
+    /* 站点导航是 sticky（--ac-nav-h=64px）：滚动定位时留出导航高度，
+       否则 scrollIntoView(block:start) 会把卡片标题压在导航条下面 */
+    .human-annotate-card,
+    .human-crop-wrap,
+    .cropper-wrap,
+    .result-wrap,
+    .history-item {
+        scroll-margin-top: calc(var(--ac-nav-h, 64px) + 14px);
+    }
+
     .human-crop-canvas {
         display: flex;
         align-items: center;
@@ -1464,6 +1474,11 @@ require_once ROOT_PATH . '/views/layout.php';
                     if (this.humanCropPlaceholder) this.humanCropPlaceholder.style.display = 'none';
                     if (this.humanCropCanvas) this.humanCropCanvas.classList.remove('flow-empty');
                     this.initHumanCropper();
+                    // 图片撑开高度后最后校正一次滚动位置
+                    if (this.autoScrollPending) {
+                        this.scrollToAnnotateCard(0);
+                        this.autoScrollPending = false;
+                    }
                 });
                 this.humanCropImage.addEventListener('error', () => {
                     // 只有正在加载真实图片时才当错误（清空 src 会触发假 error）
@@ -2351,7 +2366,9 @@ require_once ROOT_PATH . '/views/layout.php';
             const taskParam = (params.get('task') || '').trim();
             if (taskParam) {
                 this.switchTab('human');
+                this.autoScrollPending = true;
                 this.loadHumanTask(taskParam);
+                this.scrollToAnnotateCard(120);
             }
         }
 
@@ -2371,7 +2388,11 @@ require_once ROOT_PATH . '/views/layout.php';
                 this.loadPublicFeed();
                 this.refreshHistoryStatuses();
             }
-            if (name === 'human') this.renderHumanPanel();
+            if (name === 'human') {
+                this.renderHumanPanel();
+            } else {
+                this.autoScrollPending = false;
+            }
         }
 
         /* ==================== 加载骨架（仪表盘同款流水卡片，不写字） ==================== */
@@ -2582,6 +2603,9 @@ require_once ROOT_PATH . '/views/layout.php';
                 }
                 if (v.character_index !== undefined && v.character_index !== null) {
                     html += '<span class="channel-chip">#' + (Number(v.character_index) + 1) + '</span>';
+                }
+                if (!v.bbox && !v.bbox_percent) {
+                    html += '<span class="channel-chip">整图</span>';
                 }
                 if (label.name) html += this.moegirlHtml(label.name);
                 if (guess) html += '<span class="model-guess">模型猜测：' + escapeHtml(guess) + '</span>';
@@ -2959,14 +2983,43 @@ require_once ROOT_PATH . '/views/layout.php';
                 '</div>';
         }
 
-        /* 跳到「能工智人」并选中某个任务 */
+        /* 跳到「能工智人」并选中某个任务，然后平滑滚到标注卡片 */
         selectHumanTask(taskId) {
             this.switchTab('human');
+            this.autoScrollPending = true;
             if (taskId) this.loadHumanTask(taskId);
-            window.scrollTo({
-                top: 0,
-                behavior: 'smooth'
-            });
+            this.scrollToAnnotateCard(60);
+            // 兜底：列表渲染 / 图片加载还会再校正两次，万一都没触发，1.2s 后再滚一次
+            setTimeout(() => {
+                if (this.autoScrollPending) this.scrollToAnnotateCard(0);
+            }, 1200);
+        }
+
+        /**
+         * 平滑滚动到标注卡片。
+         * 注意：任务列表是异步渲染的（骨架 → 真实卡片），页面高度会变，
+         * 所以除了点击时滚一次，列表渲染完、图片加载完还要各校正一次，
+         * 否则会停在旧位置（看起来像没滚）。
+         */
+        scrollToAnnotateCard(delay) {
+            const target = this.humanAnnotateCard;
+            if (!target || target.hidden) return;
+            const run = () => {
+                try {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                } catch (e) {
+                    window.scrollTo(0, target.offsetTop || 0);
+                }
+            };
+            const ms = delay === undefined ? 60 : delay;
+            if (typeof requestAnimationFrame === 'function') {
+                requestAnimationFrame(() => setTimeout(run, ms));
+            } else {
+                setTimeout(run, ms);
+            }
         }
 
         renderHumanPanel() {
@@ -2974,6 +3027,7 @@ require_once ROOT_PATH . '/views/layout.php';
             if (!taskId && this.humanAnnotateCard) this.humanAnnotateCard.hidden = true;
             this.loadHumanTaskList().then(() => {
                 if (taskId) this.loadHumanTask(taskId); // 刷新列表时保持当前任务高亮
+                if (this.autoScrollPending) this.scrollToAnnotateCard(0);
             });
         }
 
@@ -3178,22 +3232,25 @@ require_once ROOT_PATH . '/views/layout.php';
                 if (!silent) Notify.error('作品和角色名都要填');
                 return false;
             }
+            // 不框也可以：没有选框就按整图提交（不传 bbox，服务端也不会补框）
             const box = this.readHumanBbox();
-            if (!box) {
-                if (!silent) Notify.error('先在图上框住要标注的角色');
-                return false;
-            }
+            const whole = !box;
 
             let thumb = '';
-            try {
-                const canvas = this.humanCropInstance.getCroppedCanvas({
-                    width: 72,
-                    height: 72,
-                    fillColor: '#ffffff'
-                });
-                if (canvas) thumb = canvas.toDataURL('image/jpeg', 0.7);
-            } catch (e) {
-                // 缩略图失败不影响提交
+            if (box) {
+                try {
+                    const canvas = this.humanCropInstance.getCroppedCanvas({
+                        width: 72,
+                        height: 72,
+                        fillColor: '#ffffff'
+                    });
+                    if (canvas) thumb = canvas.toDataURL('image/jpeg', 0.7);
+                } catch (e) {
+                    // 缩略图失败不影响提交
+                }
+            } else {
+                // 整图提交：缩略图直接用这张任务图
+                thumb = '/api/tasks/' + encodeURIComponent(taskId) + '/image?max_side=160';
             }
 
             this.pendingVotes = this.pendingVotes || [];
@@ -3201,8 +3258,9 @@ require_once ROOT_PATH . '/views/layout.php';
                 name: ip + '/' + character,
                 ip: ip,
                 name_zh: character,
-                bbox: box.bbox,
-                bbox_percent: box.percent,
+                bbox: box ? box.bbox : null,
+                bbox_percent: box ? box.percent : null,
+                whole: whole,
                 note: (this.humanNote && this.humanNote.value || '').trim(),
                 thumb: thumb,
             });
@@ -3241,8 +3299,11 @@ require_once ROOT_PATH . '/views/layout.php';
                             '<div class="pending-name">' + escapeHtml(label.name) +
                             (label.ip ? '<span class="badge badge-neutral cand-ip">' + escapeHtml(label.ip) + '</span>' : '') +
                             '</div>' +
-                            '<div class="channel-meta">框选 ' + (Number(pct.x) || 0).toFixed(0) + '%,' + (Number(pct.y) || 0).toFixed(0) +
-                            '% · ' + (Number(pct.w) || 0).toFixed(0) + '%×' + (Number(pct.h) || 0).toFixed(0) + '%' +
+                            '<div class="channel-meta">' +
+                            (v.whole || !v.bbox_percent ?
+                                '<span class="channel-chip">整图</span>' :
+                                '框选 ' + (Number(pct.x) || 0).toFixed(0) + '%,' + (Number(pct.y) || 0).toFixed(0) +
+                                '% · ' + (Number(pct.w) || 0).toFixed(0) + '%×' + (Number(pct.h) || 0).toFixed(0) + '%') +
                             (v.note ? ' · ' + escapeHtml(v.note) : '') + '</div>' +
                             '</div>' +
                             '<button type="button" class="btn btn-ghost btn-sm" data-role="remove-pending">移除</button>' +
@@ -3279,14 +3340,20 @@ require_once ROOT_PATH . '/views/layout.php';
 
             const payload = {
                 task_id: taskId,
-                votes: list.map((v) => ({
-                    name: v.name,
-                    ip: v.ip,
-                    name_zh: v.name_zh,
-                    bbox: v.bbox,
-                    bbox_percent: v.bbox_percent,
-                    note: v.note || undefined,
-                })),
+                votes: list.map((v) => {
+                    const item = {
+                        name: v.name,
+                        ip: v.ip,
+                        name_zh: v.name_zh,
+                        note: v.note || undefined,
+                    };
+                    // 整图提交时不带 bbox，避免服务端收到空框
+                    if (v.bbox && v.bbox_percent) {
+                        item.bbox = v.bbox;
+                        item.bbox_percent = v.bbox_percent;
+                    }
+                    return item;
+                }),
             };
 
             const btn = this.btnSubmitVotes || this.humanForm.querySelector('button[type="submit"]');

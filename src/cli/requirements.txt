@@ -9,8 +9,8 @@ torchvision==0.28.0
 # .env 中设置 USE_DIRECTML=True 启用
 
 # YOLO 人物检测（快速定位 + ResNet 分类）
-ultralytics>=8.0.0
-opencv-python>=4.8.0  # ultralytics 依赖
+ultralytics==8.0.0
+opencv-python==4.8.0  # ultralytics 依赖
 
 # 第二种裁剪方式：MediaPipe 关键点（CROP_METHOD=mediapipe / auto 的兜底，见 detection/mediapipe_detector.py）
 # 模型文件（.tflite，约 28MB）随 wheel 分发，无需额外下载；

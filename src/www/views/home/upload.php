@@ -1083,14 +1083,42 @@ require_once ROOT_PATH . '/views/layout.php';
         white-space: nowrap;
     }
 
+    /* 角色块整体可点开详情，但不要整块换底色（一大块粉很怪）：只让标题亮起来 */
     .char-block[data-index] {
         cursor: pointer;
-        border-radius: var(--ac-radius-input);
-        transition: background var(--ac-dur-fast) var(--ac-ease-out);
     }
 
-    .char-block[data-index]:hover {
+    .char-block[data-index] .char-name {
+        transition: color var(--ac-dur-fast) var(--ac-ease-out);
+    }
+
+    .char-block[data-index]:hover .char-name,
+    .char-block[data-index]:focus-visible .char-name {
+        color: var(--ac-pink-600);
+        text-decoration: underline;
+        text-underline-offset: 3px;
+    }
+
+    .char-block[data-index] .char-conf::after {
+        content: '详情';
+        display: inline-block;
+        margin-left: .4rem;
+        padding: .02rem .38rem;
+        border-radius: var(--ac-radius-pill);
         background: var(--ac-pink-50);
+        color: var(--ac-pink-700);
+        font-family: var(--ac-font-body);
+        font-size: .68rem;
+        font-weight: 700;
+        opacity: 0;
+        transform: translateX(-2px);
+        transition: opacity var(--ac-dur-fast) var(--ac-ease-out), transform var(--ac-dur-fast) var(--ac-ease-out);
+    }
+
+    .char-block[data-index]:hover .char-conf::after,
+    .char-block[data-index]:focus-visible .char-conf::after {
+        opacity: 1;
+        transform: none;
     }
 
     .detail-modal {
@@ -1733,6 +1761,20 @@ require_once ROOT_PATH . '/views/layout.php';
                 const row = e.target.closest('[data-index]');
                 this.openResultDetail(card.getAttribute('data-channel'),
                     row ? Number(row.getAttribute('data-index')) : null, wrap);
+            });
+            // 鼠标扫过结果卡片就先把原图拉下来（详情要用它），点开时就不用等
+            document.addEventListener('mouseover', (e) => {
+                const card = (e.target && e.target.closest) ? e.target.closest('.result-wrap .channel-card[data-channel]') : null;
+                if (!card) return;
+                const wrap = card.closest('.result-wrap');
+                const payload = wrap && wrap.__detailPayload;
+                if (payload && payload.taskId) this.preloadDetailImage(this.detailImageUrl(payload.taskId), null);
+            });
+
+            // Esc 关闭详情（原生 <dialog> 也支持，这里保证一定有反应）
+            document.addEventListener('keydown', (e) => {
+                if (e.key !== 'Escape' && e.key !== 'Esc') return;
+                if (this.detailDialog && this.detailDialog.open) this.closeResultDetail();
             });
             // 键盘可达：卡片聚焦后回车/空格也能打开
             document.addEventListener('keydown', (e) => {
@@ -2785,7 +2827,7 @@ require_once ROOT_PATH . '/views/layout.php';
 
         channelCard(title, state, bodyHtml, metaHtml, key) {
             // data-channel：整张卡片可点开详情（检测框坐标就画在详情里）
-            const attr = key ? ' data-channel="' + escapeHtml(key) + '" role="button" tabindex="0" title="点开看检测框与完整候选"' : '';
+            const attr = key ? ' data-channel="' + escapeHtml(key) + '" role="button" tabindex="0" aria-label="点开看检测框与完整候选"' : '';
             let html = '<div class="card channel-card"' + attr + '>';
             html += '<div class="channel-head">';
             html += '<span class="channel-title">' + title + '</span>';
@@ -3114,9 +3156,17 @@ require_once ROOT_PATH . '/views/layout.php';
             });
             dialog.addEventListener('close', () => {
                 this.detailState = null;
+                this.detailImageReady = null;   // 下次打开重新确认（换任务/图被清理都能发现）
                 // 关掉就从 DOM 里摘掉：不留着（也就不会出现"关了还显示"）
                 dialog.remove();
                 if (this.detailDialog === dialog) this.detailDialog = null;
+            });
+            // Esc：浏览器一般会自己关，这里兜底（某些情况下 cancel 之后并不派发 close）
+            dialog.addEventListener('cancel', () => {
+                setTimeout(() => {
+                    if (dialog.open) this.closeResultDetail();
+                    else if (dialog.parentNode) dialog.remove();
+                }, 0);
             });
             this.detailDialog = dialog;
             return dialog;
@@ -3128,6 +3178,62 @@ require_once ROOT_PATH . '/views/layout.php';
          * @param {number|null} index 聚焦第几项（点卡片里的某个角色行时传）
          * @param {Element|null} wrap 结果区元素（payload 挂在它上面）
          */
+        /* 详情里用的原图地址 */
+        detailImageUrl(taskId) {
+            return taskId ? ('/api/tasks/' + encodeURIComponent(taskId) + '/image?max_side=1280') : '';
+        }
+
+        /**
+         * 预加载原图。同一个 URL 只发一次请求，加载完（或失败/超时）再回调。
+         * 详情弹层要等它好了再弹，否则会先看到空框、再看到图"啪"地闪出来。
+         */
+        preloadDetailImage(url, done) {
+            const cb = (typeof done === 'function') ? done : function() {};
+            if (!url || typeof Image !== 'function' || this.detailImageReady === url) {
+                cb();
+                return;
+            }
+            const waiters = (this.detailImageWaiters = this.detailImageWaiters || {});
+            if (waiters[url]) {
+                waiters[url].push(cb);
+                return;
+            }
+            waiters[url] = [cb];
+            const flush = () => {
+                const list = waiters[url] || [];
+                delete waiters[url];
+                list.forEach((fn) => {
+                    try {
+                        fn();
+                    } catch (e) {
+                        // 单个回调出错不影响其它
+                    }
+                });
+            };
+            const img = new Image();
+            img.onload = () => {
+                this.detailImageReady = url;
+                flush();
+            };
+            img.onerror = flush;
+            // 兜底：图挂了或网络很慢，也不能一直不弹
+            setTimeout(flush, 5000);
+            img.src = url;
+        }
+
+        showDetailDialog(dialog) {
+            if (!dialog || dialog.open) return;
+            if (typeof dialog.showModal === 'function') {
+                try {
+                    dialog.showModal();
+                    return;
+                } catch (e) {
+                    // 已经是模态状态等异常：退回普通打开方式
+                }
+            }
+            dialog.setAttribute('open', '');
+        }
+
         openResultDetail(channelKey, index, wrap) {
             const payload = (wrap && wrap.__detailPayload) || this.lastResultPayload;
             if (!payload || !payload.result) {
@@ -3144,19 +3250,15 @@ require_once ROOT_PATH . '/views/layout.php';
                 focus: (index === null || index === undefined || isNaN(Number(index))) ? null : String(index),
                 taskId: payload.taskId || '',
             };
-            this.renderDetail();
-            if (!dialog.open) {
-                if (typeof dialog.showModal === 'function') {
-                    try {
-                        dialog.showModal();
-                    } catch (e) {
-                        // 已经是模态状态等异常：退回普通打开方式
-                        dialog.setAttribute('open', '');
-                    }
-                } else {
-                    dialog.setAttribute('open', '');
-                }
-            }
+            // 先把原图预加载好（鼠标悬停卡片时已经开始拉了，通常是缓存命中），
+            // 图就绪后再渲染 + 弹出：弹出来就是完整的，不会闪一下
+            const url = this.detailImageUrl(payload.taskId);
+            this.setBusy(true);
+            this.preloadDetailImage(url, () => {
+                this.setBusy(false);
+                this.renderDetail();
+                this.showDetailDialog(dialog);
+            });
         }
 
         /* 手动关闭（供 Esc 之外的自定义入口使用） */
@@ -3213,7 +3315,7 @@ require_once ROOT_PATH . '/views/layout.php';
                 if (taskId) {
                     // 图片没尺寸前用占位高度撑住，否则百分比定位的框会塌在一起；加载完就交给图片本身
                     html += '<div class="detail-stage is-empty" id="detailStage">';
-                    html += '<img id="detailImage" class="flow-empty" alt="原图" src="/api/tasks/' + encodeURIComponent(taskId) + '/image?max_side=1280">';
+                    html += '<img id="detailImage" class="flow-empty" alt="原图" src="' + escapeHtml(this.detailImageUrl(taskId)) + '">';
                     boxes.forEach((r) => {
                         const b = r.box;
                         const inside = b.y < 8 ? ' inside' : '';
@@ -3235,7 +3337,11 @@ require_once ROOT_PATH . '/views/layout.php';
             }
             html += '</div>';
 
+            // 换内容时把已经解码好的那张 <img> 搬回去：同一个元素不会重新请求/重新解码，切通道不闪
+            const oldImg = dialog.querySelector('#detailImage');
             dialog.innerHTML = html;
+            const newImg = dialog.querySelector('#detailImage');
+            if (oldImg && newImg && newImg !== oldImg) newImg.replaceWith(oldImg);
             this.bindDetailEvents();
         }
 

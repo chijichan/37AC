@@ -19,7 +19,16 @@ auto 的回退链：
 
 import tempfile
 
-from config.base import CROP_MARGIN_RATIO, CROP_METHOD, MAX_CHARACTERS, YOLO_DETECT_MAX_SIZE
+from config.base import (
+    CROP_MARGIN_RATIO,
+    CROP_MAX_AREA_RATIO,
+    CROP_METHOD,
+    CROP_MIN_AREA_RATIO,
+    CROP_MIN_CONFIDENCE,
+    CROP_QUALITY_GATE,
+    MAX_CHARACTERS,
+    YOLO_DETECT_MAX_SIZE,
+)
 from config.log_config import get_logger
 from detection.bbox import normalize_bbox, percent_bbox
 
@@ -43,6 +52,65 @@ def available_methods() -> list:
     except Exception:
         pass
     return methods
+
+
+def gate_detections(items, image_size):
+    """裁剪质量门控：按检测置信度与框面积占比过滤候选框。
+
+    实测背景（91 类原始网图抽样）：直接裁剪 71.3% vs 不裁剪 79.0%，
+    因为 COCO 模型在二次元图上会误检/多检，裁出的框常常不是角色主体。
+    返回通过门控的候选；CROP_QUALITY_GATE=false 时原样返回（旧行为）。
+    """
+    items = list(items or [])
+    if not CROP_QUALITY_GATE or not items:
+        return items
+
+    width, height = image_size or (0, 0)
+    total_area = float(width) * float(height) if width and height else 0.0
+    passed = []
+    for item in items:
+        confidence = item.get("detector_confidence")
+        if confidence is not None and CROP_MIN_CONFIDENCE > 0 and float(confidence) < CROP_MIN_CONFIDENCE:
+            continue
+
+        box = item.get("bbox_norm") or {}
+        ratio = float(box.get("w") or 0) * float(box.get("h") or 0)
+        if not ratio and total_area:
+            raw = item.get("bbox") or ()
+            if len(raw) == 4:
+                ratio = max(0.0, (raw[2] - raw[0]) * (raw[3] - raw[1]) / total_area)
+        if CROP_MIN_AREA_RATIO > 0 and ratio and ratio < CROP_MIN_AREA_RATIO:
+            continue
+        if CROP_MAX_AREA_RATIO > 0 and ratio > CROP_MAX_AREA_RATIO:
+            continue
+        passed.append(item)
+    return passed
+
+
+def crop_quality_ok(crop_path, image_path, confidence=None):
+    """单框路径的质量门控：裁图面积占原图比例 + 检测置信度都要达标。"""
+    if not CROP_QUALITY_GATE:
+        return True
+    if confidence is not None and CROP_MIN_CONFIDENCE > 0 and float(confidence) < CROP_MIN_CONFIDENCE:
+        return False
+    if CROP_MIN_AREA_RATIO <= 0 and CROP_MAX_AREA_RATIO <= 0:
+        return True
+    try:
+        from PIL import Image
+        with Image.open(crop_path) as crop:
+            crop_area = crop.size[0] * crop.size[1]
+        with Image.open(image_path) as original:
+            orig_area = original.size[0] * original.size[1]
+    except Exception:
+        return True                     # 读不到尺寸时不拦（宁可裁剪也不要整图）
+    if orig_area <= 0:
+        return True
+    ratio = crop_area / float(orig_area)
+    if CROP_MIN_AREA_RATIO > 0 and ratio < CROP_MIN_AREA_RATIO:
+        return False
+    if CROP_MAX_AREA_RATIO > 0 and ratio > CROP_MAX_AREA_RATIO:
+        return False
+    return True
 
 
 def _image_size(image_path):
@@ -121,6 +189,15 @@ def crop_characters_by_method(image_path, method=None, max_characters=None, marg
             continue
 
         characters = found.get("characters") or []
+        if characters:
+            size = found.get("image_size") or image_size
+            gated = gate_detections(characters, size)
+            if len(gated) != len(characters):
+                logger.info(
+                    "裁剪门控过滤: %d -> %d 个候选（置信度<%.2f 或面积占比<%.2f）",
+                    len(characters), len(gated), CROP_MIN_CONFIDENCE, CROP_MIN_AREA_RATIO,
+                )
+            characters = gated
         if characters:
             size = found.get("image_size") or image_size
             logger.info("裁剪方式=%s，检出人物=%d", name, len(characters))

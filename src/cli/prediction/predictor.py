@@ -50,11 +50,16 @@ except ImportError:
 
 # 多人物裁剪入口（yolo / mediapipe / auto，见 detection/cropper.py）
 try:
-    from detection.cropper import crop_characters_by_method
+    from detection.cropper import crop_characters_by_method, crop_quality_ok
     CROP_AVAILABLE = True
 except ImportError:
     CROP_AVAILABLE = False
     crop_characters_by_method = None
+
+    def crop_quality_ok(*args, **kwargs):
+        """裁剪模块缺失时的兜底：不拦任何裁剪。"""
+        return True
+
     logger.debug("裁剪模块不可用，使用整图分类")
 
 # 数据预处理（惰性构建：torchvision 只在真正要推理时才 import）
@@ -320,14 +325,19 @@ def predict_image(image_path, model_path=None, classes_file=None, use_cache=True
             try:
                 crop_path, det_info = crop_best_character(image_path)
                 if crop_path and os.path.exists(crop_path):
-                    effective_image = crop_path
-                    yolo_info = det_info
-                    logger.info(
-                        "YOLO 定位到角色区域: %s, 类别=%s, 置信度=%.2f",
-                        det_info["bbox"] if det_info else "N/A",
-                        det_info["class_name"] if det_info else "N/A",
-                        det_info["confidence"] if det_info else 0,
-                    )
+                    # 质量门控：COCO 检测器在二次元图上常误检/多检，裁错的框会拉低准确率
+                    # （实测：不裁剪 79.0% vs 直接裁剪 71.3%）——不达标就回退整图
+                    if crop_quality_ok(crop_path, image_path, (det_info or {}).get("confidence")):
+                        effective_image = crop_path
+                        yolo_info = det_info
+                        logger.info(
+                            "YOLO 定位到角色区域: %s, 类别=%s, 置信度=%.2f",
+                            det_info["bbox"] if det_info else "N/A",
+                            det_info["class_name"] if det_info else "N/A",
+                            det_info["confidence"] if det_info else 0,
+                        )
+                    else:
+                        logger.info("裁剪质量不达标（置信度/面积占比），改用整图分类")
                 else:
                     logger.info("YOLO 未检测到角色区域，使用全图分类")
             except Exception as e:

@@ -352,6 +352,17 @@ _DEFAULT_LLM_PROMPT = (
 # 注意：os.getenv 在变量存在但值为空字符串时返回空串而非默认值，因此用 or 兜底
 LLM_PROMPT_TEMPLATE = os.getenv("LLM_PROMPT_TEMPLATE", "") or _DEFAULT_LLM_PROMPT
 
+# ==================== 裁剪质量门控（实测：误检框会拉低准确率） ====================
+# 背景：YOLOv8n 是 COCO 真人检测器，在二次元/插画上会误检、多检，裁出来的框经常不是角色主体。
+# 实测（91 类、原始网图抽样）：不裁剪 79.0% vs 直接裁剪 71.3% —— 裁剪是负收益。
+# 因此加门控：只有"置信度 + 面积占比"都达标的框才用来裁剪，其余回退整图识别。
+CROP_QUALITY_GATE = os.getenv("CROP_QUALITY_GATE", "True").lower() == "true"
+# 检测置信度下限（低于此值的框丢弃；mediapipe 姿态框没置信度则不做这项检查）
+CROP_MIN_CONFIDENCE = float(os.getenv("CROP_MIN_CONFIDENCE", "0.35"))
+# 框面积占原图比例的下限/上限（太小是误检碎片，太大等于没裁）
+CROP_MIN_AREA_RATIO = float(os.getenv("CROP_MIN_AREA_RATIO", "0.06"))
+CROP_MAX_AREA_RATIO = float(os.getenv("CROP_MAX_AREA_RATIO", "0.98"))
+
 # ==================== 资源占用开关（内存敏感机器按需关闭） ====================
 # 本地模型识别（YOLO + ResNet）：关闭后节点不再下载/加载本地模型，只做 LLM 识别。
 # 配合下面的惰性加载，空闲节点可省下约 255MB（torch 175MB + torchvision 80MB）。

@@ -4,6 +4,7 @@
 import sys
 import json
 import os
+import re
 from pathlib import Path
 
 # 将 src/ 加入 sys.path，使 common 公共包可被导入
@@ -72,6 +73,41 @@ DATASET_COMPRESS_QUALITY = int(os.getenv("DATASET_COMPRESS_QUALITY", "90") or "9
 DATASET_COMPRESS_WORKERS = int(os.getenv("DATASET_COMPRESS_WORKERS", "4") or "4")
 # YOLO 裁剪并发线程数（按角色并行，每线程独立加载一个 YOLO 模型）
 YOLO_CROP_WORKERS = int(os.getenv("YOLO_CROP_WORKERS", "2") or "2")
+# ==================== 源数据集「不处理列表」 ====================
+# 列表里的源目录直接当数据集使用，**不做 YOLO 裁剪**（图片原样复制 + 按压缩参数处理）。
+# 多个用分号或换行分隔；相对路径按 DATASET_DIR 解析。
+# 例：DATASET_NO_CROP_PATHS=W:\Img\蔚蓝档案\_amazing;蔚蓝档案/_amazing2
+DATASET_NO_CROP_PATHS = os.getenv("DATASET_NO_CROP_PATHS", "") or ""
+
+
+def _normalize_dataset_path(p) -> str:
+    """统一路径写法：去空白/引号、转绝对路径、大小写归一（Windows 不区分大小写）。"""
+    text = str(p).strip().strip('"').strip("'")
+    if not text:
+        return ""
+    if not os.path.isabs(text):
+        text = os.path.join(str(DATASET_DIR), text)
+    return os.path.normcase(os.path.normpath(text))
+
+
+DATASET_NO_CROP_DIRS = [
+    _normalize_dataset_path(p)
+    for p in re.split(r"[;\n\r]+", DATASET_NO_CROP_PATHS)
+    if _normalize_dataset_path(p)
+]
+
+
+def is_in_no_crop_list(path) -> bool:
+    """判断源目录是否在「不处理列表」内（等于条目，或位于条目之下）。"""
+    if not DATASET_NO_CROP_DIRS:
+        return False
+    target = _normalize_dataset_path(path)
+    if not target:
+        return False
+    for entry in DATASET_NO_CROP_DIRS:
+        if target == entry or target.startswith(entry + os.sep):
+            return True
+    return False
 # 验证集比例（0 表示不使用验证集）
 VAL_SPLIT_RATIO = float(os.getenv("VAL_SPLIT_RATIO", "0.2") or "0.2")
 # 权重衰减（L2 正则化）
@@ -460,7 +496,21 @@ def get_device():
     _logger = __import__('logging').getLogger(__name__)
 
     if AUTO_DEVICE is False:
-        DEVICE = "cpu"
+        # 按 .env 的 DEVICE 指定（cpu / cuda / dml）；此前该配置从未被读取
+        forced = (os.getenv("DEVICE") or "cpu").strip().lower()
+        if forced == "dml":
+            try:
+                import torch_directml
+                DEVICE = torch_directml.device()
+                _logger.info("按 DEVICE 配置使用 DirectML: %s", DEVICE)
+            except Exception as e:
+                _logger.warning("DEVICE=dml 初始化失败: %s，回退 CPU", e)
+                DEVICE = "cpu"
+        elif forced == "cuda":
+            import torch
+            DEVICE = torch.device("cuda") if torch.cuda.is_available() else "cpu"
+        else:
+            DEVICE = "cpu"
     elif USE_DIRECTML:
         try:
             import torch_directml

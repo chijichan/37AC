@@ -273,6 +273,27 @@ python src/cli/main.py node
 
 ---
 
+### 8. 源数据集「不处理列表」（不裁剪直接用）
+
+有些源目录不需要 YOLO 裁剪（例如你已经手工裁好、或是特殊画风的补充素材），
+把它们写进 src/cli/.env 的 DATASET_NO_CROP_PATHS：
+
+`ini
+DATASET_NO_CROP_PATHS=W:\Img\蔚蓝档案\_amazing;W:\Img\某IP\另一个目录
+`
+
+- 多个路径用**分号**（或换行）分隔；相对路径按 DATASET_DIR 解析。
+- 匹配规则：路径**等于**条目或**位于条目之下**（大小写、正斜杠与反斜杠都不敏感）。
+- 命中目录的处理：跳过 YOLO 检测，**原图直接复制**进 saves/dataset/<IP>/<角色>/
+  （仍按 DATASET_COMPRESS_SIZE / DATASET_COMPRESS_QUALITY 压缩），因此文件名**没有** `_37ac` 后缀——
+  与「YOLO 未检测到人物时直接复制原图」是同一套行为。
+- 目录名照常成为类别：W:\Img\蔚蓝档案\_amazing → 类别 蔚蓝档案/_amazing；想要别的类别名就直接改文件夹名。
+- 日志会打印命中的角色清单，结束统计形如 `已处理=…（其中不裁剪原图 N）`。
+
+> .env 已按功能分组重排（调试 / 设备与推理后端 / 资源占用 / 节点连接 / 本地模型识别 / LLM / 训练 /
+> 数据集构建 / 保留），所有可配置键都写在文件里且每行上方有中文注释；**删掉某一行即回落到代码内置默认值**。
+> 代码目前未读取的键（HTTP/WS 代理）集中放在最后一段作记录，完整模板见 .env.example。
+
 ### 7. 运行测试
 
 ```bash
@@ -280,7 +301,7 @@ python -m pytest tests/cli -q --no-cov      # CLI（src/cli）
 python -m pytest tests/server -q --no-cov   # 服务端（src/server）
 ```
 
-两套必须**分开进程**运行（各自持有独立的 `config` 包，同进程会互相串）。当前状态：CLI 196 通过、服务端 194 通过。
+两套必须**分开进程**运行（各自持有独立的 `config` 包，同进程会互相串）。当前状态：CLI 208 通过、服务端 194 通过。
 
 受限环境（系统 TEMP 不可写、`mkdir(mode=0o700)` 建出的目录后续连列举/写入都被拒）下，`tests/conftest.py` 会自动：
 

@@ -472,7 +472,7 @@ def crop_dataset(source_dir: str, output_dir: str, target_classes=None, max_imag
     _logger = _get_logger("crop_dataset")
 
     from common.constants import IMAGE_EXTENSIONS_BASIC as image_extensions
-    from config.base import YOLO_CROP_WORKERS, DATASET_COMPRESS_SIZE
+    from config.base import YOLO_CROP_WORKERS, DATASET_COMPRESS_SIZE, is_in_no_crop_list
     from concurrent.futures import ThreadPoolExecutor, as_completed
     from tqdm import tqdm
 
@@ -490,10 +490,19 @@ def crop_dataset(source_dir: str, output_dir: str, target_classes=None, max_imag
                 continue
             role_tasks.append((ip_name, role_name, role_path))
 
-    def process_role(ip_name, role_name, role_path):
+    no_crop_roles = [t for t in role_tasks if is_in_no_crop_list(t[2])]
+    if no_crop_roles:
+        _logger.info(
+            "「不处理列表」命中 %d 个角色（不做 YOLO 裁剪，原图直接用）: %s",
+            len(no_crop_roles), ", ".join("%s/%s" % (i, r) for i, r, _p in no_crop_roles),
+        )
+
+    def process_role(ip_name, role_name, role_path, no_crop=False):
         """处理单个角色（在线程内执行，使用线程本地 detector）。"""
-        local = {"processed": 0, "skipped": 0, "failed": 0}
-        detector = _get_thread_detector()
+        local = {"processed": 0, "skipped": 0, "failed": 0, "no_crop": 0}
+        detector = None if no_crop else _get_thread_detector()
+        if no_crop:
+            _logger.info("角色 %s/%s 在「不处理列表」中：原图直接作为数据集（不裁剪）", ip_name, role_name)
 
         out_role_dir = os.path.join(output_dir, ip_name, role_name)
         existing_files = []
@@ -549,6 +558,21 @@ def crop_dataset(source_dir: str, output_dir: str, target_classes=None, max_imag
                 os.makedirs(out_role_dir, exist_ok=True)
                 created_role_dir = True
 
+            if no_crop:
+                # 不处理列表：跳过 YOLO，原图直接落盘（仍按 DATASET_COMPRESS_SIZE 压缩）
+                try:
+                    from utils.image_utils import compress_image_file
+                    shutil.copy2(src_img, original_out)
+                    compress_image_file(original_out, max_size=DATASET_COMPRESS_SIZE)
+                    local["processed"] += 1
+                    local["no_crop"] += 1
+                    saved_count += 1
+                    _logger.debug("原图入集（不裁剪）: %s → %s", src_img, original_out)
+                except Exception as e:
+                    _logger.error("复制原图失败 %s: %s", src_img, e)
+                    local["failed"] += 1
+                continue
+
             try:
                 crop_path, info = detector.detect_and_crop(
                     src_img, target_classes=target_classes, suffix=CROP_SUFFIX,
@@ -585,13 +609,14 @@ def crop_dataset(source_dir: str, output_dir: str, target_classes=None, max_imag
     workers = max(1, int(YOLO_CROP_WORKERS or 1))
     _logger.info("YOLO 裁剪并发线程数: %d（共 %d 个角色）", workers, len(role_tasks))
 
-    counters = {"processed": 0, "skipped": 0, "failed": 0}
+    counters = {"processed": 0, "skipped": 0, "failed": 0, "no_crop": 0}
     counters_lock = threading.Lock()
 
     if role_tasks:
         with ThreadPoolExecutor(max_workers=workers) as executor:
             futures = [
-                executor.submit(process_role, ip_name, role_name, role_path)
+                executor.submit(process_role, ip_name, role_name, role_path,
+                                is_in_no_crop_list(role_path))
                 for ip_name, role_name, role_path in role_tasks
             ]
             for future in tqdm(
@@ -610,11 +635,12 @@ def crop_dataset(source_dir: str, output_dir: str, target_classes=None, max_imag
     processed = counters["processed"]
     skipped = counters["skipped"]
     failed = counters["failed"]
+    no_crop = counters["no_crop"]
     _logger.info(
-        "数据集裁剪完成: 已处理=%d, 跳过=%d, 失败=%d（输出已按最长边 %d 压缩）",
-        processed, skipped, failed, DATASET_COMPRESS_SIZE,
+        "数据集裁剪完成: 已处理=%d（其中不裁剪原图 %d）, 跳过=%d, 失败=%d（输出已按最长边 %d 压缩）",
+        processed, no_crop, skipped, failed, DATASET_COMPRESS_SIZE,
     )
-    return {"processed": processed, "skipped": skipped, "failed": failed}
+    return {"processed": processed, "skipped": skipped, "failed": failed, "no_crop": no_crop}
 
 
 def detect_characters(image_path: str) -> list:

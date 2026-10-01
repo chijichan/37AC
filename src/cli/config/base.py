@@ -73,11 +73,15 @@ DATASET_COMPRESS_QUALITY = int(os.getenv("DATASET_COMPRESS_QUALITY", "90") or "9
 DATASET_COMPRESS_WORKERS = int(os.getenv("DATASET_COMPRESS_WORKERS", "4") or "4")
 # YOLO 裁剪并发线程数（按角色并行，每线程独立加载一个 YOLO 模型）
 YOLO_CROP_WORKERS = int(os.getenv("YOLO_CROP_WORKERS", "2") or "2")
-# ==================== 源数据集「不处理列表」 ====================
-# 列表里的源目录直接当数据集使用，**不做 YOLO 裁剪**（图片原样复制 + 按压缩参数处理）。
+# ==================== 源数据集「不处理列表」（完全忽略） ====================
+# 列表里的源目录**完全不管**：不进数据集、不裁剪、不压缩、不补足（原样跳过）。
 # 多个用分号或换行分隔；相对路径按 DATASET_DIR 解析。
-# 例：DATASET_NO_CROP_PATHS=W:\Img\蔚蓝档案\_amazing;蔚蓝档案/_amazing2
+# 例：DATASET_IGNORE_PATHS=W:\Img\蔚蓝档案\_amazing;蔚蓝档案/_sketch
+# 兼容旧名 DATASET_NO_CROP_PATHS（两者会合并）
+DATASET_IGNORE_PATHS = os.getenv("DATASET_IGNORE_PATHS", "") or ""
 DATASET_NO_CROP_PATHS = os.getenv("DATASET_NO_CROP_PATHS", "") or ""
+# 命中的角色若在数据集里已有旧产物，是否顺手清理（默认 True；设 False 只跳过、不删）
+DATASET_IGNORE_CLEAN = os.getenv("DATASET_IGNORE_CLEAN", "True").lower() == "true"
 
 
 def _normalize_dataset_path(p) -> str:
@@ -90,11 +94,17 @@ def _normalize_dataset_path(p) -> str:
     return os.path.normcase(os.path.normpath(text))
 
 
-DATASET_NO_CROP_DIRS = [
-    _normalize_dataset_path(p)
-    for p in re.split(r"[;\n\r]+", DATASET_NO_CROP_PATHS)
-    if _normalize_dataset_path(p)
+DATASET_IGNORE_DIRS = [
+    entry
+    for entry in (
+        _normalize_dataset_path(p)
+        for raw in (DATASET_IGNORE_PATHS, DATASET_NO_CROP_PATHS)
+        for p in re.split(r"[;\n\r]+", raw or "")
+    )
+    if entry
 ]
+# 旧名字兼容（指向同一个列表对象）
+DATASET_NO_CROP_DIRS = DATASET_IGNORE_DIRS
 
 
 # 裁剪不出人物时：是否用整图（压缩后）补足 MAX_IMAGES_PER_ROLE（False=直接丢弃，旧行为）
@@ -103,17 +113,21 @@ DATASET_NO_CROP_DIRS = [
 DATASET_FILL_UNCROPPED = os.getenv("DATASET_FILL_UNCROPPED", "True").lower() == "true"
 
 
-def is_in_no_crop_list(path) -> bool:
-    """判断源目录是否在「不处理列表」内（等于条目，或位于条目之下）。"""
-    if not DATASET_NO_CROP_DIRS:
+def is_in_ignore_list(path) -> bool:
+    """判断源目录是否在「不处理列表」内（等于条目，或位于条目之下）→ 完全忽略。"""
+    if not DATASET_IGNORE_DIRS:
         return False
     target = _normalize_dataset_path(path)
     if not target:
         return False
-    for entry in DATASET_NO_CROP_DIRS:
+    for entry in DATASET_IGNORE_DIRS:
         if target == entry or target.startswith(entry + os.sep):
             return True
     return False
+
+
+# 旧名字兼容
+is_in_no_crop_list = is_in_ignore_list
 # 验证集比例（0 表示不使用验证集）
 VAL_SPLIT_RATIO = float(os.getenv("VAL_SPLIT_RATIO", "0.2") or "0.2")
 # 权重衰减（L2 正则化）

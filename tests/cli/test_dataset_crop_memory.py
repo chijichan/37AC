@@ -120,7 +120,7 @@ def test_crop_dataset_writes_bytes_directly(tree, monkeypatch):
     monkeypatch.setattr(cfg, "YOLO_CROP_WORKERS", 1)
     monkeypatch.setattr(cfg, "DATASET_COMPRESS_SIZE", 512)
     monkeypatch.setattr(cfg, "DATASET_COMPRESS_QUALITY", 88)
-    monkeypatch.setattr(cfg, "DATASET_NO_CROP_DIRS", [])
+    monkeypatch.setattr(cfg, "DATASET_IGNORE_DIRS", [])
     monkeypatch.setattr(cfg, "DATASET_FILL_UNCROPPED", True)
 
     # 任何临时目录创建都视为回归（新流程不该再落临时文件）
@@ -146,7 +146,7 @@ def test_crop_dataset_skips_when_output_exists(tree, monkeypatch):
     monkeypatch.setattr(YD, "_get_thread_detector", lambda: fake)
     monkeypatch.setattr(cfg, "YOLO_CROP_WORKERS", 1)
     monkeypatch.setattr(cfg, "DATASET_COMPRESS_SIZE", 0)
-    monkeypatch.setattr(cfg, "DATASET_NO_CROP_DIRS", [])
+    monkeypatch.setattr(cfg, "DATASET_IGNORE_DIRS", [])
     # 已经裁过（jpng 命名也要能识别，兼容旧产物）
     (out / "原神" / "荧").mkdir(parents=True, exist_ok=True)
     (out / "原神" / "荧" / "a_37ac.jpg").write_bytes(b"OLD")

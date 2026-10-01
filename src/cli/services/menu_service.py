@@ -119,16 +119,27 @@ def crop_dataset_function():
         logger.warning("YOLO 模块未安装 (ultralytics)，无法裁剪数据集")
         return
 
+    from utils.concurrency import CancelToken
+
+    print("  提示：随时按 Ctrl+C 可停止（已处理的图片会保留，可稍后继续）")
     logger.info("开始裁剪原始数据集: %s → %s", DATASET_DIR, CROPPED_DATASET_DIR)
     result = crop_dataset(
         str(DATASET_DIR),
         str(CROPPED_DATASET_DIR),
         max_images_per_role=MAX_IMAGES_PER_ROLE,
+        cancel_event=CancelToken(),
     )
-    logger.info(
-        "裁剪完成: 处理 %d 张, 跳过 %d 张, 失败 %d 张",
-        result["processed"], result["skipped"], result["failed"],
-    )
+    if result.get("interrupted"):
+        logger.warning(
+            "裁剪已被中断（Ctrl+C）: 本次处理 %d 张, 跳过 %d 张, 失败 %d 张；"
+            "已完成的图片保留在数据集目录，下次运行会跳过它们继续",
+            result["processed"], result["skipped"], result["failed"],
+        )
+    else:
+        logger.info(
+            "裁剪完成: 处理 %d 张, 跳过 %d 张, 失败 %d 张",
+            result["processed"], result["skipped"], result["failed"],
+        )
     print("=" * 50)
 
 
@@ -154,7 +165,10 @@ def compress_dataset_function():
         logger.error("已裁剪数据集不存在: %s", CROPPED_DATASET_DIR)
         return
 
+    from utils.concurrency import CancelToken
     from utils.image_utils import compress_dataset_images
+
+    print("  提示：随时按 Ctrl+C 可停止")
     logger.info(
         "开始压缩: %s（最长边 %d, 并发 %d）",
         CROPPED_DATASET_DIR, DATASET_COMPRESS_SIZE, DATASET_COMPRESS_WORKERS,
@@ -164,9 +178,11 @@ def compress_dataset_function():
         max_size=DATASET_COMPRESS_SIZE,
         quality=DATASET_COMPRESS_QUALITY,
         workers=DATASET_COMPRESS_WORKERS,
+        cancel_token=CancelToken(),
     )
     logger.info(
-        "压缩完成: 总计 %d, 已压缩 %d, 跳过 %d, 失败 %d",
+        "压缩%s: 总计 %d, 已压缩 %d, 跳过 %d, 失败 %d",
+        "已中断" if result.get("interrupted") else "完成",
         result["total"], result["compressed"], result["skipped"], result["failed"],
     )
     print("=" * 50)

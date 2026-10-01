@@ -284,22 +284,21 @@ python src/cli/main.py node
 
 ---
 
-### 8. 源数据集「不处理列表」（不裁剪直接用）
+### 8. 源数据集「不处理列表」（完全忽略）
 
-有些源目录不需要 YOLO 裁剪（例如你已经手工裁好、或是特殊画风的补充素材），
-把它们写进 src/cli/.env 的 DATASET_NO_CROP_PATHS：
+有些源目录**根本不该进数据集**（例如素材堆、草稿、临时的额外图集），
+把它们写进 src/cli/.env 的 DATASET_IGNORE_PATHS：
 
 `ini
-DATASET_NO_CROP_PATHS=W:\Img\蔚蓝档案\_amazing;W:\Img\某IP\另一个目录
+DATASET_IGNORE_PATHS=W:\Img\蔚蓝档案\_amazing;W:\Img\某IP\_sketch
 `
 
 - 多个路径用**分号**（或换行）分隔；相对路径按 DATASET_DIR 解析。
 - 匹配规则：路径**等于**条目或**位于条目之下**（大小写、正斜杠与反斜杠都不敏感）。
-- 命中目录的处理：跳过 YOLO 检测，**原图直接复制**进 saves/dataset/<IP>/<角色>/
-  （仍按 DATASET_COMPRESS_SIZE / DATASET_COMPRESS_QUALITY 压缩），因此文件名**没有** `_37ac` 后缀——
-  与「YOLO 未检测到人物时直接复制原图」是同一套行为。
-- 目录名照常成为类别：W:\Img\蔚蓝档案\_amazing → 类别 蔚蓝档案/_amazing；想要别的类别名就直接改文件夹名。
-- 日志会打印命中的角色清单，结束统计形如 `已处理=…（其中不裁剪原图 N）`。
+- 命中目录的处理：**完全不管** —— 不进数据集、不裁剪、不压缩、不参与「整图补足」，
+  也不会成为类别；裁剪日志会打印命中清单，结束统计里给出 `忽略目录=N`。
+- 存量清理：命中的角色若在 saves/dataset 里已有旧产物，默认**顺手删掉**（`DATASET_IGNORE_CLEAN=False` 可改为只跳过不删）。
+- 兼容：旧键名 `DATASET_NO_CROP_PATHS` 仍可用（两者会合并，语义同样是「完全忽略」）。
 
 #### 裁剪链路：全程内存、直写数据集
 

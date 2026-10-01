@@ -152,7 +152,8 @@ def compress_image_file(file_path: str, max_size: int = 512, quality: int = 90) 
 
 
 def compress_dataset_images(dataset_dir: str, max_size: int = 512,
-                            quality: int = 90, workers: int = 4) -> dict:
+                            quality: int = 90, workers: int = 4,
+                            cancel_token=None) -> dict:
     """并发压缩数据集图片（最长边 <= max_size），带 tqdm 进度条。
 
     Returns:
@@ -178,29 +179,32 @@ def compress_dataset_images(dataset_dir: str, max_size: int = 512,
         logger.warning("数据集中没有可压缩的图片: %s", dataset_dir)
         return result
 
-    from concurrent.futures import ThreadPoolExecutor, as_completed
-    from tqdm import tqdm
+    from utils.concurrency import interruptible_map
 
     max_workers = max(1, int(workers or 1))
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = {
-            executor.submit(compress_image_file, path, max_size, quality): path
-            for path in targets
-        }
-        for future in tqdm(
-            as_completed(futures), total=len(futures),
-            desc=f"压缩数据集(最长边{max_size})", unit="张", ncols=100,
-        ):
-            try:
-                if future.result():
-                    result["compressed"] += 1
-                else:
-                    result["skipped"] += 1
-            except Exception:
-                result["failed"] += 1
 
+    def _count(path, outcome):
+        if isinstance(outcome, Exception):
+            result["failed"] += 1
+        elif outcome:
+            result["compressed"] += 1
+        else:
+            result["skipped"] += 1
+
+    # 用可中断执行器：Ctrl+C 后不再开始新图片，且不必等所有任务跑完
+    interrupted, _ = interruptible_map(
+        lambda path, token: compress_image_file(path, max_size, quality),
+        targets,
+        max_workers=max_workers,
+        cancel_token=cancel_token,
+        desc=f"压缩数据集(最长边{max_size})",
+        unit="张",
+        on_done=_count,
+    )
+    result["interrupted"] = interrupted
     logger.info(
-        "数据集压缩完成: 总计 %d, 已压缩 %d, 跳过 %d, 失败 %d",
+        "数据集压缩%s: 总计 %d, 已压缩 %d, 跳过 %d, 失败 %d",
+        "已中断" if interrupted else "完成",
         result["total"], result["compressed"], result["skipped"], result["failed"],
     )
     return result

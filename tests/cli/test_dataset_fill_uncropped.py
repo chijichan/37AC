@@ -57,7 +57,7 @@ def _patch(monkeypatch, fake, cap, fill=True):
     monkeypatch.setattr(YD, "_get_thread_detector", lambda: fake)
     monkeypatch.setattr(cfg, "YOLO_CROP_WORKERS", 1)
     monkeypatch.setattr(cfg, "DATASET_COMPRESS_SIZE", 0)
-    monkeypatch.setattr(cfg, "DATASET_NO_CROP_DIRS", [])
+    monkeypatch.setattr(cfg, "DATASET_IGNORE_DIRS", [])
     monkeypatch.setattr(cfg, "DATASET_FILL_UNCROPPED", fill)
     return cap
 

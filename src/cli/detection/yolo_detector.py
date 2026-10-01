@@ -549,7 +549,8 @@ def _get_thread_detector() -> YoloDetector:
     return detector
 
 
-def crop_dataset(source_dir: str, output_dir: str, target_classes=None, max_images_per_role: int = 100):
+def crop_dataset(source_dir: str, output_dir: str, target_classes=None,
+                 max_images_per_role: int = 100, cancel_event=None):
     """遍历数据集目录，对每张图片执行 YOLO 检测并裁剪人物区域。
 
     裁剪全程在内存里完成（缩略图检测 → 坐标映射回原图 → 从原图裁剪 → 压缩编码），
@@ -584,10 +585,10 @@ def crop_dataset(source_dir: str, output_dir: str, target_classes=None, max_imag
         DATASET_COMPRESS_SIZE,
         DATASET_COMPRESS_QUALITY,
         DATASET_FILL_UNCROPPED,
-        is_in_no_crop_list,
+        DATASET_IGNORE_CLEAN,
+        is_in_ignore_list,
     )
-    from concurrent.futures import ThreadPoolExecutor, as_completed
-    from tqdm import tqdm
+    from utils.concurrency import CancelToken, interruptible_map
 
     _logger.info("开始 YOLO 裁剪: %s → %s", source_dir, output_dir)
 
@@ -603,19 +604,35 @@ def crop_dataset(source_dir: str, output_dir: str, target_classes=None, max_imag
                 continue
             role_tasks.append((ip_name, role_name, role_path))
 
-    no_crop_roles = [t for t in role_tasks if is_in_no_crop_list(t[2])]
-    if no_crop_roles:
+    # 「不处理列表」：命中的源目录**完全不管**（不进数据集），并从任务里剔除
+    ignored_tasks = [t for t in role_tasks if is_in_ignore_list(t[2])]
+    role_tasks = [t for t in role_tasks if not is_in_ignore_list(t[2])]
+    if ignored_tasks:
         _logger.info(
-            "「不处理列表」命中 %d 个角色（不做 YOLO 裁剪，原图直接用）: %s",
-            len(no_crop_roles), ", ".join("%s/%s" % (i, r) for i, r, _p in no_crop_roles),
+            "「不处理列表」命中 %d 个目录，已完全跳过（不进数据集）: %s",
+            len(ignored_tasks), ", ".join("%s/%s" % (i, r) for i, r, _p in ignored_tasks),
         )
+        if DATASET_IGNORE_CLEAN:
+            for ip_name_i, role_name_i, _p in ignored_tasks:
+                stale_dir = os.path.join(output_dir, ip_name_i, role_name_i)
+                if os.path.isdir(stale_dir) and os.listdir(stale_dir):
+                    stale_count = len(os.listdir(stale_dir))
+                    shutil.rmtree(stale_dir, ignore_errors=True)
+                    _logger.warning(
+                        "已清理该目录在数据集中的旧产物: %s/%s（%d 个文件）",
+                        ip_name_i, role_name_i, stale_count,
+                    )
 
-    def process_role(ip_name, role_name, role_path, no_crop=False):
-        """处理单个角色（在线程内执行，使用线程本地 detector）。"""
-        local = {"processed": 0, "skipped": 0, "failed": 0, "no_crop": 0, "whole": 0}
-        detector = None if no_crop else _get_thread_detector()
-        if no_crop:
-            _logger.info("角色 %s/%s 在「不处理列表」中：原图直接作为数据集（不裁剪）", ip_name, role_name)
+    def process_role(ip_name, role_name, role_path, token=None):
+        """处理单个角色（在线程内执行，使用线程本地 detector）。
+
+        token（CancelToken）用于协作式取消：每个角色/每张图前检查一次，
+        收到 Ctrl+C 后能马上停下来，而不是把整个角色跑完。
+        """
+        local = {"processed": 0, "skipped": 0, "failed": 0, "whole": 0}
+        if token is not None and token.cancelled():
+            return local
+        detector = _get_thread_detector()
 
         out_role_dir = os.path.join(output_dir, ip_name, role_name)
         existing_files = []
@@ -659,6 +676,8 @@ def crop_dataset(source_dir: str, output_dir: str, target_classes=None, max_imag
         for src_img, fname, file_size in role_images:
             if saved_count >= max_images_per_role:
                 break
+            if token is not None and token.cancelled():
+                break
 
             base_name, ext = os.path.splitext(fname)
             # 新流程统一输出 JPEG；同时检查旧命名的产物，避免续跑时重复处理
@@ -674,21 +693,6 @@ def crop_dataset(source_dir: str, output_dir: str, target_classes=None, max_imag
             if not created_role_dir:
                 os.makedirs(out_role_dir, exist_ok=True)
                 created_role_dir = True
-
-            if no_crop:
-                # 不处理列表：跳过 YOLO，原图直接落盘（仍按 DATASET_COMPRESS_SIZE 压缩）
-                try:
-                    from utils.image_utils import compress_image_file
-                    shutil.copy2(src_img, original_out)
-                    compress_image_file(original_out, max_size=DATASET_COMPRESS_SIZE)
-                    local["processed"] += 1
-                    local["no_crop"] += 1
-                    saved_count += 1
-                    _logger.debug("原图入集（不裁剪）: %s → %s", src_img, original_out)
-                except Exception as e:
-                    _logger.error("复制原图失败 %s: %s", src_img, e)
-                    local["failed"] += 1
-                continue
 
             try:
                 # 内存内完成：缩略图检测 → 坐标映射回原图 → 从原图裁剪 → 压缩编码；
@@ -727,7 +731,7 @@ def crop_dataset(source_dir: str, output_dir: str, target_classes=None, max_imag
             )
             from utils.image_utils import compress_image_file
             for src_img, fname in uncropped_candidates:
-                if need <= 0:
+                if need <= 0 or (token is not None and token.cancelled()):
                     break
                 original_out = os.path.join(out_role_dir, fname)
                 if os.path.exists(original_out):
@@ -762,45 +766,48 @@ def crop_dataset(source_dir: str, output_dir: str, target_classes=None, max_imag
     workers = max(1, int(YOLO_CROP_WORKERS or 1))
     _logger.info("YOLO 裁剪并发线程数: %d（共 %d 个角色）", workers, len(role_tasks))
 
-    counters = {"processed": 0, "skipped": 0, "failed": 0, "no_crop": 0, "whole": 0}
+    counters = {"processed": 0, "skipped": 0, "failed": 0, "whole": 0}
     counters_lock = threading.Lock()
 
+    def _accumulate(task, result):
+        with counters_lock:
+            if isinstance(result, dict):
+                for key in counters:
+                    counters[key] += result.get(key, 0) or 0
+            else:
+                counters["failed"] += 1
+
+    token = cancel_event if cancel_event is not None else CancelToken()
+    interrupted = False
     if role_tasks:
-        with ThreadPoolExecutor(max_workers=workers) as executor:
-            futures = [
-                executor.submit(process_role, ip_name, role_name, role_path,
-                                is_in_no_crop_list(role_path))
-                for ip_name, role_name, role_path in role_tasks
-            ]
-            for future in tqdm(
-                as_completed(futures), total=len(futures),
-                desc=f"YOLO裁剪({workers}线程)", unit="角色", ncols=100,
-            ):
-                try:
-                    r = future.result()
-                except Exception as e:
-                    _logger.error("角色处理异常: %s", e)
-                    r = {"processed": 0, "skipped": 0, "failed": 1}
-                with counters_lock:
-                    for key in counters:
-                        counters[key] += r.get(key, 0)
+        interrupted, _ = interruptible_map(
+            lambda task, tok: process_role(task[0], task[1], task[2], tok),
+            role_tasks,
+            max_workers=workers,
+            cancel_token=token,
+            desc=f"YOLO裁剪({workers}线程)",
+            unit="角色",
+            on_done=_accumulate,
+        )
 
     processed = counters["processed"]
     skipped = counters["skipped"]
     failed = counters["failed"]
-    no_crop = counters["no_crop"]
     whole = counters["whole"]
+    interrupted = interrupted or token.cancelled()
     _logger.info(
-        "数据集裁剪完成: 已处理=%d（其中不裁剪原图 %d、裁剪不足用整图补足 %d）, 跳过=%d, 失败=%d"
+        "数据集裁剪%s: 已处理=%d（其中裁剪不足用整图补足 %d）, 跳过=%d, 失败=%d, 忽略目录=%d"
         "（输出已按最长边 %d 压缩）",
-        processed, no_crop, whole, skipped, failed, DATASET_COMPRESS_SIZE,
+        "已中断" if interrupted else "完成",
+        processed, whole, skipped, failed, len(ignored_tasks), DATASET_COMPRESS_SIZE,
     )
     return {
         "processed": processed,
         "skipped": skipped,
         "failed": failed,
-        "no_crop": no_crop,
         "whole": whole,
+        "ignored": len(ignored_tasks),
+        "interrupted": interrupted,
     }
 
 

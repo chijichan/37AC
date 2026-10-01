@@ -161,6 +161,10 @@ LLM_RECOGNITION_ENABLED = os.getenv("LLM_RECOGNITION_ENABLED", "False").lower() 
 # 训练结束后是否使用 LLM 为每个角色生成 features_used / tags 并写入 classes.json
 # （需同时启用 LLM_RECOGNITION_ENABLED；会按角色逐个调用 API，注意成本）
 LLM_ENRICH_FEATURES = os.getenv("LLM_ENRICH_FEATURES", "False").lower() == "true"
+# features_used / tags 每条列表最多保留多少条（LLM 多给的会被截断，0 或负数=不限制）
+# 训练补全时：两个字段**都已达到各自上限**的角色视为已完整，不再调用 LLM（省 API）
+LLM_MAX_FEATURES = int(os.getenv("LLM_MAX_FEATURES", "3") or "3")
+LLM_MAX_TAGS = int(os.getenv("LLM_MAX_TAGS", "3") or "3")
 # 实验性：LLM 识别时把 classes.json 中已知角色的 features_used / tags 附加到提示词，
 # 让大模型对照角色数据库匹配识别（需同时启用 LLM_RECOGNITION_ENABLED）
 LLM_DB_RECOGNITION = os.getenv("LLM_DB_RECOGNITION", "False").lower() == "true"
@@ -315,6 +319,11 @@ _DEFAULT_LLM_PROMPT = (
     '    }\n'
     '  ]\n'
     '}'
+    '\n'
+
+    '【features_used / tags 规则】\n'
+    '两个字段各给 1~3 条，最多 3 条（多给的会被截断）：\n'
+    'features_used 写判断依据（发色/发型/服装/武器等具体特征），tags 写外貌标签（银发/长发/女性角色）。\n'
     '\n'
 
     '【label 字段规则（最高优先级）】\n'

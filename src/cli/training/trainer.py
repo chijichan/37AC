@@ -370,11 +370,37 @@ def _evaluate_per_ip_success_rate(model, dataset, device, class_names):
     return ip_stats
 
 
+def _merge_profile_items(existing, new, limit):
+    """合并已有与新增条目：去重、保序（已有的在前），并按上限截断。"""
+    merged = []
+    for item in list(existing or []) + list(new or []):
+        text = str(item).strip()
+        if not text or text in merged:
+            continue
+        merged.append(text)
+        if limit and limit > 0 and len(merged) >= limit:
+            break
+    return merged
+
+
+def _profile_reached_limit(profile, min_features=None, min_tags=None):
+    """features_used 与 tags 是否都已达到上限（都够了就不再调用 LLM）。"""
+    need_features = LLM_MAX_FEATURES if min_features is None else min_features
+    need_tags = LLM_MAX_TAGS if min_tags is None else min_tags
+    features = [x for x in (profile or {}).get("features_used") or [] if str(x).strip()]
+    tags = [x for x in (profile or {}).get("tags") or [] if str(x).strip()]
+    return (
+        len(features) >= (need_features if need_features and need_features > 0 else 1)
+        and len(tags) >= (need_tags if need_tags and need_tags > 0 else 1)
+    )
+
+
 def _enrich_classes_with_llm_features(dataset, class_names):
     """训练结束后，用 LLM（多模态）为每个角色生成 features_used / tags 并写入 classes.json。
 
     仅当 LLM_ENRICH_FEATURES=True 且 LLM_RECOGNITION_ENABLED=True 时执行；
-    已有 features_used 或 tags 的角色会跳过，避免重复消耗 API。
+    features_used 与 tags **都已达到上限**（LLM_MAX_FEATURES / LLM_MAX_TAGS，默认各 3 条）的角色
+    会跳过，不再调用 API；没满的角色会用 LLM 结果**合并补齐**到上限（去重、已有的在前）。
     每个角色取数据集中的第一张图片作为代表图，复用 predict_image_llm 返回的
     features_used / tags 字段。
 
@@ -420,20 +446,38 @@ def _enrich_classes_with_llm_features(dataset, class_names):
         sample_by_label.setdefault(label, path)
 
     logger.info("=" * 50)
-    logger.info("使用 LLM 为 %d 个角色生成 features_used / tags ...", len(class_names))
+    logger.info(
+        "使用 LLM 为 %d 个角色生成 features_used / tags（上限 features=%s / tags=%s，已达上限的角色跳过）...",
+        len(class_names), LLM_MAX_FEATURES, LLM_MAX_TAGS,
+    )
     profiles = {}
     for idx, cls in enumerate(class_names, 1):
-        if existing_profiles.get(cls):
-            profiles[cls] = existing_profiles[cls]
-            logger.info("[%d/%d] %s 已有 profile，跳过", idx, len(class_names), cls)
+        existing = existing_profiles.get(cls) or {}
+        if _profile_reached_limit(existing):
+            # 已经有 3 个（达到上限）就不再去问 LLM
+            profiles[cls] = {
+                "features_used": _merge_profile_items(existing.get("features_used"), None, LLM_MAX_FEATURES),
+                "tags": _merge_profile_items(existing.get("tags"), None, LLM_MAX_TAGS),
+            }
+            logger.info(
+                "[%d/%d] %s 已有 features_used=%d 条 / tags=%d 条（上限 %s/%s），跳过",
+                idx, len(class_names), cls,
+                len(profiles[cls]["features_used"]), len(profiles[cls]["tags"]),
+                LLM_MAX_FEATURES, LLM_MAX_TAGS,
+            )
             continue
         img = sample_by_label.get(idx - 1)  # dataset.samples 的 label 是 0-based
         if not img:
             continue
         try:
             result = predict_image_llm(str(img))
-            feats = result.get("features_used") or []
-            tags = result.get("tags") or []
+            # 合并补齐（不覆盖已有条目），并各自截断到上限
+            feats = _merge_profile_items(
+                existing.get("features_used"), result.get("features_used"), LLM_MAX_FEATURES
+            )
+            tags = _merge_profile_items(
+                existing.get("tags"), result.get("tags"), LLM_MAX_TAGS
+            )
             profiles[cls] = {"features_used": feats, "tags": tags}
             logger.info(
                 "[%d/%d] %s -> features_used=%s tags=%s",

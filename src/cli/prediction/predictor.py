@@ -34,6 +34,8 @@ from config.base import (
     LLM_TIMEOUT_SEC,
     LLM_MAX_TOKEN,
     LLM_THINKING,
+    LLM_MAX_FEATURES,
+    LLM_MAX_TAGS,
     LLM_MAX_ATTEMPTS,
     LLM_RETRY_BASE_SEC,
     LLM_RETRY_MAX_SEC,
@@ -700,6 +702,14 @@ def _merge_llm_class_probs(label, confidence, class_probs):
         merged.append({"name": name, "prob": prob})
     merged.sort(key=lambda x: x["prob"], reverse=True)
     return merged[:10]
+
+
+def _cap_items(items, limit):
+    """按上限截断列表（limit<=0 表示不限制）。"""
+    items = list(items or [])
+    if limit is None or limit <= 0:
+        return items
+    return items[:limit]
 
 
 # 可重试的 HTTP 状态码：限流 + 服务端/网关临时错误
@@ -1384,15 +1394,19 @@ def _parse_llm_response(resp_data: dict) -> tuple:
             label = str(raw_label).strip() if raw_label else ""
             confidence = float(parsed.get("confidence", 95.0))
 
-            # 关键特征（如 ["蓝发", "和服"]）
+            # 关键特征（如 ["蓝发", "和服"]）：最多 LLM_MAX_FEATURES 条（默认 3）
             raw_features = parsed.get("features_used")
             if isinstance(raw_features, list):
-                features_used = [str(f).strip() for f in raw_features if str(f).strip()]
+                features_used = _cap_items(
+                    [str(f).strip() for f in raw_features if str(f).strip()], LLM_MAX_FEATURES
+                )
 
-            # 标签（如 ["银发", "长发", "女性角色", "偶像风"]）
+            # 标签（如 ["银发", "长发", "女性角色"]）：最多 LLM_MAX_TAGS 条（默认 3）
             raw_tags = parsed.get("tags")
             if isinstance(raw_tags, list):
-                tags = [str(t).strip() for t in raw_tags if str(t).strip()]
+                tags = _cap_items(
+                    [str(t).strip() for t in raw_tags if str(t).strip()], LLM_MAX_TAGS
+                )
 
             # 备选角色 → class_probs（统一 Candidate 结构，见 common/recognition.py）
             # 提示词约定字段为 "class_probs"（{"label","confidence"}），

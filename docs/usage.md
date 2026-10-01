@@ -36,6 +36,11 @@ CLI 采用**子命令**设计（无参数运行则进入交互菜单）：
     一图多角时，某个人物重试仍失败只记为「该人物未识别」（结果里 `failed_characters` / `character_failed_count` /
     `warnings`），**其它人物照常返回、整图不算失败**；整图路径失败才会把 `success` 置 false。
     单张图总耗时由 `LLM_MAX_TOTAL_SEC`（默认 90s）兜住，避免多人图把任务拖到节点超时。
+  - **features_used / tags 最多各 3 条**（`LLM_MAX_FEATURES` / `LLM_MAX_TAGS`，0=不限制）：
+    提示词里已要求"各给 1~3 条"，解析时超出的会被截断。
+    训练结束后的角色档案补全（`LLM_ENRICH_FEATURES=true`）也按这个上限判断：
+    **两个字段都已够 3 条就跳过、不再调用 LLM**；没满的用 LLM 结果合并补齐（去重、已有的在前）。
+
 
 
 ### 1. 训练模型
@@ -317,7 +322,7 @@ python -m pytest tests/cli -q --no-cov      # CLI（src/cli）
 python -m pytest tests/server -q --no-cov   # 服务端（src/server）
 ```
 
-两套必须**分开进程**运行（各自持有独立的 `config` 包，同进程会互相串）。当前状态：CLI 224 通过、服务端 194 通过。
+两套必须**分开进程**运行（各自持有独立的 `config` 包，同进程会互相串）。当前状态：CLI 232 通过、服务端 194 通过。
 
 受限环境（系统 TEMP 不可写、`mkdir(mode=0o700)` 建出的目录后续连列举/写入都被拒）下，`tests/conftest.py` 会自动：
 

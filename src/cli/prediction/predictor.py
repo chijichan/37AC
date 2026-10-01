@@ -193,9 +193,13 @@ def predict_character(recognition_method: str = "local", image_path: str = None)
         if single_shot:
             user_input = image_path
         else:
+            from utils.cli_input import GoBack, read_line
+
             try:
-                user_input = input("请输入你要预测的图片路径（或输入 0 返回主菜单）: ").strip().strip("\"'").strip("\x1a")
-            except (KeyboardInterrupt, EOFError):
+                user_input = read_line(
+                    "请输入你要预测的图片路径（ESC/Ctrl+Z 返回上级，0 返回主菜单）: "
+                ).strip("\"'")
+            except GoBack:
                 print()
                 logger.info("好的，返回主菜单~")
                 return

@@ -56,13 +56,15 @@ def _action_train(args):
         print("  [0] 返回主菜单")
         print("-" * 40)
 
+        from utils.cli_input import GoBack, ask
+
         while True:
             try:
-                mode_choice = input("请选择 (1/2/0): ").strip().strip("\x1a")
-            except (KeyboardInterrupt, EOFError):
+                mode_choice = ask("请选择 (1/2/0): ", valid=("1", "2", "0"))
+            except GoBack:
                 print()
                 return
-            if mode_choice == "0" or mode_choice == "":
+            if mode_choice == "0":
                 logger.info("返回主菜单~")
                 return
             elif mode_choice == "1":
@@ -253,12 +255,15 @@ def main():
         return
 
     # 交互模式（无参数或 menu 子命令）
+    from utils.cli_input import ExitProgram, GoBack, ask
+
     while True:
         try:
             # 丢弃训练/识别等长任务期间残留的按键，避免结束后主菜单被逐条消费重复打印
             drain_pending_input()
             show_menu()
-            choice = input("请输入你的选择 (1/2/3/4/0): ").strip().strip("\x1a")
+            choice = ask("请输入你的选择 (1/2/3/4/0): ", valid=("1", "2", "3", "4", "0"),
+                         invalid_tip="请输入 1、2、3、4 或 0")
 
             if choice == "0":
                 logger.info("退出程序，再见~")
@@ -267,8 +272,15 @@ def main():
             handler = MENU_ACTIONS.get(choice)
             if handler:
                 handler(args)
-            else:
-                logger.info("请输入 1、2、3、4 或 0 哦")
+        except GoBack:
+            # 主菜单已是顶层：再"返回上级"就重新显示主菜单
+            print()
+            continue
+        except ExitProgram:
+            # Ctrl+C（或长任务被 Ctrl+C 中断后）结束程序
+            print()
+            logger.info("收到 Ctrl+C，退出程序，再见~")
+            _force_exit(0)
         except KeyboardInterrupt:
             print()  # 换行，避免 ^C 糊在输入行
             logger.info("按 Ctrl+C 退出程序，再见~")

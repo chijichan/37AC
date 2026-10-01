@@ -135,6 +135,9 @@ def crop_dataset_function():
             "已完成的图片保留在数据集目录，下次运行会跳过它们继续",
             result["processed"], result["skipped"], result["failed"],
         )
+        # 约定：Ctrl+C = 结束程序（此处已完成收尾，直接抛出交给顶层处理）
+        from utils.cli_input import ExitProgram
+        raise ExitProgram()
     else:
         logger.info(
             "裁剪完成: 处理 %d 张, 跳过 %d 张, 失败 %d 张",
@@ -198,20 +201,24 @@ def show_dataset_menu():
     print("  [2] 裁剪数据集（YOLO 裁剪原始数据集，自动压缩）")
     print("  [3] 压缩数据集（压缩 saves/dataset 内图片）")
     print("  [0] 返回主菜单")
+    print("  " + "─" * 30)
+    print("  ESC / Ctrl+Z 返回上级菜单，Ctrl+C 结束程序")
     print("-" * 40)
 
 
 def run_dataset_settings():
     """数据集管理子菜单交互循环"""
+    from utils.cli_input import GoBack, ask
+
     while True:
         drain_pending_input()
         show_dataset_menu()
         try:
-            choice = input("请选择 (1/2/3/0): ").strip().strip("\x1a")
-        except (KeyboardInterrupt, EOFError):
+            choice = ask("请选择 (1/2/3/0): ", valid=("1", "2", "3", "0"))
+        except GoBack:
             print()
             return
-        if choice == "0" or choice == "":
+        if choice == "0":
             return
         elif choice == "1":
             verify_images_function()
@@ -259,13 +266,15 @@ def ask_recognition_method():
     print("  [0] 返回主菜单")
     print("-" * 40)
 
+    from utils.cli_input import GoBack, ask
+
     while True:
         try:
-            choice = input("请选择 (1/2/0): ").strip().strip("\x1a")
-        except (KeyboardInterrupt, EOFError):
+            choice = ask("请选择 (1/2/0): ", valid=("1", "2", "0"))
+        except GoBack:
             print()
             return None
-        if choice == "0" or choice == "":
+        if choice == "0":
             return None
         elif choice == "1":
             return "local"
@@ -304,6 +313,7 @@ def show_menu():
     for key, name, desc in _MENU_ITEMS:
         print(_pad_display(f"  [{key}] {name}", 19) + desc)
     print("=" * 48)
+    print("  ESC / Ctrl+Z 返回上级菜单，Ctrl+C 结束程序")
 
 
 def ask_dataset_choice():
@@ -322,13 +332,15 @@ def ask_dataset_choice():
     print("  [0] 返回主菜单")
     print("-" * 40)
 
+    from utils.cli_input import GoBack, ask
+
     while True:
         try:
-            choice = input("请选择 (1/2/3/0): ").strip().strip("\x1a")
-        except (KeyboardInterrupt, EOFError):
+            choice = ask("请选择 (1/2/3/0): ", valid=("1", "2", "3", "0"))
+        except GoBack:
             print()
             return None, None
-        if choice == "0" or choice == "":
+        if choice == "0":
             return None, None
         elif choice == "1":
             return str(DATASET_DIR), False

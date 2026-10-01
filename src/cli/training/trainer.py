@@ -816,6 +816,8 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None, cancel
                 epochs_no_improve = 0
                 logger.info("保存最佳模型 (正确率: %.2f%%) → %s", best_val_acc, str(MODEL_PATH))
                 save_classes_to_json(CLASSES_JSON_PATH, class_names)
+                # 权重/类别都换了，config.json 必须一起更新（节点同步靠它的 version + sha256 比对）
+                _write_model_config(training_version)
             elif EARLY_STOP_PATIENCE > 0:
                 epochs_no_improve += 1
                 if epochs_no_improve >= EARLY_STOP_PATIENCE:
@@ -833,6 +835,13 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None, cancel
 
         # 训练结束后：使用 LLM 为每个角色补充 features_used / tags（可选，需 LLM_ENRICH_FEATURES=True）
         _enrich_classes_with_llm_features(full_dataset, class_names)
+
+        # 收尾统一刷新一次 config.json：
+        # 上面可能刚改过 classes.json（LLM 补全），哈希必须重新计算；
+        # 另外早停/无提升（阶段2 从未保存）等情况也需要这一次兜底写入
+        _write_model_config(training_version)
+        logger.info("模型配置已刷新: %s（version=%s，最佳正确率 %.2f%%）",
+                    str(MODEL_INFO_PATH), training_version, best_val_acc)
 
     except (KeyboardInterrupt, TrainingCancelled):
         logger.warning("=" * 50)

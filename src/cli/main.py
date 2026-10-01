@@ -81,15 +81,34 @@ def _action_train(args):
     logger.info("正在加载训练模块（首次加载 PyTorch 较慢，请稍候）...")
     from training.trainer import train_model  # 延迟导入（PyTorch 加载较慢）
 
+    # 先完成交互选择（此时不能开启按键监听，否则会抢走 input() 的按键）
     if args and args.dataset:
-        train_model(dataset_dir=args.dataset, use_yolo_crop=args.yolo_crop,
-                    resume_model=resume_model)
+        train_dataset_dir, train_use_yolo = args.dataset, args.yolo_crop
     else:
-        dataset_dir, use_yolo = ask_dataset_choice()
-        if dataset_dir is None:
+        train_dataset_dir, train_use_yolo = ask_dataset_choice()
+        if train_dataset_dir is None:
             return  # 用户选择返回主菜单
-        train_model(dataset_dir=dataset_dir, use_yolo_crop=use_yolo,
-                    resume_model=resume_model)
+
+    # 训练期间监听按键：ESC / Ctrl+Z = 停止训练并返回上级菜单；Ctrl+C = 结束程序
+    from utils.cli_input import ExitProgram, KeyWatcher
+    from utils.concurrency import CancelToken
+
+    token = CancelToken()
+    watcher = KeyWatcher()
+    watcher.on_back = token.cancel
+    watcher.start()
+    print("  提示：ESC / Ctrl+Z 停止训练并返回上级菜单，Ctrl+C 结束程序")
+    try:
+        train_model(dataset_dir=train_dataset_dir, use_yolo_crop=train_use_yolo,
+                    resume_model=resume_model, cancel_token=token)
+    finally:
+        watcher.stop()
+
+    if watcher.back_requested and not watcher.exit_requested:
+        logger.info("训练已停止，返回上级菜单（当前模型已保存，可用「继续训练」接着练）")
+        return
+    if watcher.exit_requested:
+        raise ExitProgram()
 
 
 def _action_predict(args=None):

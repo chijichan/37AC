@@ -497,7 +497,11 @@ def _enrich_classes_with_llm_features(dataset, class_names):
     logger.info("=" * 50)
 
 
-def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None):
+class TrainingCancelled(Exception):
+    """用户按 ESC / Ctrl+Z 取消训练（回到上级菜单）。"""
+
+
+def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None, cancel_token=None):
     """训练模型
 
     Args:
@@ -663,6 +667,8 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None):
                             bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, "
                                         "{rate_fmt}{postfix}]")
                 for batch_idx, (inputs, labels) in enumerate(loop):
+                    if cancel_token is not None and cancel_token.cancelled():
+                        raise TrainingCancelled()
                     try:
                         inputs, labels = inputs.to(device), labels.to(device)
                         phase1_optimizer.zero_grad()
@@ -754,6 +760,8 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None):
                         bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, "
                                     "{rate_fmt}{postfix}]")
             for batch_idx, (inputs, labels) in enumerate(loop):
+                if cancel_token is not None and cancel_token.cancelled():
+                    raise TrainingCancelled()
                 try:
                     inputs, labels = inputs.to(device), labels.to(device)
                     phase2_optimizer.zero_grad()
@@ -826,9 +834,9 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None):
         # 训练结束后：使用 LLM 为每个角色补充 features_used / tags（可选，需 LLM_ENRICH_FEATURES=True）
         _enrich_classes_with_llm_features(full_dataset, class_names)
 
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, TrainingCancelled):
         logger.warning("=" * 50)
-        logger.warning("训练被用户中断，正在保存当前模型...")
+        logger.warning("训练被用户中断（ESC/Ctrl+Z 或 Ctrl+C），正在保存当前模型...")
         try:
             if 'model_handler' in dir() and 'class_names' in dir() and class_names:
                 model_handler.save_model(MODEL_PATH)

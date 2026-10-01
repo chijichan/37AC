@@ -119,30 +119,40 @@ def crop_dataset_function():
         logger.warning("YOLO 模块未安装 (ultralytics)，无法裁剪数据集")
         return
 
+    from utils.cli_input import ExitProgram, KeyWatcher
     from utils.concurrency import CancelToken
 
-    print("  提示：随时按 Ctrl+C 可停止（已处理的图片会保留，可稍后继续）")
+    token = CancelToken()
+    watcher = KeyWatcher()
+    watcher.on_back = token.cancel          # ESC / Ctrl+Z → 停止裁剪
+    watcher.start()
+    print("  提示：ESC / Ctrl+Z 停止并返回上级菜单，Ctrl+C 结束程序（已处理的图片保留）")
     logger.info("开始裁剪原始数据集: %s → %s", DATASET_DIR, CROPPED_DATASET_DIR)
-    result = crop_dataset(
-        str(DATASET_DIR),
-        str(CROPPED_DATASET_DIR),
-        max_images_per_role=MAX_IMAGES_PER_ROLE,
-        cancel_event=CancelToken(),
-    )
-    if result.get("interrupted"):
+    try:
+        result = crop_dataset(
+            str(DATASET_DIR),
+            str(CROPPED_DATASET_DIR),
+            max_images_per_role=MAX_IMAGES_PER_ROLE,
+            cancel_event=token,
+        )
+    finally:
+        watcher.stop()
+
+    if result.get("interrupted") or watcher.back_requested:
         logger.warning(
-            "裁剪已被中断（Ctrl+C）: 本次处理 %d 张, 跳过 %d 张, 失败 %d 张；"
+            "裁剪已停止: 本次处理 %d 张, 跳过 %d 张, 失败 %d 张；"
             "已完成的图片保留在数据集目录，下次运行会跳过它们继续",
             result["processed"], result["skipped"], result["failed"],
         )
-        # 约定：Ctrl+C = 结束程序（此处已完成收尾，直接抛出交给顶层处理）
-        from utils.cli_input import ExitProgram
-        raise ExitProgram()
-    else:
-        logger.info(
-            "裁剪完成: 处理 %d 张, 跳过 %d 张, 失败 %d 张",
-            result["processed"], result["skipped"], result["failed"],
-        )
+        if watcher.back_requested and not watcher.exit_requested:
+            logger.info("已按 ESC/Ctrl+Z 停止，返回上级菜单")
+            print("=" * 50)
+            return
+        raise ExitProgram()                 # Ctrl+C → 结束程序
+    logger.info(
+        "裁剪完成: 处理 %d 张, 跳过 %d 张, 失败 %d 张",
+        result["processed"], result["skipped"], result["failed"],
+    )
     print("=" * 50)
 
 
@@ -168,26 +178,40 @@ def compress_dataset_function():
         logger.error("已裁剪数据集不存在: %s", CROPPED_DATASET_DIR)
         return
 
+    from utils.cli_input import ExitProgram, KeyWatcher
     from utils.concurrency import CancelToken
-    from utils.image_utils import compress_dataset_images
 
-    print("  提示：随时按 Ctrl+C 可停止")
+    token = CancelToken()
+    watcher = KeyWatcher()
+    watcher.on_back = token.cancel
+    watcher.start()
+    print("  提示：ESC / Ctrl+Z 停止并返回上级菜单，Ctrl+C 结束程序")
     logger.info(
         "开始压缩: %s（最长边 %d, 并发 %d）",
         CROPPED_DATASET_DIR, DATASET_COMPRESS_SIZE, DATASET_COMPRESS_WORKERS,
     )
-    result = compress_dataset_images(
-        str(CROPPED_DATASET_DIR),
-        max_size=DATASET_COMPRESS_SIZE,
-        quality=DATASET_COMPRESS_QUALITY,
-        workers=DATASET_COMPRESS_WORKERS,
-        cancel_token=CancelToken(),
-    )
+    try:
+        result = compress_dataset_images(
+            str(CROPPED_DATASET_DIR),
+            max_size=DATASET_COMPRESS_SIZE,
+            quality=DATASET_COMPRESS_QUALITY,
+            workers=DATASET_COMPRESS_WORKERS,
+            cancel_token=token,
+        )
+    finally:
+        watcher.stop()
+
     logger.info(
         "压缩%s: 总计 %d, 已压缩 %d, 跳过 %d, 失败 %d",
-        "已中断" if result.get("interrupted") else "完成",
+        "已停止" if (result.get("interrupted") or watcher.back_requested) else "完成",
         result["total"], result["compressed"], result["skipped"], result["failed"],
     )
+    if watcher.back_requested and not watcher.exit_requested:
+        logger.info("已按 ESC/Ctrl+Z 停止，返回上级菜单")
+        print("=" * 50)
+        return
+    if result.get("interrupted") and not watcher.back_requested:
+        raise ExitProgram()
     print("=" * 50)
 
 

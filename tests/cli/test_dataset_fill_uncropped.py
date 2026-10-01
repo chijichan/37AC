@@ -20,19 +20,22 @@ def _root() -> Path:
 
 
 class FakeDetector:
-    """failing 里的文件名返回"没检出人物"（None, None）。"""
+    """failing 里的文件名返回"没检出人物"（None, None）；其余返回压缩字节。"""
 
     def __init__(self, failing=()):
         self.failing = set(failing)
         self.calls = []
 
-    def detect_and_crop(self, src_img, target_classes=None, suffix="_37ac", max_size=None):
+    def detect_and_crop_bytes(self, src_img, target_classes=None, max_size=0, quality=90,
+                              margin_ratio=0.0, detect_max_size=0):
         self.calls.append(Path(src_img).name)
         if Path(src_img).name in self.failing:
             return None, None
-        out = Path(src_img).with_name(Path(src_img).stem + suffix + Path(src_img).suffix)
-        shutil.copy2(src_img, out)
-        return str(out), {"bbox": [0, 0, 10, 10]}
+        import io
+
+        buf = io.BytesIO()
+        Image.new("RGB", (60, 80), (200, 100, 50)).save(buf, format="JPEG")
+        return buf.getvalue(), {"ext": ".jpg", "bbox": (0, 0, 60, 80), "confidence": 0.9}
 
 
 @pytest.fixture

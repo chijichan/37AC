@@ -77,6 +77,38 @@ def validate_image_file(file_path: str) -> bool:
         return False
 
 
+def encode_image_bytes(image, max_size: int = 512, quality: int = 90, fmt: str = "JPEG"):
+    """把内存里的 PIL.Image 缩放（最长边 <= max_size，0=不缩放）并编码为字节。
+
+    与 compress_image_file 的区别：**不落盘、不读盘**，直接给内存中的图用，
+    适合"裁剪 → 压缩 → 直接写目标文件"的直连流程（省一次临时文件中转）。
+
+    Returns:
+        (data, ext)：编码后的字节与建议后缀（如 (b"...", ".jpg")）；失败返回 (None, "")
+    """
+    import io
+
+    try:
+        img = image if image.mode == "RGB" else image.convert("RGB")
+        if max_size and max_size > 0:
+            width, height = img.size
+            if max(width, height) > max_size:
+                ratio = max_size / float(max(width, height))
+                resized = img.resize(
+                    (max(1, int(width * ratio)), max(1, int(height * ratio))), Image.LANCZOS
+                )
+                if resized is not img:
+                    img = resized
+        buf = io.BytesIO()
+        suffix = ".jpg" if fmt.upper() in ("JPEG", "JPG") else "." + fmt.lower()
+        save_kwargs = {"quality": int(quality), "optimize": True} if suffix == ".jpg" else {}
+        img.save(buf, format=fmt.upper(), **save_kwargs)
+        return buf.getvalue(), suffix
+    except Exception as e:
+        logger.debug("图片内存编码失败: %s", e)
+        return None, ""
+
+
 def compress_image_file(file_path: str, max_size: int = 512, quality: int = 90) -> bool:
     """把图片最长边压到 max_size 以内（保持宽高比）。
 

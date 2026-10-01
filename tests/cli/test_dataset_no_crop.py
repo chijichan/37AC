@@ -58,14 +58,19 @@ def test_empty_list_matches_nothing(monkeypatch):
 # ---------------- crop_dataset 行为 ----------------
 
 class FakeDetector:
+    """新版接口：内存内返回压缩后的字节（crop_dataset 直接写目标文件）。"""
+
     def __init__(self):
         self.calls = []
 
-    def detect_and_crop(self, src_img, target_classes=None, suffix="_37ac", max_size=None):
+    def detect_and_crop_bytes(self, src_img, target_classes=None, max_size=0, quality=90,
+                              margin_ratio=0.0, detect_max_size=0):
         self.calls.append(src_img)
-        out = Path(src_img).with_name(Path(src_img).stem + suffix + Path(src_img).suffix)
-        shutil.copy2(src_img, out)
-        return str(out), {"bbox": [0, 0, 10, 10]}
+        import io
+
+        buf = io.BytesIO()
+        Image.new("RGB", (60, 80), (200, 100, 50)).save(buf, format="JPEG")
+        return buf.getvalue(), {"ext": ".jpg", "bbox": (0, 0, 60, 80), "confidence": 0.9}
 
 
 @pytest.fixture
@@ -96,9 +101,9 @@ def test_crop_dataset_skips_crop_for_listed_dir(source_tree, monkeypatch):
     listed = sorted(p.name for p in (out / "蔚蓝档案" / "_amazing").iterdir())
     assert listed == ["a.png", "b.png"]
     assert stats["no_crop"] == 2
-    # 普通角色：走上 YOLO 裁剪
+    # 普通角色：走上 YOLO 裁剪（内存直出，统一 JPEG）
     normal = sorted(p.name for p in (out / "蔚蓝档案" / "白子").iterdir())
-    assert normal == ["c_37ac.png"]
+    assert normal == ["c_37ac.jpg"]
     assert len(fake.calls) == 1
     assert stats["processed"] == 3
 
@@ -115,5 +120,5 @@ def test_crop_dataset_without_list_crops_everything(source_tree, monkeypatch):
     stats = YD.crop_dataset(str(src), str(out), max_images_per_role=100)
 
     assert stats["no_crop"] == 0
-    assert sorted(p.name for p in (out / "蔚蓝档案" / "_amazing").iterdir()) == ["a_37ac.png", "b_37ac.png"]
+    assert sorted(p.name for p in (out / "蔚蓝档案" / "_amazing").iterdir()) == ["a_37ac.jpg", "b_37ac.jpg"]
     assert len(fake.calls) == 3

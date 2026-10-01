@@ -301,6 +301,20 @@ DATASET_NO_CROP_PATHS=W:\Img\蔚蓝档案\_amazing;W:\Img\某IP\另一个目录
 - 目录名照常成为类别：W:\Img\蔚蓝档案\_amazing → 类别 蔚蓝档案/_amazing；想要别的类别名就直接改文件夹名。
 - 日志会打印命中的角色清单，结束统计形如 `已处理=…（其中不裁剪原图 N）`。
 
+#### 裁剪链路：全程内存、直写数据集
+
+crop_dataset 每张图的处理不再经过临时文件：
+
+1. 读原图（一次解码）；
+2. 在**缩略副本**上跑 YOLO 检测（最长边 YOLO_DETECT_MAX_SIZE，默认 1024）；
+3. 检测框按比例**映射回原图坐标**；
+4. 从**原图**裁剪（不是从缩略图裁，细节不丢——原先缩到 512 再裁，小人物会被裁成糊图）；
+5. 缩放 + JPEG 压缩（DATASET_COMPRESS_SIZE / DATASET_COMPRESS_QUALITY）得到字节；
+6. **直写** saves/dataset/<IP>/<角色>/<名>_37ac.jpg（不再写源图目录再 move）。
+
+实测（20 张 3000×2000、512px 输出）：单张约 181 ms，**RSS 全程稳定在 21.3 MB**，零临时文件。
+裁剪产物统一为 JPEG（.jpg）；续跑时旧的 `_37ac.<原后缀>` 也会被判定为已完成，不会重复处理。
+
 #### 相关：裁剪不足时用整图补足（DATASET_FILL_UNCROPPED）
 
 每个角色**优先保留 YOLO 裁剪图**；只有当某角色裁剪成功数仍少于 MAX_IMAGES_PER_ROLE 时，
@@ -322,7 +336,7 @@ python -m pytest tests/cli -q --no-cov      # CLI（src/cli）
 python -m pytest tests/server -q --no-cov   # 服务端（src/server）
 ```
 
-两套必须**分开进程**运行（各自持有独立的 `config` 包，同进程会互相串）。当前状态：CLI 232 通过、服务端 194 通过。
+两套必须**分开进程**运行（各自持有独立的 `config` 包，同进程会互相串）。当前状态：CLI 237 通过、服务端 194 通过。
 
 受限环境（系统 TEMP 不可写、`mkdir(mode=0o700)` 建出的目录后续连列举/写入都被拒）下，`tests/conftest.py` 会自动：
 

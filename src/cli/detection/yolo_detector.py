@@ -307,6 +307,112 @@ class YoloDetector:
             return None, None
 
 
+    def detect_and_crop_bytes(self, image_path, target_classes=None, max_size: int = 0,
+                              quality: int = 90, margin_ratio: float = 0.0,
+                              detect_max_size: int = 0):
+        """内存内一次完成：缩略图检测 → 坐标映射回原图 → 从原图裁剪 → 压缩编码。
+
+        与 detect_and_crop 的区别（也是它存在的理由）：
+        - 检测在**缩略副本**上做（快），框按比例映射回**原图**坐标；
+        - 裁剪从**原图**取像素（而不是从缩略图），细节不丢；
+        - 结果以压缩后的字节返回，**不落任何临时文件**，调用方可直接写数据集目录。
+
+        Args:
+            image_path: 原图路径
+            target_classes: 只关注的目标类别（默认 ["person"]）
+            max_size: 输出最长边上限（0=不缩放），即"压缩"的尺寸
+            quality: JPEG 质量（1-100）
+            margin_ratio: 裁剪框外扩比例
+            detect_max_size: 检测用缩略图的最长边（0=用 YOLO_DETECT_MAX_SIZE）
+
+        Returns:
+            (image_bytes, info)：info 含 bbox(原图坐标)/confidence/class_name/image_size/ext；
+            未检出目标或失败返回 (None, None)
+        """
+        from PIL import Image
+
+        from utils.image_utils import encode_image_bytes
+
+        if target_classes is None:
+            target_classes = ["person"]
+
+        try:
+            with Image.open(image_path) as raw:
+                original = raw.convert("RGB")
+                original_size = original.size
+        except Exception as e:
+            logger.error("YOLO 裁剪失败（图片无法读取）: %s", e)
+            return None, None
+
+        limit = int(detect_max_size or 0)
+        if limit <= 0:
+            try:
+                from config.base import YOLO_DETECT_MAX_SIZE
+                limit = int(YOLO_DETECT_MAX_SIZE or 0)
+            except Exception:
+                limit = 0
+
+        # ① 检测用小图（只在内存里缩小；下面仍从原图裁剪）
+        work = original
+        if limit and max(original_size) > limit:
+            ratio = limit / float(max(original_size))
+            work = original.resize(
+                (max(1, int(original_size[0] * ratio)), max(1, int(original_size[1] * ratio))),
+                Image.LANCZOS,
+            )
+        try:
+            detections = self.detect(work)
+            detected_size = work.size
+        finally:
+            if work is not original:
+                work.close()
+
+        if target_classes:
+            detections = [d for d in detections if d.get("class_name") in target_classes]
+        if not detections:
+            return None, None
+
+        # ② 坐标映射回原图（面积大者优先）
+        best, best_area = None, -1.0
+        for det in detections:
+            box = scale_bbox(det["bbox"], detected_size, original_size)
+            area = bbox_area(box)
+            if area > best_area:
+                best, best_area = dict(det, bbox=box), area
+        if best is None:
+            return None, None
+
+        box = expand_bbox(best["bbox"], original_size, margin_ratio)
+
+        # ③ 从原图裁剪 → 压缩编码（全在内存里完成）
+        try:
+            crop = original.crop(box)
+            data, ext = encode_image_bytes(crop, max_size=max_size, quality=quality)
+            crop.close()
+        except Exception as e:
+            logger.error("YOLO 裁剪失败（内存裁剪）: %s", e)
+            return None, None
+        finally:
+            original.close()
+
+        if not data:
+            return None, None
+
+        info = {
+            "bbox": box,
+            "detector_bbox": best["bbox"],
+            "confidence": best.get("confidence"),
+            "class_id": best.get("class_id"),
+            "class_name": best.get("class_name"),
+            "image_size": original_size,
+            "detected_size": detected_size,
+            "ext": ext,
+            "bytes": len(data),
+        }
+        logger.debug("内存裁剪: %s bbox=%s 置信度=%.2f → %d 字节 %s",
+                     image_path, box, best.get("confidence") or 0.0, len(data), ext)
+        return data, info
+
     def detect_all(self, image_path, max_size: int = 0, target_classes=("person",)):
         """多目标检测，并把检测框映射回**原图**坐标系（需求1）。
 
@@ -446,8 +552,9 @@ def _get_thread_detector() -> YoloDetector:
 def crop_dataset(source_dir: str, output_dir: str, target_classes=None, max_images_per_role: int = 100):
     """遍历数据集目录，对每张图片执行 YOLO 检测并裁剪人物区域。
 
-    裁剪后的图片保存到 output_dir（不覆盖原图），
-    文件名为 `_37ac` 后缀。若 YOLO 未检测到目标，则在数量未超限时直接复制原图。
+    裁剪全程在内存里完成（缩略图检测 → 坐标映射回原图 → 从原图裁剪 → 压缩编码），
+    结果**直接写入 output_dir**，不再产生临时文件；文件名为 `_37ac` 后缀（统一 JPEG）。
+    未检测到目标的图不复制，而是留到最后的「整图补足」阶段（见 DATASET_FILL_UNCROPPED）。
     每个角色最多保留 max_images_per_role 张图片，优先选择大图和 person 检测结果。
     若配置 DATASET_COMPRESS_SIZE>0，裁剪完成后会自动压缩数据集图片。
 
@@ -475,6 +582,7 @@ def crop_dataset(source_dir: str, output_dir: str, target_classes=None, max_imag
     from config.base import (
         YOLO_CROP_WORKERS,
         DATASET_COMPRESS_SIZE,
+        DATASET_COMPRESS_QUALITY,
         DATASET_FILL_UNCROPPED,
         is_in_no_crop_list,
     )
@@ -553,11 +661,13 @@ def crop_dataset(source_dir: str, output_dir: str, target_classes=None, max_imag
                 break
 
             base_name, ext = os.path.splitext(fname)
-            yolo_fname = f"{base_name}{CROP_SUFFIX}{ext}"
-            yolo_out = os.path.join(out_role_dir, yolo_fname)
+            # 新流程统一输出 JPEG；同时检查旧命名的产物，避免续跑时重复处理
+            yolo_out = os.path.join(out_role_dir, f"{base_name}{CROP_SUFFIX}.jpg")
+            yolo_out_legacy = os.path.join(out_role_dir, f"{base_name}{CROP_SUFFIX}{ext}")
             original_out = os.path.join(out_role_dir, fname)
 
-            if os.path.exists(yolo_out) or os.path.exists(original_out):
+            if (os.path.exists(yolo_out) or os.path.exists(yolo_out_legacy)
+                    or os.path.exists(original_out)):
                 local["skipped"] += 1
                 continue
 
@@ -581,15 +691,21 @@ def crop_dataset(source_dir: str, output_dir: str, target_classes=None, max_imag
                 continue
 
             try:
-                crop_path, info = detector.detect_and_crop(
-                    src_img, target_classes=target_classes, suffix=CROP_SUFFIX,
-                    max_size=DATASET_COMPRESS_SIZE,
+                # 内存内完成：缩略图检测 → 坐标映射回原图 → 从原图裁剪 → 压缩编码；
+                # 拿到字节后**直写数据集目录**，不再经过临时文件（少一次写+读+move）
+                data, info = detector.detect_and_crop_bytes(
+                    src_img, target_classes=target_classes,
+                    max_size=DATASET_COMPRESS_SIZE, quality=DATASET_COMPRESS_QUALITY,
                 )
-                if crop_path and os.path.exists(crop_path):
-                    shutil.move(crop_path, yolo_out)
+                if data:
+                    out_ext = (info or {}).get("ext") or ".jpg"
+                    out_path = os.path.join(out_role_dir, f"{base_name}{CROP_SUFFIX}{out_ext}")
+                    with open(out_path, "wb") as fh:
+                        fh.write(data)
                     local["processed"] += 1
                     saved_count += 1
-                    _logger.debug("YOLO 裁剪: %s → %s", src_img, yolo_out)
+                    _logger.debug("YOLO 裁剪(内存直出): %s → %s（%d 字节）",
+                                  src_img, out_path, len(data))
                 else:
                     # 未裁剪出人物：留到「整图补足」阶段（见下），此处只登记候选
                     uncropped_candidates.append((src_img, fname))

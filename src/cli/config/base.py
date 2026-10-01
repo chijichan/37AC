@@ -97,6 +97,12 @@ DATASET_NO_CROP_DIRS = [
 ]
 
 
+# 裁剪不出人物时：是否用整图（压缩后）补足 MAX_IMAGES_PER_ROLE（False=直接丢弃，旧行为）
+# 说明：优先保留 YOLO 裁剪图，只有在"裁剪成功数 < MAX_IMAGES_PER_ROLE"时才拿整图补齐，
+# 因此不会挤掉本可以裁出人物的样本。
+DATASET_FILL_UNCROPPED = os.getenv("DATASET_FILL_UNCROPPED", "True").lower() == "true"
+
+
 def is_in_no_crop_list(path) -> bool:
     """判断源目录是否在「不处理列表」内（等于条目，或位于条目之下）。"""
     if not DATASET_NO_CROP_DIRS:

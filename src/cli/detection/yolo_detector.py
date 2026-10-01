@@ -472,7 +472,12 @@ def crop_dataset(source_dir: str, output_dir: str, target_classes=None, max_imag
     _logger = _get_logger("crop_dataset")
 
     from common.constants import IMAGE_EXTENSIONS_BASIC as image_extensions
-    from config.base import YOLO_CROP_WORKERS, DATASET_COMPRESS_SIZE, is_in_no_crop_list
+    from config.base import (
+        YOLO_CROP_WORKERS,
+        DATASET_COMPRESS_SIZE,
+        DATASET_FILL_UNCROPPED,
+        is_in_no_crop_list,
+    )
     from concurrent.futures import ThreadPoolExecutor, as_completed
     from tqdm import tqdm
 
@@ -499,7 +504,7 @@ def crop_dataset(source_dir: str, output_dir: str, target_classes=None, max_imag
 
     def process_role(ip_name, role_name, role_path, no_crop=False):
         """处理单个角色（在线程内执行，使用线程本地 detector）。"""
-        local = {"processed": 0, "skipped": 0, "failed": 0, "no_crop": 0}
+        local = {"processed": 0, "skipped": 0, "failed": 0, "no_crop": 0, "whole": 0}
         detector = None if no_crop else _get_thread_detector()
         if no_crop:
             _logger.info("角色 %s/%s 在「不处理列表」中：原图直接作为数据集（不裁剪）", ip_name, role_name)
@@ -541,6 +546,8 @@ def crop_dataset(source_dir: str, output_dir: str, target_classes=None, max_imag
 
         saved_count = len(existing_files)
         created_role_dir = False
+        # 裁剪不出人物的图先攒着：等裁剪全部跑完，若仍不足 MAX_IMAGES_PER_ROLE 再用整图补足
+        uncropped_candidates = []
         for src_img, fname, file_size in role_images:
             if saved_count >= max_images_per_role:
                 break
@@ -584,19 +591,49 @@ def crop_dataset(source_dir: str, output_dir: str, target_classes=None, max_imag
                     saved_count += 1
                     _logger.debug("YOLO 裁剪: %s → %s", src_img, yolo_out)
                 else:
-                    if target_classes is None and saved_count < max_images_per_role:
-                        # 未检测到目标时也先压缩再保存
-                        from utils.image_utils import compress_image_file
-                        shutil.copy2(src_img, original_out)
-                        compress_image_file(original_out, max_size=DATASET_COMPRESS_SIZE)
-                        local["processed"] += 1
-                        saved_count += 1
-                        _logger.debug("直接复制原图: %s → %s", src_img, original_out)
-                    else:
-                        local["skipped"] += 1
+                    # 未裁剪出人物：留到「整图补足」阶段（见下），此处只登记候选
+                    uncropped_candidates.append((src_img, fname))
+                    _logger.debug("未裁剪出人物（待整图补足）: %s", src_img)
             except Exception as e:
                 _logger.error("处理失败 %s: %s", src_img, e)
                 local["failed"] += 1
+
+        # ==================== 整图补足 ====================
+        # 裁剪成功数不足 MAX_IMAGES_PER_ROLE 时，用「未裁剪出人物」的原图（压缩后）补齐；
+        # 因为整图永远是兜底，不会挤掉本可以裁出人物的样本。
+        filled = 0
+        if DATASET_FILL_UNCROPPED and saved_count < max_images_per_role and uncropped_candidates:
+            need = max_images_per_role - saved_count
+            _logger.info(
+                "角色 %s/%s 裁剪后 %d 张（上限 %d），用整图压缩补足 %d 张",
+                ip_name, role_name, saved_count, max_images_per_role,
+                min(need, len(uncropped_candidates)),
+            )
+            from utils.image_utils import compress_image_file
+            for src_img, fname in uncropped_candidates:
+                if need <= 0:
+                    break
+                original_out = os.path.join(out_role_dir, fname)
+                if os.path.exists(original_out):
+                    local["skipped"] += 1
+                    continue
+                try:
+                    if not created_role_dir:
+                        os.makedirs(out_role_dir, exist_ok=True)
+                        created_role_dir = True
+                    shutil.copy2(src_img, original_out)
+                    compress_image_file(original_out, max_size=DATASET_COMPRESS_SIZE)
+                    local["processed"] += 1
+                    local["whole"] += 1
+                    saved_count += 1
+                    filled += 1
+                    need -= 1
+                    _logger.debug("整图补足: %s → %s", src_img, original_out)
+                except Exception as e:
+                    _logger.error("整图补足失败 %s: %s", src_img, e)
+                    local["failed"] += 1
+        # 没被用上的候选（上限已满 / 开关关闭）按旧口径记为 skipped
+        local["skipped"] += max(0, len(uncropped_candidates) - filled)
 
         if os.path.isdir(out_role_dir) and not os.listdir(out_role_dir):
             # 当前角色没有写入任何新文件，删除可能产生的空目录
@@ -609,7 +646,7 @@ def crop_dataset(source_dir: str, output_dir: str, target_classes=None, max_imag
     workers = max(1, int(YOLO_CROP_WORKERS or 1))
     _logger.info("YOLO 裁剪并发线程数: %d（共 %d 个角色）", workers, len(role_tasks))
 
-    counters = {"processed": 0, "skipped": 0, "failed": 0, "no_crop": 0}
+    counters = {"processed": 0, "skipped": 0, "failed": 0, "no_crop": 0, "whole": 0}
     counters_lock = threading.Lock()
 
     if role_tasks:
@@ -636,11 +673,19 @@ def crop_dataset(source_dir: str, output_dir: str, target_classes=None, max_imag
     skipped = counters["skipped"]
     failed = counters["failed"]
     no_crop = counters["no_crop"]
+    whole = counters["whole"]
     _logger.info(
-        "数据集裁剪完成: 已处理=%d（其中不裁剪原图 %d）, 跳过=%d, 失败=%d（输出已按最长边 %d 压缩）",
-        processed, no_crop, skipped, failed, DATASET_COMPRESS_SIZE,
+        "数据集裁剪完成: 已处理=%d（其中不裁剪原图 %d、裁剪不足用整图补足 %d）, 跳过=%d, 失败=%d"
+        "（输出已按最长边 %d 压缩）",
+        processed, no_crop, whole, skipped, failed, DATASET_COMPRESS_SIZE,
     )
-    return {"processed": processed, "skipped": skipped, "failed": failed, "no_crop": no_crop}
+    return {
+        "processed": processed,
+        "skipped": skipped,
+        "failed": failed,
+        "no_crop": no_crop,
+        "whole": whole,
+    }
 
 
 def detect_characters(image_path: str) -> list:

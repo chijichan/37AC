@@ -181,6 +181,15 @@ else:
     LLM_API_TYPE = _LLM_API_TYPE_RAW
 LLM_MODEL_NAME = os.getenv("LLM_MODEL_NAME", "deepseek-v4.1")
 LLM_TIMEOUT_SEC = int(os.getenv("LLM_TIMEOUT_SEC", "30"))
+# ==================== LLM 限流/服务端错误重试 ====================
+# 单次请求的总尝试次数（含首次）；命中 429/5xx/连接断开会退避重试
+LLM_MAX_ATTEMPTS = int(os.getenv("LLM_MAX_ATTEMPTS", "3") or "3")
+# 退避基数（秒）：第 n 次失败后等待 base * 2^(n-1)，再受下面的上限约束；
+# 若响应带 Retry-After 头则优先按它等待
+LLM_RETRY_BASE_SEC = float(os.getenv("LLM_RETRY_BASE_SEC", "2") or "2")
+LLM_RETRY_MAX_SEC = float(os.getenv("LLM_RETRY_MAX_SEC", "30") or "30")
+# 单张图所有 LLM 请求的总时间预算（秒，0=不限）；一图多角会发多次请求，用它兜住总耗时
+LLM_MAX_TOTAL_SEC = float(os.getenv("LLM_MAX_TOTAL_SEC", "90") or "90")
 # 单次 LLM 推理的最大输出 token 数（推理模型思考+结论所需，默认 2048）
 LLM_MAX_TOKEN = int(os.getenv("LLM_MAX_TOKEN", "2048"))
 # 是否开启模型思考（推理）模式：True=开启推理过程（适合 DeepSeek R1 / QwQ / o1 等），

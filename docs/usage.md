@@ -31,6 +31,12 @@ CLI 采用**子命令**设计（无参数运行则进入交互菜单）：
     开关：`LLM_MULTI_CHARACTER`（默认 true）、`LLM_MAX_CHARACTERS`（默认 8，**每人一次调用**）、
     `LLM_CROP_METHOD`（auto / yolo / mediapipe / none）、`LLM_CROP_MAX_SIDE`（默认 768）；
     自定义提示词仍用 `LLM_PROMPT_TEMPLATE`（优先级最高）。
+  - **限流/服务端错误会自动退避重试**：429 / 5xx / 连接断开 / 超时都会重试（默认总 3 次尝试），
+    优先按响应头 `Retry-After` 等待，否则指数退避 + 抖动（`LLM_RETRY_BASE_SEC` / `LLM_RETRY_MAX_SEC`）。
+    一图多角时，某个人物重试仍失败只记为「该人物未识别」（结果里 `failed_characters` / `character_failed_count` /
+    `warnings`），**其它人物照常返回、整图不算失败**；整图路径失败才会把 `success` 置 false。
+    单张图总耗时由 `LLM_MAX_TOTAL_SEC`（默认 90s）兜住，避免多人图把任务拖到节点超时。
+
 
 ### 1. 训练模型
 
@@ -311,7 +317,7 @@ python -m pytest tests/cli -q --no-cov      # CLI（src/cli）
 python -m pytest tests/server -q --no-cov   # 服务端（src/server）
 ```
 
-两套必须**分开进程**运行（各自持有独立的 `config` 包，同进程会互相串）。当前状态：CLI 213 通过、服务端 194 通过。
+两套必须**分开进程**运行（各自持有独立的 `config` 包，同进程会互相串）。当前状态：CLI 224 通过、服务端 194 通过。
 
 受限环境（系统 TEMP 不可写、`mkdir(mode=0o700)` 建出的目录后续连列举/写入都被拒）下，`tests/conftest.py` 会自动：
 

@@ -2,6 +2,7 @@
 from PIL import Image
 import os
 import json
+import random
 import re
 import shutil
 import time
@@ -33,6 +34,10 @@ from config.base import (
     LLM_TIMEOUT_SEC,
     LLM_MAX_TOKEN,
     LLM_THINKING,
+    LLM_MAX_ATTEMPTS,
+    LLM_RETRY_BASE_SEC,
+    LLM_RETRY_MAX_SEC,
+    LLM_MAX_TOTAL_SEC,
     get_device,
 )
 from config.log_config import get_logger
@@ -697,6 +702,47 @@ def _merge_llm_class_probs(label, confidence, class_probs):
     return merged[:10]
 
 
+# 可重试的 HTTP 状态码：限流 + 服务端/网关临时错误
+_RETRYABLE_STATUS = frozenset({408, 409, 425, 429, 500, 502, 503, 504})
+
+
+def _parse_retry_after(resp):
+    """解析响应头 Retry-After（秒数或 HTTP 日期），拿不到返回 None。"""
+    try:
+        raw = (getattr(resp, "headers", None) or {}).get("Retry-After")
+    except Exception:
+        raw = None
+    if not raw:
+        return None
+    text = str(raw).strip()
+    if text.isdigit():
+        return float(text)
+    try:
+        import email.utils
+        from datetime import datetime, timezone
+
+        when = email.utils.parsedate_to_datetime(text)
+        if when is None:
+            return None
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=timezone.utc)
+        return (when - datetime.now(timezone.utc)).total_seconds()
+    except Exception:
+        return None
+
+
+def _retry_delay(resp, attempt, base=None, cap=None):
+    """第 attempt 次失败后的等待秒数：优先 Retry-After，否则指数退避 + 抖动。"""
+    base = float(LLM_RETRY_BASE_SEC if base is None else base)
+    cap = float(LLM_RETRY_MAX_SEC if cap is None else cap)
+    delay = _parse_retry_after(resp)
+    if delay is None or delay <= 0:
+        delay = base * (2 ** max(0, attempt - 1))
+    delay = max(0.0, min(float(delay), cap))
+    # 抖动：最多 +25%（避免多节点同时重试再次撞限流）
+    return delay + random.uniform(0, delay * 0.25)
+
+
 def _encode_image_for_llm(image_path, max_side=None, quality=85):
     """把图片缩放压缩后转 base64（视觉模型不需要大图，顺便省 token / 避免网关断开）。
 
@@ -936,13 +982,41 @@ def predict_image_llm(image_path: str) -> dict:
                 payload["temperature"] = 0.1
             return payload
 
-        def _request(prompt: str, image_b64: str, image_mime: str, _retries: int = 2):
-            """向 LLM API 发送一次识别请求（指定图片），返回解析后的
-            (label, confidence, features_used, tags, class_probs)。
+        # 本轮请求的软错误（限流/超时/断开等可重试失败）：
+        # 只有整图路径才算整体失败；一图多角时只表示"这个人没识别出来"
+        soft = {"last": None, "counts": {}}
+        started_at = time.time()
 
-            ConnectionError（网关断开）时自动重试，最多 _retries 次。
+        def _deadline_left():
+            """距离整张图的总预算还剩多少秒（0=不限）。"""
+            if LLM_MAX_TOTAL_SEC <= 0:
+                return None
+            return LLM_MAX_TOTAL_SEC - (time.time() - started_at)
+
+        def _post_with_retry(prompt, image_b64, image_mime):
+            """POST 一次（含限流/服务端错误的退避重试）。
+
+            Returns:
+                (resp, soft_error)：soft_error 非空表示"重试耗尽仍失败"，
+                此时 resp 为 None；拿到响应时 soft_error 为 None（状态码由调用方判断）。
             """
-            for attempt in range(1, _retries + 1):
+            attempts = max(1, int(LLM_MAX_ATTEMPTS))
+            last = None
+            last_resp = None          # 保留上一次响应，用于读取 Retry-After
+            for attempt in range(1, attempts + 1):
+                resp = None
+                if attempt > 1:
+                    delay = _retry_delay(last_resp, attempt - 1)
+                    left = _deadline_left()
+                    if left is not None and left <= delay:
+                        logger.warning(
+                            "LLM 重试预算不足（剩余 %.1fs < 需等待 %.1fs），放弃本次请求", left, delay
+                        )
+                        break
+                    logger.warning(
+                        "LLM 请求失败，%.1fs 后重试（第 %d/%d 次）", delay, attempt, attempts
+                    )
+                    time.sleep(delay)
                 try:
                     resp = requests.post(
                         LLM_API_URL,
@@ -951,26 +1025,41 @@ def predict_image_llm(image_path: str) -> dict:
                         timeout=LLM_TIMEOUT_SEC,
                     )
                 except requests.ConnectionError as e:
-                    logger.warning(
-                        "LLM 连接被断开 (第 %d/%d 次): %s", attempt, _retries, e
-                    )
-                    if attempt < _retries:
-                        time.sleep(2 * attempt)  # 2s, 4s 递增等待
-                        continue
-                    result["error"] = f"LLM 连接失败: {e}"
-                    logger.error("LLM %s", result["error"])
-                    return None, None, [], [], []
+                    last = ("connection", f"连接被断开: {e}")
                 except requests.Timeout:
-                    result["error"] = f"API 请求超时 ({LLM_TIMEOUT_SEC}秒)"
-                    logger.error("LLM %s", result["error"])
-                    return None, None, [], [], []
-                break
+                    last = ("timeout", f"请求超时 ({LLM_TIMEOUT_SEC}秒)")
+                else:
+                    last_resp = resp
+                    if resp.status_code == 200 or resp.status_code not in _RETRYABLE_STATUS:
+                        return resp, None
+                    last = ("http_%d" % resp.status_code,
+                            "API 返回错误 (%d): %s" % (resp.status_code, resp.text[:150]))
+                    # 用响应里的 Retry-After 覆盖下一次等待
+                    retry_after = _parse_retry_after(resp)
+                    if retry_after and retry_after > 0:
+                        logger.warning("服务端要求 %.0fs 后重试（Retry-After）", retry_after)
+                if _deadline_left() is not None and _deadline_left() <= 0:
+                    logger.warning("LLM 总时间预算（%.0fs）已用尽，停止重试", LLM_MAX_TOTAL_SEC)
+                    break
+            return None, last
+
+        def _request(prompt: str, image_b64: str, image_mime: str):
+            """识别一张图，返回 (label, confidence, features_used, tags, class_probs)。
+
+            限流/服务端错误会退避重试；重试仍失败时返回空结果，
+            并把原因放进 soft（一图多角时只跳过这一个子图，不影响其它人物）。
+            """
+            resp, err = _post_with_retry(prompt, image_b64, image_mime)
+            if err is not None:
+                soft["last"] = err
+                soft["counts"][err[0]] = soft["counts"].get(err[0], 0) + 1
+                logger.error("LLM 请求失败（已重试 %d 次）: %s", LLM_MAX_ATTEMPTS, err[1])
+                return None, None, [], [], []
             if resp.status_code != 200:
                 result["error"] = f"API 返回错误 ({resp.status_code}): {resp.text[:200]}"
                 logger.error("LLM %s", result["error"])
                 return None, None, [], [], []
-            resp_data = resp.json()
-            return _parse_llm_response(resp_data)
+            return _parse_llm_response(resp.json())
 
         # 实验性模式（LLM_DB_RECOGNITION=True）：把 classes.json 中已知角色的
         # features_used / tags 附加到提示词，让 LLM 对照角色数据库匹配识别
@@ -1001,6 +1090,7 @@ def predict_image_llm(image_path: str) -> dict:
         # 而且模型每次只看一个人，识别更准；
         # 代价：N 个人物 = N 次 API 调用（上限见 LLM_MAX_CHARACTERS）
         characters = []
+        failed_characters = []          # 限流/超时等导致"这个人没识别出来"的记录
         crops, crop_tmp_dir, used_crop_method = ([], None, "none")
         if LLM_MULTI_CHARACTER:
             crops, crop_tmp_dir, used_crop_method = crop_for_llm(image_path)
@@ -1014,7 +1104,17 @@ def predict_image_llm(image_path: str) -> dict:
                     continue
                 c_label, c_conf, c_feats, c_tags, c_probs = _request(prompt, crop_b64, crop_mime)
                 if not c_label:
-                    logger.info("第 %s 个人物：LLM 未识别出角色，跳过", item.get("index"))
+                    reason = soft["last"][1] if soft["last"] else "LLM 未识别出角色"
+                    kind = soft["last"][0] if soft["last"] else "unrecognized"
+                    soft["last"] = None
+                    failed_characters.append({
+                        "index": item.get("index"),
+                        "bbox_percent": item.get("bbox_percent"),
+                        "reason": kind,
+                        "message": reason,
+                    })
+                    logger.info("第 %s 个人物未识别（%s），跳过，其余人物不受影响",
+                                item.get("index"), kind)
                     continue
                 c_conf, merged = _finalize(c_label, c_conf, c_feats, c_tags, c_probs)
                 characters.append({
@@ -1037,6 +1137,7 @@ def predict_image_llm(image_path: str) -> dict:
             best = max(characters, key=lambda c: c.get("confidence") or 0)
             result.update({
                 "success": True,
+                "error": None,                          # 有任意人物成功就不算整张失败
                 "class_probs": best["class_probs"],     # 兼容旧客户端：顶层=最确定的人物
                 "features_used": best.get("features_used") or [],
                 "tags": best.get("tags") or [],
@@ -1045,9 +1146,20 @@ def predict_image_llm(image_path: str) -> dict:
                 "crop_method": f"llm_{used_crop_method}",
                 "image": None,
             })
+            if failed_characters:
+                # 限流/超时导致没识别出来的人物：单独列出，前端可选择展示"该人物未识别"
+                result["failed_characters"] = failed_characters
+                result["character_failed_count"] = len(failed_characters)
+                result["warnings"] = [
+                    "有 %d 个人物未识别：%s" % (
+                        len(failed_characters),
+                        ", ".join(sorted(soft["counts"])) or "unrecognized",
+                    )
+                ]
             logger.info(
-                "LLM 多角色识别: %s -> %d 个人物（切图=%s，最佳 %s）",
+                "LLM 多角色识别: %s -> %d 个人物（切图=%s，最佳 %s%s）",
                 image_path, len(characters), used_crop_method, best["label"],
+                "，%d 个未识别" % len(failed_characters) if failed_characters else "",
             )
             return result
 
@@ -1055,8 +1167,14 @@ def predict_image_llm(image_path: str) -> dict:
         label, confidence, features_used, tags, class_probs = _request(prompt, image_b64, image_mime)
 
         if not label or label.lower() == "unknown":
-            result["error"] = f"LLM 无法识别该角色: {label}"
-            logger.warning("LLM %s", result["error"])
+            if soft["last"]:
+                # 限流/超时/断开等，重试已耗尽：如实报出原因而不是"无法识别"
+                result["error"] = f"LLM 请求失败（{soft['last'][0]}）: {soft['last'][1]}"
+                logger.error("LLM %s", result["error"])
+            elif not result.get("error"):
+                # 已经由 _request 记录过具体错误（如 401/403）就不要覆盖成"无法识别"
+                result["error"] = f"LLM 无法识别该角色: {label}"
+                logger.warning("LLM %s", result["error"])
             return result
 
         # 统一结果结构：最佳结果在 class_probs[0]（不再返回顶层 label/confidence）

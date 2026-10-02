@@ -28,6 +28,62 @@ class AdamNoLerp(Optimizer):
         super().__init__(params, defaults)
 
     @torch.no_grad()
+    def _step_group_foreach(self, group):
+        """用 foreach 批量更新一组参数；成功返回 True，不支持则返回 False（走逐参数实现）。"""
+        params = [p for p in group["params"] if p.grad is not None]
+        if not params:
+            return True
+        beta1, beta2 = group["betas"]
+        lr, eps, weight_decay = group["lr"], group["eps"], group["weight_decay"]
+
+        try:
+            states = []
+            for param in params:
+                state = self.state[param]
+                if len(state) == 0:
+                    state["step"] = 0
+                    state["exp_avg"] = torch.zeros_like(param)
+                    state["exp_avg_sq"] = torch.zeros_like(param)
+                states.append(state)
+
+            # 所有参数的 step 必须一致（同一组内总是同时 step），否则不能用共享的偏差校正
+            steps = [s["step"] + 1 for s in states]
+            if len(set(steps)) != 1:
+                return False
+            step = steps[0]
+
+            grads = []
+            for param in params:
+                grad = param.grad
+                if weight_decay != 0:
+                    grad = grad.add(param, alpha=weight_decay)
+                grads.append(grad)
+
+            exp_avgs = [s["exp_avg"] for s in states]
+            exp_avg_sqs = [s["exp_avg_sq"] for s in states]
+
+            torch._foreach_mul_(exp_avgs, beta1)
+            torch._foreach_add_(exp_avgs, grads, alpha=1 - beta1)
+            torch._foreach_mul_(exp_avg_sqs, beta2)
+            torch._foreach_addcmul_(exp_avg_sqs, grads, grads, value=1 - beta2)
+
+            bias_correction1 = 1 - beta1 ** step
+            bias_correction2 = 1 - beta2 ** step
+            step_size = lr / bias_correction1
+
+            denoms = torch._foreach_sqrt(exp_avg_sqs)
+            torch._foreach_div_(denoms, math.sqrt(bias_correction2))
+            torch._foreach_add_(denoms, eps)
+            torch._foreach_addcdiv_(params, exp_avgs, denoms, value=-step_size)
+
+            for state in states:
+                state["step"] += 1
+            return True
+        except Exception:
+            # 该后端缺少某个 foreach 算子：本组回退逐参数实现（状态在下面按需初始化）
+            return False
+
+    @torch.no_grad()
     def step(self, closure=None):
         loss = None
         if closure is not None:
@@ -39,6 +95,12 @@ class AdamNoLerp(Optimizer):
             eps = group["eps"]
             lr = group["lr"]
             weight_decay = group["weight_decay"]
+
+            # 优先走 foreach 批量路径：一次 dispatch 处理整组张量，
+            # 显著减少 DML 上的 op 调度与 CPU 开销（逐参数循环约 700 次 dispatch/步）。
+            # 任一步不支持（DML 缺某个 foreach 算子）就整体回退到逐参数实现。
+            if self._step_group_foreach(group):
+                continue
 
             for param in group["params"]:
                 if param.grad is None:

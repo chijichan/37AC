@@ -156,6 +156,45 @@ def crop_dataset_function():
     print("=" * 50)
 
 
+def convert_dataset_jpeg_function():
+    """把数据集里的 PNG 等统一转成 JPEG（训练读图更快）"""
+    from config.base import CROPPED_DATASET_DIR, DATASET_COMPRESS_QUALITY, DATASET_COMPRESS_WORKERS
+
+    print()
+    print("=" * 50)
+    print("  数据集转 JPEG")
+    print("=" * 50)
+    if not os.path.isdir(CROPPED_DATASET_DIR):
+        logger.error("已裁剪数据集不存在: %s", CROPPED_DATASET_DIR)
+        return
+
+    from utils.cli_input import ExitProgram, KeyWatcher
+    from utils.concurrency import CancelToken
+    from utils.image_utils import convert_dataset_to_jpeg
+
+    token = CancelToken()
+    watcher = KeyWatcher()
+    watcher.on_back = token.cancel
+    watcher.start()
+    print("  提示：ESC / Ctrl+Z 停止并返回上级菜单，Ctrl+C 结束程序")
+    try:
+        result = convert_dataset_to_jpeg(
+            str(CROPPED_DATASET_DIR),
+            quality=DATASET_COMPRESS_QUALITY,
+            workers=DATASET_COMPRESS_WORKERS,
+            cancel_token=token,
+        )
+    finally:
+        watcher.stop()
+    if watcher.back_requested and not watcher.exit_requested:
+        logger.info("已按 ESC/Ctrl+Z 停止，返回上级菜单")
+        print("=" * 50)
+        return
+    if result.get("interrupted") and not watcher.back_requested:
+        raise ExitProgram()
+    print("=" * 50)
+
+
 def compress_dataset_function():
     """压缩已裁剪数据集（最长边压到 DATASET_COMPRESS_SIZE 以内）"""
     from config.base import (
@@ -224,6 +263,7 @@ def show_dataset_menu():
     print("  [1] 验证图像（检查数据集目录与图片有效性）")
     print("  [2] 裁剪数据集（YOLO 裁剪原始数据集，自动压缩）")
     print("  [3] 压缩数据集（压缩 saves/dataset 内图片）")
+    print("  [4] 转 JPEG（统一为 JPEG，训练读图更快）")
     print("  [0] 返回主菜单")
     print("  " + "─" * 30)
     print("  ESC / Ctrl+Z 返回上级菜单，Ctrl+C 结束程序")
@@ -238,7 +278,7 @@ def run_dataset_settings():
         drain_pending_input()
         show_dataset_menu()
         try:
-            choice = ask("请选择 (1/2/3/0): ", valid=("1", "2", "3", "0"))
+            choice = ask("请选择 (1/2/3/4/0): ", valid=("1", "2", "3", "4", "0"))
         except GoBack:
             print()
             return
@@ -250,6 +290,8 @@ def run_dataset_settings():
             crop_dataset_function()
         elif choice == "3":
             compress_dataset_function()
+        elif choice == "4":
+            convert_dataset_jpeg_function()
         else:
             print("无效选择，请输入 1、2、3 或 0")
 

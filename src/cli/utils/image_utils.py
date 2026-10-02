@@ -151,6 +151,76 @@ def compress_image_file(file_path: str, max_size: int = 512, quality: int = 90) 
         return False
 
 
+def convert_dataset_to_jpeg(dataset_dir: str, quality: int = 90, workers: int = 4,
+                           cancel_token=None, delete_originals: bool = True) -> dict:
+    """把数据集里的图片统一转成 JPEG（加速训练时的解码：PNG 解码比 JPEG 慢 2~3 倍）。
+
+    - 同名 .jpg 已存在时跳过（不覆盖已有文件），避免丢数据
+    - delete_originals=True 时删除转换后的原文件（否则两套并存，数据集体积翻倍）
+    - 用可中断执行器，支持 Ctrl+C / ESC
+
+    Returns:
+        dict: {"total", "converted", "skipped", "failed", "interrupted"}
+    """
+    result = {"total": 0, "converted": 0, "skipped": 0, "failed": 0, "interrupted": False}
+    if not os.path.isdir(dataset_dir):
+        logger.error("数据集目录不存在: %s", dataset_dir)
+        return result
+
+    targets = []
+    for root, dirs, files in os.walk(dataset_dir):
+        dirs[:] = [d for d in dirs if not d.startswith(".")]
+        for name in files:
+            ext = os.path.splitext(name)[1].lower()
+            if ext in (".png", ".bmp", ".webp", ".tif", ".tiff"):
+                targets.append(os.path.join(root, name))
+
+    result["total"] = len(targets)
+    if not targets:
+        logger.info("没有需要转换的图片（数据集已是 JPEG）")
+        return result
+
+    from concurrent.futures import as_completed  # noqa: F401  (兼容导入，实际用下面执行器)
+    from utils.concurrency import interruptible_map
+
+    def _convert(path):
+        target = os.path.splitext(path)[0] + ".jpg"
+        if os.path.exists(target):
+            return "skipped"
+        try:
+            with Image.open(path) as img:
+                rgb = img.convert("RGB")
+                rgb.save(target, format="JPEG", quality=int(quality), optimize=True)
+            if delete_originals:
+                try:
+                    os.remove(path)
+                except OSError:
+                    pass
+            return "converted"
+        except Exception as e:
+            logger.debug("转换失败 %s: %s", path, e)
+            return "failed"
+
+    def _count(path, outcome):
+        result[outcome if outcome in result else "failed"] += 1
+
+    result["interrupted"], _ = interruptible_map(
+        lambda path, token: _convert(path),
+        targets,
+        max_workers=max(1, int(workers or 1)),
+        cancel_token=cancel_token,
+        desc=f"转 JPEG(质量{quality})",
+        unit="张",
+        on_done=_count,
+    )
+    logger.info(
+        "数据集转 JPEG%s: 总计 %d, 已转换 %d, 跳过 %d, 失败 %d",
+        "已中断" if result["interrupted"] else "完成",
+        result["total"], result["converted"], result["skipped"], result["failed"],
+    )
+    return result
+
+
 def compress_dataset_images(dataset_dir: str, max_size: int = 512,
                             quality: int = 90, workers: int = 4,
                             cancel_token=None) -> dict:

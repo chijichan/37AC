@@ -502,6 +502,8 @@ class TrainingCancelled(Exception):
 
 
 def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None, cancel_token=None):
+    """训练入口（优化器经 make_adam() 选择：DirectML 上用无 lerp 的 Adam）。"""
+    from training.optim_compat import make_adam  # noqa: F401  (下方闭包内使用)
     """训练模型
 
     Args:
@@ -645,7 +647,7 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None, cancel
         if not skip_phase1 and PHASE1_EPOCHS > 0:
             model_handler.freeze_backbone()
             # 阶段1 优化器 — 只更新 requires_grad=True 的参数
-            phase1_optimizer = optim.Adam(
+            phase1_optimizer = make_adam(
                 filter(lambda p: p.requires_grad, model.parameters()),
                 lr=PHASE1_LR, weight_decay=WEIGHT_DECAY
             )
@@ -734,7 +736,7 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None, cancel
         phase2_epochs = NUM_EPOCHS - (PHASE1_EPOCHS if not skip_phase1 else 0)
         if phase2_epochs <= 0:
             phase2_epochs = NUM_EPOCHS
-        phase2_optimizer = optim.Adam(
+        phase2_optimizer = make_adam(
             model.parameters(), lr=PHASE2_LR, weight_decay=WEIGHT_DECAY
         )
         phase2_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(

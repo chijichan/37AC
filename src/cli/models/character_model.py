@@ -5,6 +5,38 @@ from torchvision.models import resnet18
 from config.base import get_device
 
 
+def _load_state_dict_any(load_path: str) -> dict:
+    """加载权重字典，兼容历史文件。
+
+    严格模式（weights_only=True）优先；失败时说明文件里带有非白名单 global ——
+    典型是**在 DirectML 上直接保存**的旧权重（torch._utils._rebuild_device_tensor_from_numpy）。
+    这种情况下依次尝试：
+      1) 把该重建函数加入安全白名单后再用严格模式；
+      2) 最后退回 weights_only=False（文件是自己训练产生的，可信），日志留痕。
+    """
+    import logging
+
+    _logger = logging.getLogger(__name__)
+    try:
+        return torch.load(load_path, map_location="cpu", weights_only=True)
+    except Exception as strict_error:
+        _logger.warning(
+            "严格加载失败（多为 DirectML 上保存的旧权重），改用兼容模式: %s",
+            str(strict_error)[:200],
+        )
+        try:
+            from torch.serialization import add_safe_globals
+            import torch._utils as _torch_utils
+
+            rebuild = getattr(_torch_utils, "_rebuild_device_tensor_from_numpy", None)
+            if rebuild is not None:
+                add_safe_globals([rebuild])
+                return torch.load(load_path, map_location="cpu", weights_only=True)
+        except Exception:
+            pass
+        return torch.load(load_path, map_location="cpu", weights_only=False)
+
+
 # ==================== CBAM 注意力模块 ====================
 
 
@@ -105,7 +137,20 @@ class CharacterRecognitionModel:
         return self.model
 
     def save_model(self, save_path: str) -> None:
-        torch.save(self.model.state_dict(), save_path)
+        """保存权重（**统一转到 CPU 再存**）。
+
+        直接在 DirectML 上保存会把张量序列化成
+        torch._utils._rebuild_device_tensor_from_numpy，导致：
+        - 其它环境（CPU/CUDA）加载时依赖 torch-directml 的私有反序列化函数；
+        - weights_only=True 的严格加载会直接拒绝该 global。
+        转 CPU 后文件与设备无关，任何环境都能安全加载。
+        """
+        state_dict = self.model.state_dict()
+        cpu_state = {
+            key: (value.detach().cpu() if isinstance(value, torch.Tensor) else value)
+            for key, value in state_dict.items()
+        }
+        torch.save(cpu_state, save_path)
 
     def load_model(self, load_path: str, num_classes: int) -> nn.Module:
         """加载模型权重，支持类别数变化的兼容性加载。
@@ -128,7 +173,7 @@ class CharacterRecognitionModel:
         # 会被 torch_directml 的 device() 当成 device_id 解析并抛
         # TypeError: '>=' not supported between instances of 'torch.device' and 'int'。
         # 先加载到 CPU，再由下面的 load_state_dict 拷进模型所在设备（模型已 .to(get_device())）。
-        state_dict = torch.load(load_path, map_location="cpu", weights_only=True)
+        state_dict = _load_state_dict_any(load_path)
 
         # 仅当模型未构建或类别数不匹配时才重建，避免重复构建
         if not hasattr(self, 'model') or self.model is None \

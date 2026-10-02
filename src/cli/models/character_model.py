@@ -124,7 +124,11 @@ class CharacterRecognitionModel:
         Returns:
             nn.Module: 加载权重后的模型
         """
-        state_dict = torch.load(load_path, map_location=get_device(), weights_only=True)
+        # 权重固定加载到 CPU：DirectML(privateuseone) 设备对象传给 torch.load 的 map_location，
+        # 会被 torch_directml 的 device() 当成 device_id 解析并抛
+        # TypeError: '>=' not supported between instances of 'torch.device' and 'int'。
+        # 先加载到 CPU，再由下面的 load_state_dict 拷进模型所在设备（模型已 .to(get_device())）。
+        state_dict = torch.load(load_path, map_location="cpu", weights_only=True)
 
         # 仅当模型未构建或类别数不匹配时才重建，避免重复构建
         if not hasattr(self, 'model') or self.model is None \

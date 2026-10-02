@@ -12,7 +12,7 @@ def tables(path):
         out[name] = fields
     return out
 
-a = tables(r"d:\下载\37ac.sql")
+a = tables(r"D:\datasets\downloads\37ac.sql")
 b = tables(r"scripts/install.sql")
 print("源dump 表:", list(a.keys()))
 print("安装脚本表:", list(b.keys()))

@@ -1,0 +1,161 @@
+# 今天有新图片的角色目录 —— 批量识别命令清单
+# 来源 .dsh-scratch\today_folders.txt（已剔除 _amazing），共 76 个
+#
+# 先跑【一、预览】核对判定；确认后再跑【二、执行】
+# 预览不动文件；执行会把『不是该角色』的图移到 D:\datasets\_tmp\识别到的角色名\
+
+==================== 一、预览（不动文件） ====================
+python batch_recognize.py --character "初音未来(蔚蓝档案)" --expect "蔚蓝档案/初音未来"
+python batch_recognize.py --character "渊上琴音"
+python batch_recognize.py --character "朝雾周防"
+python batch_recognize.py --character "宇泽玲纱"
+python batch_recognize.py --character "申谷海"
+python batch_recognize.py --character "室笠朱音"
+python batch_recognize.py --character "大野月夜"
+python batch_recognize.py --character "羽沼真琴"
+python batch_recognize.py --character "若狭冬优"
+python batch_recognize.py --character "水羽三森"
+python batch_recognize.py --character "栗滨明美"
+python batch_recognize.py --character "渡海心"
+python batch_recognize.py --character "梯昴"
+python batch_recognize.py --character "桑上嘉穗"
+python batch_recognize.py --character "由良木桃香"
+python batch_recognize.py --character "小百合"
+python batch_recognize.py --character "牛牧朱莉"
+python batch_recognize.py --character "狮子堂泉"
+python batch_recognize.py --character "千鸟三千留"
+python batch_recognize.py --character "丰见亚都梨"
+python batch_recognize.py --character "久田伊树菜"
+python batch_recognize.py --character "乙花堇"
+python batch_recognize.py --character "七棱菖蒲"
+python batch_recognize.py --character "七神琳"
+python batch_recognize.py --character "不破莲华"
+python batch_recognize.py --character "近卫弥奈"
+python batch_recognize.py --character "衣斐蕾娜"
+python batch_recognize.py --character "勘解由小路紫"
+python batch_recognize.py --character "元宫千秋"
+python batch_recognize.py --character "灰音"
+python batch_recognize.py --character "三善贵音"
+python batch_recognize.py --character "漆原辉夜"
+python batch_recognize.py --character "樱井美代"
+python batch_recognize.py --character "圆堂志美子"
+python batch_recognize.py --character "苍森美弥"
+python batch_recognize.py --character "食蜂操祈"
+python batch_recognize.py --character "不知火花耶"
+python batch_recognize.py --character "和乐知世"
+python batch_recognize.py --character "天地妮娅"
+python batch_recognize.py --character "秋泉红叶"
+python batch_recognize.py --character "志真木乃香"
+python batch_recognize.py --character "御坂美琴"
+python batch_recognize.py --character "里滨海香"
+python batch_recognize.py --character "清澄晶"
+python batch_recognize.py --character "间宵时雨"
+python batch_recognize.py --character "野正丽"
+python batch_recognize.py --character "立木迈亚"
+python batch_recognize.py --character "下仓惠"
+python batch_recognize.py --character "鹿山丽情"
+python batch_recognize.py --character "朱城瑠美"
+python batch_recognize.py --character "荒槙八云"
+python batch_recognize.py --character "箭吹棕榈"
+python batch_recognize.py --character "天神山音葵"
+python batch_recognize.py --character "高仓胡桃"
+python batch_recognize.py --character "各务千寻"
+python batch_recognize.py --character "吉野妮可"
+python batch_recognize.py --character "朝比奈菲娜"
+python batch_recognize.py --character "监原美铃"
+python batch_recognize.py --character "土生蓟"
+python batch_recognize.py --character "板垣鹿江"
+python batch_recognize.py --character "羽咋翼"
+python batch_recognize.py --character "五十岚祥子"
+python batch_recognize.py --character "吾妻未来"
+python batch_recognize.py --character "岩柜步梦"
+python batch_recognize.py --character "七度雪乃"
+python batch_recognize.py --character "海路凑"
+python batch_recognize.py --character "安守实里"
+python batch_recognize.py --character "乌头尾阳子"
+python batch_recognize.py --character "川流诗音"
+python batch_recognize.py --character "五百雀和美"
+python batch_recognize.py --character "鹰野主翠子"
+python batch_recognize.py --character "佐天泪子(蔚蓝档案)" --expect "蔚蓝档案/佐天泪子"
+python batch_recognize.py --character "护守七海"
+python batch_recognize.py --character "风卷麻衣"
+python batch_recognize.py --character "灯下亚美"
+python batch_recognize.py --character "柚子"
+
+==================== 二、执行（真正移动） ====================
+python batch_recognize.py --character "初音未来(蔚蓝档案)" --expect "蔚蓝档案/初音未来" --apply
+python batch_recognize.py --character "渊上琴音" --apply
+python batch_recognize.py --character "朝雾周防" --apply
+python batch_recognize.py --character "宇泽玲纱" --apply
+python batch_recognize.py --character "申谷海" --apply
+python batch_recognize.py --character "室笠朱音" --apply
+python batch_recognize.py --character "大野月夜" --apply
+python batch_recognize.py --character "羽沼真琴" --apply
+python batch_recognize.py --character "若狭冬优" --apply
+python batch_recognize.py --character "水羽三森" --apply
+python batch_recognize.py --character "栗滨明美" --apply
+python batch_recognize.py --character "渡海心" --apply
+python batch_recognize.py --character "梯昴" --apply
+python batch_recognize.py --character "桑上嘉穗" --apply
+python batch_recognize.py --character "由良木桃香" --apply
+python batch_recognize.py --character "小百合" --apply
+python batch_recognize.py --character "牛牧朱莉" --apply
+python batch_recognize.py --character "狮子堂泉" --apply
+python batch_recognize.py --character "千鸟三千留" --apply
+python batch_recognize.py --character "丰见亚都梨" --apply
+python batch_recognize.py --character "久田伊树菜" --apply
+python batch_recognize.py --character "乙花堇" --apply
+python batch_recognize.py --character "七棱菖蒲" --apply
+python batch_recognize.py --character "七神琳" --apply
+python batch_recognize.py --character "不破莲华" --apply
+python batch_recognize.py --character "近卫弥奈" --apply
+python batch_recognize.py --character "衣斐蕾娜" --apply
+python batch_recognize.py --character "勘解由小路紫" --apply
+python batch_recognize.py --character "元宫千秋" --apply
+python batch_recognize.py --character "灰音" --apply
+python batch_recognize.py --character "三善贵音" --apply
+python batch_recognize.py --character "漆原辉夜" --apply
+python batch_recognize.py --character "樱井美代" --apply
+python batch_recognize.py --character "圆堂志美子" --apply
+python batch_recognize.py --character "苍森美弥" --apply
+python batch_recognize.py --character "食蜂操祈" --apply
+python batch_recognize.py --character "不知火花耶" --apply
+python batch_recognize.py --character "和乐知世" --apply
+python batch_recognize.py --character "天地妮娅" --apply
+python batch_recognize.py --character "秋泉红叶" --apply
+python batch_recognize.py --character "志真木乃香" --apply
+python batch_recognize.py --character "御坂美琴" --apply
+python batch_recognize.py --character "里滨海香" --apply
+python batch_recognize.py --character "清澄晶" --apply
+python batch_recognize.py --character "间宵时雨" --apply
+python batch_recognize.py --character "野正丽" --apply
+python batch_recognize.py --character "立木迈亚" --apply
+python batch_recognize.py --character "下仓惠" --apply
+python batch_recognize.py --character "鹿山丽情" --apply
+python batch_recognize.py --character "朱城瑠美" --apply
+python batch_recognize.py --character "荒槙八云" --apply
+python batch_recognize.py --character "箭吹棕榈" --apply
+python batch_recognize.py --character "天神山音葵" --apply
+python batch_recognize.py --character "高仓胡桃" --apply
+python batch_recognize.py --character "各务千寻" --apply
+python batch_recognize.py --character "吉野妮可" --apply
+python batch_recognize.py --character "朝比奈菲娜" --apply
+python batch_recognize.py --character "监原美铃" --apply
+python batch_recognize.py --character "土生蓟" --apply
+python batch_recognize.py --character "板垣鹿江" --apply
+python batch_recognize.py --character "羽咋翼" --apply
+python batch_recognize.py --character "五十岚祥子" --apply
+python batch_recognize.py --character "吾妻未来" --apply
+python batch_recognize.py --character "岩柜步梦" --apply
+python batch_recognize.py --character "七度雪乃" --apply
+python batch_recognize.py --character "海路凑" --apply
+python batch_recognize.py --character "安守实里" --apply
+python batch_recognize.py --character "乌头尾阳子" --apply
+python batch_recognize.py --character "川流诗音" --apply
+python batch_recognize.py --character "五百雀和美" --apply
+python batch_recognize.py --character "鹰野主翠子" --apply
+python batch_recognize.py --character "佐天泪子(蔚蓝档案)" --expect "蔚蓝档案/佐天泪子" --apply
+python batch_recognize.py --character "护守七海" --apply
+python batch_recognize.py --character "风卷麻衣" --apply
+python batch_recognize.py --character "灯下亚美" --apply
+python batch_recognize.py --character "柚子" --apply

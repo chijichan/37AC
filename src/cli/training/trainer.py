@@ -497,6 +497,11 @@ def _enrich_classes_with_llm_features(dataset, class_names):
     logger.info("=" * 50)
 
 
+# 训练进度统计/刷新的间隔（步）：.item() 与 set_postfix 都会强制设备同步，
+# DML 上每步同步 2~3 次的代价很明显，改为每 N 步取一次值
+STAT_UPDATE_EVERY = 20
+
+
 class TrainingCancelled(Exception):
     """用户按 ESC / Ctrl+Z 取消训练（回到上级菜单）。"""
 
@@ -680,20 +685,25 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None, cancel
                         if GRAD_CLIP_NORM > 0:
                             nn.utils.clip_grad_norm_(model.parameters(), GRAD_CLIP_NORM)
                         phase1_optimizer.step()
-                        running_loss += loss.item()
+                        # 累积在设备上（detach 不建图），避免每步 .item() 触发同步
+                        running_loss += loss.detach()
                         _, preds = torch.max(outputs, 1)
-                        correct += (preds == labels).sum().item()
+                        correct += (preds == labels).sum().detach()
                         total += labels.size(0)
-                        loop.set_postfix(
-                            loss=f"{running_loss/(loop.n+1):.4f}",
-                            acc=f"{100.*correct/total:.2f}%" if total > 0 else "N/A",
-                            lr=f"{PHASE1_LR:.0e}",
-                        )
+                        if batch_idx % STAT_UPDATE_EVERY == 0:
+                            loop.set_postfix(
+                                loss=f"{float(running_loss)/(loop.n+1):.4f}",
+                                acc=f"{100.*float(correct)/total:.2f}%" if total > 0 else "N/A",
+                                lr=f"{PHASE1_LR:.0e}",
+                            )
                     except Exception:
                         logger.exception("阶段1训练错误, epoch=%d, batch=%d", epoch + 1, batch_idx)
                         continue
 
                 loop.close()
+                # 一轮结束取一次值（此时才同步，CPU 数值参与后续日志/调度）
+                correct = float(correct)
+                running_loss = float(running_loss)
                 epoch_train_acc = 100.0 * correct / total if total > 0 else 0.0
                 epoch_loss = running_loss / len(train_loader) if len(train_loader) > 0 else 0.0
 
@@ -773,15 +783,17 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None, cancel
                     if GRAD_CLIP_NORM > 0:
                         nn.utils.clip_grad_norm_(model.parameters(), GRAD_CLIP_NORM)
                     phase2_optimizer.step()
-                    running_loss += loss.item()
+                    # 同上：累积在设备上，每 STAT_UPDATE_EVERY 步才同步一次
+                    running_loss += loss.detach()
                     _, preds = torch.max(outputs, 1)
-                    correct += (preds == labels).sum().item()
+                    correct += (preds == labels).sum().detach()
                     total += labels.size(0)
-                    loop.set_postfix(
-                        loss=f"{running_loss/(loop.n+1):.4f}",
-                        acc=f"{100.*correct/total:.2f}%" if total > 0 else "N/A",
-                        lr=f"{current_lr:.0e}",
-                    )
+                    if batch_idx % STAT_UPDATE_EVERY == 0:
+                        loop.set_postfix(
+                            loss=f"{float(running_loss)/(loop.n+1):.4f}",
+                            acc=f"{100.*float(correct)/total:.2f}%" if total > 0 else "N/A",
+                            lr=f"{current_lr:.0e}",
+                        )
                 except Exception:
                     logger.exception("阶段2训练错误, epoch=%d, batch=%d", epoch + 1, batch_idx)
                     continue
@@ -789,6 +801,8 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None, cancel
             loop.close()
             phase2_scheduler.step()
             current_lr = phase2_optimizer.param_groups[0]["lr"]
+            correct = float(correct)
+            running_loss = float(running_loss)
             epoch_train_acc = 100.0 * correct / total if total > 0 else 0.0
             epoch_loss = running_loss / len(train_loader) if len(train_loader) > 0 else 0.0
 

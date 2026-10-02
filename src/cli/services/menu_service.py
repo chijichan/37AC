@@ -219,6 +219,7 @@ def compress_dataset_function():
 
     from utils.cli_input import ExitProgram, KeyWatcher
     from utils.concurrency import CancelToken
+    from utils.image_utils import compress_dataset_images
 
     token = CancelToken()
     watcher = KeyWatcher()

@@ -1,6 +1,7 @@
 """YOLO 人物检测器 — 快速定位图片中角色区域，裁剪后供 ResNet 分类"""
 
 import os
+from pathlib import Path
 import shutil
 import threading
 import traceback
@@ -143,6 +144,15 @@ class YoloDetector:
             from ultralytics import YOLO
 
             model_path = self.model_path or "yolov8n.pt"
+            # 统一成绝对路径：相对名（含空值退化出来的 "yolov8n.pt"）一律落到 saves/models，
+            # 否则 Ultralytics 会在**当前工作目录**下载一份，多线程并发下载还会卡死
+            try:
+                from config.base import MODEL_DIR as _MODEL_DIR
+                _p = Path(model_path)
+                if not _p.is_absolute():
+                    model_path = str(_MODEL_DIR / _p.name)
+            except Exception:
+                pass
 
             # 如果指定路径存在，直接加载；否则交给 Ultralytics 自动下载
             if os.path.exists(model_path):
@@ -187,6 +197,14 @@ class YoloDetector:
         """
         if not self._load_model():
             return []
+        if getattr(self, "_model_broken", False):
+            # 上一次推理抛过异常：模型可能残留了坏状态（DML 下尤其明显），重建再跑
+            logger.warning("上次推理异常，重建 YOLO 模型实例")
+            self._loaded = False
+            self._model = None
+            self._model_broken = False
+            if not self._load_model():
+                return []
 
         try:
             results = self._model(
@@ -224,8 +242,21 @@ class YoloDetector:
             return detections
 
         except Exception as e:
-            logger.error("YOLO 检测失败: %s", e)
+            # 标记为损坏：下一次调用会重建模型，避免"一次异常之后再也不用不了/卡死"
+            self._model_broken = True
+            logger.error("YOLO 检测失败（本图已跳过，模型将在下次调用时重建）: %s", e)
             return []
+
+        finally:
+            # 每次检测后清掉 ultralytics 的预测器缓存。
+            # 它内部在 torch.inference_mode() 下跑推理，缓存里的 inference tensor 一旦被
+            # 后续原地操作就会报 "Cannot set version_counter for inference tensor"，
+            # 而且**从此每张图都失败**（状态被污染）；清掉缓存即恢复。
+            try:
+                if self._model is not None:
+                    self._model.predictor = None
+            except Exception:
+                pass
 
     def detect_and_crop(self, image_path: str, target_classes=None, suffix=CROP_SUFFIX,
                         output_dir=None, max_size: int = 0):
@@ -361,7 +392,14 @@ class YoloDetector:
                 Image.LANCZOS,
             )
         try:
-            detections = self.detect(work)
+            # 传"干净的像素数组"而不是 PIL 对象：
+            # 图片若带 GBK 等非 UTF-8 元数据（iCCP/tEXt 块），ultralytics 读取 PIL 的
+            # info/filename 时会抛 'utf-8' codec can't decode...，这里从源头绕开
+            try:
+                import numpy as _np
+                detections = self.detect(_np.asarray(work.convert("RGB")))
+            except ImportError:
+                detections = self.detect(work)
             detected_size = work.size
         finally:
             if work is not original:
@@ -508,18 +546,18 @@ class YoloDetector:
 # 模块级便捷函数
 def _new_detector() -> YoloDetector:
     """创建一个新的 YOLO 检测器（供线程独立使用）。"""
-    from config.base import YOLO_MODEL_PATH, YOLO_CONFIDENCE, USE_DIRECTML, get_device
-    device = get_device()
-    # YOLO 设备传递规则：
-    # - DirectML 模式：传 DirectML 设备（torch_directml device）
-    # - CUDA 可用：传 "cuda" 或 None（让 YOLO 自动选择）
-    # - 否则：传 None（YOLO 自动使用 CPU）
-    if USE_DIRECTML:
-        yolo_device = device  # DirectML device
-    elif str(device) != "cpu":
-        yolo_device = device  # CUDA device
+    from config.base import YOLO_MODEL_PATH, YOLO_CONFIDENCE, YOLO_DEVICE, get_device
+
+    # YOLO 检测设备与训练设备解耦（见 YOLO_DEVICE 注释）：
+    #   cpu（默认）→ 稳定；dml → 走 DirectML（有卡死风险）；cuda → N 卡；auto → 交给 YOLO 自选
+    if YOLO_DEVICE == "cpu":
+        yolo_device = "cpu"
+    elif YOLO_DEVICE == "cuda":
+        yolo_device = "cuda"
+    elif YOLO_DEVICE == "dml":
+        yolo_device = get_device()
     else:
-        yolo_device = None    # 让 YOLO 自动选择（CPU）
+        yolo_device = None
     return YoloDetector(
         model_path=YOLO_MODEL_PATH,
         conf_threshold=YOLO_CONFIDENCE,
@@ -776,6 +814,15 @@ def crop_dataset(source_dir: str, output_dir: str, target_classes=None,
                     counters[key] += result.get(key, 0) or 0
             else:
                 counters["failed"] += 1
+
+    # 线程池启动前先在本线程把权重准备好：
+    # ① Ultralytics 需要下载时只发生一次（多线程同时下载会卡死）
+    # ② 权重不可用就立刻失败退出，而不是让每个角色都报一次同样的错
+    _warmup = _new_detector()
+    if not _warmup._load_model():
+        _logger.error("YOLO 权重不可用，已中止裁剪: %s", _warmup.load_error or "未知原因")
+        return {"processed": 0, "skipped": 0, "failed": 0, "whole": 0, "ignored": 0,
+                "interrupted": False}
 
     token = cancel_event if cancel_event is not None else CancelToken()
     interrupted = False

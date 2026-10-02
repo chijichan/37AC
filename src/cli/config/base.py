@@ -478,7 +478,22 @@ YOLO_ENABLED = os.getenv("YOLO_ENABLED", "True").lower() == "true"
 # 模型名称：yolov8n.pt（nano，最快）/ yolov8s.pt / yolov8m.pt
 # 默认放在 saves/models/ 目录下
 _DEFAULT_YOLO_MODEL = str((MODEL_DIR / "yolov8n.pt").resolve())
-YOLO_MODEL_PATH = os.getenv("YOLO_MODEL_PATH", _DEFAULT_YOLO_MODEL)
+# 注意：os.getenv(key, default) 在"变量存在但值为空"时返回**空串**而不是默认值，
+# 所以这里用 or 兜底；并且相对路径统一落到 saves/models（避免 cwd 下生成 yolov8n.pt）
+_yolo_model_env = (os.getenv("YOLO_MODEL_PATH", "") or "").strip()
+if not _yolo_model_env:
+    YOLO_MODEL_PATH = _DEFAULT_YOLO_MODEL
+else:
+    _yolo_path = Path(_yolo_model_env)
+    YOLO_MODEL_PATH = _yolo_path if _yolo_path.is_absolute() else MODEL_DIR / _yolo_path.name
+# 统一成 Path（_DEFAULT_YOLO_MODEL 可能是字符串）
+YOLO_MODEL_PATH = Path(YOLO_MODEL_PATH)
+
+# YOLO 检测/裁剪使用的设备（**与训练设备解耦**）：cpu（默认，稳定）/ cuda / dml / auto
+# 为什么默认 CPU：DirectML 上跑 YOLO 会出现
+#   "'utf-8' codec can't decode byte 0xb2 ..."(图片 XMP 元数据触发)
+# 且异常后 DML 上下文残留坏状态，导致整批裁剪卡死；yolov8n 很小，CPU 足够稳。
+YOLO_DEVICE = (os.getenv("YOLO_DEVICE", "cpu") or "cpu").strip().lower()
 # 检测置信度阈值（低于此值的目标被忽略）
 YOLO_CONFIDENCE = float(os.getenv("YOLO_CONFIDENCE", "0.25"))
 

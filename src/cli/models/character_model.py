@@ -106,8 +106,24 @@ class CharacterRecognitionModel:
     @staticmethod
     def _build_model(num_classes: int, pretrained: bool = True) -> nn.Module:
         """构建 ResNet18 模型，每层后插入 CBAM 注意力，再替换全连接层。"""
-        weights = "IMAGENET1K_V1" if pretrained else None
-        model = resnet18(weights=weights)
+        import logging
+
+        from config.base import PRETRAINED_BASE
+
+        _log = logging.getLogger(__name__)
+        use_base = bool(pretrained) and PRETRAINED_BASE not in ("", "imagenet-resnet18")
+        # 用外部基模时不再下载 ImageNet 权重；流程：裸 resnet18 → 灌基模 → 插 CBAM → 换 fc
+        model = resnet18(weights=None if use_base else ("IMAGENET1K_V1" if pretrained else None))
+        if use_base:
+            try:
+                from models.pretrained import apply_base_to_model
+
+                result = apply_base_to_model(model, PRETRAINED_BASE)
+                if not result.get("applied"):
+                    _log.warning("基模 %s 未能应用（%s），本次使用随机初始化 backbone",
+                                 PRETRAINED_BASE, result.get("reason"))
+            except Exception as e:
+                _log.warning("基模 %s 加载失败: %s（回退随机初始化）", PRETRAINED_BASE, e)
 
         # 在每个残差阶段后插入 CBAM 注意力
         model.layer1 = nn.Sequential(model.layer1, CBAM(64))    # 64 → 64

@@ -34,6 +34,8 @@ from config.base import (
     LLM_TIMEOUT_SEC,
     LLM_MAX_TOKEN,
     LLM_THINKING,
+    MODEL_MEAN,
+    MODEL_STD,
     LLM_MAX_FEATURES,
     LLM_MAX_TAGS,
     LLM_MAX_ATTEMPTS,
@@ -87,7 +89,7 @@ def get_predict_transforms():
             [
                 transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
                 transforms.ToTensor(),
-                transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+                transforms.Normalize(list(MODEL_MEAN), list(MODEL_STD)),   # 与训练共用（随基模变化）
             ]
         )
     return _TRANSFORMS

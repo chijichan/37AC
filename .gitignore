@@ -49,3 +49,6 @@ logs/
 # 测试用临时目录
 .pytest-tmp/
 .tmp-tests/
+src/cli/saves/models/pretrained/
+src/cli/saves/models/checkpoints/
+src/cli/saves/models/_bak/

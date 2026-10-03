@@ -543,6 +543,30 @@ class YoloDetector:
         return crops
 
 
+def _role_matches(key: str, patterns) -> bool:
+    """角色是否命中指定模式。
+
+    支持：完整 "IP/角色"、只用角色名（"白子"）、带通配符（"蔚蓝档案/*"、"*白子*"）。
+    匹配不区分大小写，忽略首尾空白。
+    """
+    import fnmatch
+
+    key_l = key.strip().lower()
+    role_l = key_l.split("/")[-1]
+    for raw in patterns:
+        pat = str(raw).strip().lower()
+        if not pat:
+            continue
+        if pat == key_l or pat == role_l:
+            return True
+        if "*" in pat or "?" in pat:
+            if fnmatch.fnmatch(key_l, pat) or fnmatch.fnmatch(role_l, pat):
+                return True
+        elif pat in key_l:          # 子串匹配：输入"白子"也能命中"蔚蓝档案/白子"
+            return True
+    return False
+
+
 # 模块级便捷函数
 def _new_detector() -> YoloDetector:
     """创建一个新的 YOLO 检测器（供线程独立使用）。"""
@@ -588,7 +612,8 @@ def _get_thread_detector() -> YoloDetector:
 
 
 def crop_dataset(source_dir: str, output_dir: str, target_classes=None,
-                 max_images_per_role: int = 100, cancel_event=None):
+                 max_images_per_role: int = 100, cancel_event=None,
+                 only_roles=None, reset_roles=False):
     """遍历数据集目录，对每张图片执行 YOLO 检测并裁剪人物区域。
 
     裁剪全程在内存里完成（缩略图检测 → 坐标映射回原图 → 从原图裁剪 → 压缩编码），
@@ -660,6 +685,37 @@ def crop_dataset(source_dir: str, output_dir: str, target_classes=None,
                         "已清理该目录在数据集中的旧产物: %s/%s（%d 个文件）",
                         ip_name_i, role_name_i, stale_count,
                     )
+
+    # ==================== 指定角色裁剪 ====================
+    # only_roles 为空 = 全部裁剪；否则只裁剪匹配到的角色（避免每次全局重裁产生脏数据）
+    if only_roles:
+        patterns = [str(p).strip() for p in only_roles if str(p).strip()]
+        matched, unmatched = [], []
+        for task in role_tasks:
+            key = "%s/%s" % (task[0], task[1])
+            if _role_matches(key, patterns):
+                matched.append(task)
+            else:
+                unmatched.append(key)
+        role_tasks = matched
+        _logger.info("指定裁剪：匹配到 %d 个角色/%d 个模式：%s",
+                     len(role_tasks), len(patterns),
+                     ", ".join("%s/%s" % (i, r) for i, r, _p in role_tasks[:20]) or "无")
+        if not role_tasks:
+            _logger.warning("没有角色匹配这些模式: %s", ", ".join(patterns))
+            return {"processed": 0, "skipped": 0, "failed": 0, "whole": 0,
+                    "ignored": len(ignored_tasks), "interrupted": False,
+                    "matched_roles": 0}
+
+        if reset_roles:
+            cleared = 0
+            for ip_name_c, role_name_c, _p in role_tasks:
+                stale = os.path.join(output_dir, ip_name_c, role_name_c)
+                if os.path.isdir(stale) and os.listdir(stale):
+                    cleared += len(os.listdir(stale))
+                    shutil.rmtree(stale, ignore_errors=True)
+            _logger.warning("已清空 %d 个角色的旧产物（共 %d 个文件），将重新裁剪",
+                            len(role_tasks), cleared)
 
     def process_role(ip_name, role_name, role_path, token=None):
         """处理单个角色（在线程内执行，使用线程本地 detector）。
@@ -855,6 +911,7 @@ def crop_dataset(source_dir: str, output_dir: str, target_classes=None,
         "whole": whole,
         "ignored": len(ignored_tasks),
         "interrupted": interrupted,
+        "matched_roles": len(role_tasks),
     }
 
 

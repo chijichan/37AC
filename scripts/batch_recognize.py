@@ -74,7 +74,7 @@ def parse_args():
     p.add_argument("--show-keep", action="store_true",
                    help="逐条打印『保留』的图片（默认只统计，避免刷屏）")
     p.add_argument("--temp-dir", default=None,
-                   help="裁剪暂存根目录（默认 <仓库>/saves/tmp_crops）；裁剪图会留在这里备用")
+                   help="裁剪暂存根目录（默认 <系统临时目录>\\37ac_crops）；裁剪图会留在这里备用")
     return p.parse_args()
 
 
@@ -181,7 +181,9 @@ def main():
     quarantine = Path(args.quarantine_dir)
 
     # 裁剪暂存：固定位置、保留备用（每张一个 37ac_yolo_* 子目录）
-    temp_root = Path(args.temp_dir) if args.temp_dir else (REPO_ROOT / "saves" / "tmp_crops")
+    # 默认放系统临时目录，**不往仓库里写任何东西**；想保留就自己传 --temp-dir
+    import tempfile as _tempfile
+    temp_root = Path(args.temp_dir) if args.temp_dir else (Path(_tempfile.gettempdir()) / "37ac_crops")
     temp_used = redirect_temp_dirs(temp_root)
 
     images = list(iter_images(source, args.recursive))
@@ -276,7 +278,7 @@ def main():
     print("-" * 64)
 
     if args.csv:
-        report_dir = REPO_ROOT / "saves" / "reports"
+        report_dir = CLI_DIR / "saves" / "reports"     # 项目自己的数据目录，不在仓库根建 saves
         try:
             report_dir.mkdir(parents=True, exist_ok=True)
             report = report_dir / ("recognize_%s_%s.csv" % (character, time.strftime("%Y%m%d_%H%M%S")))

@@ -14,7 +14,7 @@
 # 说明：
 #   · 默认带 --no-detect（整图分类）：规避 ultralytics 的 'Cannot set version_counter for
 #     inference tensor' 报错，且实测整图比 YOLO 裁剪更准（79.0% vs 71.3%）。
-#   · 每个目录的输出同时写入 logs\recognize_today_<时间>.log
+#   · 每个目录的输出同时写入 src\cli\saves\logs\recognize_today_<时间>.log
 #   · 移出的图按『识别到的角色名』落到 D:\datasets\_tmp\<角色名>\（识别失败 → \未识别\）
 
 param(
@@ -52,7 +52,7 @@ if ($ListOnly) {
   exit 0
 }
 
-$logDir = Join-Path $root 'logs'
+$logDir = Join-Path $root 'src\cli\saves\logs'    # 项目自己的日志目录，不在仓库根建 logs
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 $log = Join-Path $logDir ('recognize_today_{0:yyyyMMdd_HHmmss}.log' -f (Get-Date))
 $mode = if ($Apply) { '执行移动' } else { '预览' }

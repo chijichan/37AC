@@ -152,10 +152,36 @@ def classes_to_json_dict(class_names: list, profiles: dict = None) -> dict:
 
 
 def save_classes_to_json(file_path: str, class_names: list, profiles: dict = None) -> bool:
-    """保存类别列表为规范结构的 JSON 文件（{IP/角色: {id, ip, name_zh, features_used?, tags?}}）"""
+    """保存类别列表为规范结构的 JSON 文件（{IP/角色: {id, ip, name_zh, features_used?, tags?}}）。
+
+    **关键：合并式写入，保留已有条目的附加字段**（features_used / tags 等）。
+
+    为什么：训练过程中会反复调用本函数（每次"保存最佳模型"、中断保存、收尾各一次），
+    若每次从零重写，LLM 补全的 features_used / tags 会被清空 —— 这在真实使用中发生过。
+    规则：以现有文件为底逐类合并；标准字段（id/ip/name_zh）与 profiles 给出的字段覆盖旧值，
+    但**空列表不覆盖已有非空元数据**。
+    """
     try:
         ensure_directory_exists(os.path.dirname(file_path))
+        existing = load_classes_json_data(file_path) or {}
         data = classes_to_json_dict(class_names, profiles)
+
+        preserved = 0
+        for name, entry in list(data.items()):
+            old = existing.get(name)
+            if not isinstance(old, dict) or not old:
+                continue
+            merged = dict(old)
+            for key, value in (entry or {}).items():
+                if key in ("features_used", "tags") and not value:
+                    continue                     # 空列表不覆盖已有的非空元数据
+                merged[key] = value
+            if old.get("features_used") or old.get("tags"):
+                preserved += 1
+            data[name] = merged
+        if preserved:
+            logger.info("类别元数据已保留: %d 个类目沿用原有 features_used/tags", preserved)
+
         with open(file_path, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
         logger.info("类别信息已保存到: %s", file_path)

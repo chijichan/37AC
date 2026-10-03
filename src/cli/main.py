@@ -44,14 +44,14 @@ def _action_train(args):
             logger.info("继续训练模式（命令行），使用指定权重: %s", resume_model)
     elif args and getattr(args, "command", None) == "train":
         # train 子命令：命令行模式，不带 --resume 即从头训练
-        logger.info("从头训练模式（命令行），使用 ImageNet 预训练")
+        logger.info("从头训练模式（命令行），使用 Baseline 预训练")
     else:
         # 交互模式：弹出子菜单让用户选择
         print()
         print("=" * 40)
         print("  选择训练方式")
         print("=" * 40)
-        print("  [1] 从头训练（ImageNet 预训练）")
+        print("  [1] 从头训练（Baseline 预训练）")
         print(f"  [2] 继续训练（基于已有权重: {MODEL_PATH.name}）")
         print("  [0] 返回主菜单")
         print("-" * 40)
@@ -132,6 +132,14 @@ def _action_predict(args=None):
     )
 
 
+def _action_model(args=None):
+    """模型管理：训练 / 检查点 / 训练基模 / 当前模型信息"""
+    from services.menu_service import run_model_settings
+
+    logger.info("=== 1. 模型管理 ===")
+    run_model_settings(args)
+
+
 def _action_dataset(args=None):
     logger.info("=== 3. 数据集管理 ===")
     if args is not None and getattr(args, "command", None) == "dataset":
@@ -159,7 +167,7 @@ def _action_node(args=None):
 
 
 MENU_ACTIONS = {
-    "1": _action_train,
+    "1": _action_model,
     "2": _action_predict,
     "3": _action_dataset,
     "4": _action_node,

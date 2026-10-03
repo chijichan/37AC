@@ -149,6 +149,24 @@ MODEL_LOAD_PATH = MODEL_PATH
 # YOLO 裁剪后的数据集目录（自动生成，不覆盖原图）
 CROPPED_DATASET_DIR = ROOT_PATH / "saves" / "dataset"
 
+# ==================== 训练报告（HTML） ====================
+# 训练过程中生成可实时查看的 HTML 报告 → src/cli/saves/reports/<版本>-<时间戳>/
+# 设计见 docs/design-training-report.md
+REPORT_ENABLED = os.getenv("REPORT_ENABLED", "True").lower() == "true"
+REPORT_DIR = ROOT_PATH / "saves" / "reports"
+# 页面自动刷新间隔（秒）；file:// 下用 meta refresh 实现
+REPORT_REFRESH_SEC = int(os.getenv("REPORT_REFRESH_SEC", "10") or "10")
+# 训练结束后自动跑"真实口径评估"（数据集裁剪图 / 原图 / 原图+检测），
+# 结果写进训练报告与 config.json 的 training.eval —— 训练指标与线上效果脱节的解药
+EVAL_AFTER_TRAIN = os.getenv("EVAL_AFTER_TRAIN", "True").lower() == "true"
+# 每类抽几张（1 张 ≈ 181 张/档；调大更准但更慢）
+EVAL_SAMPLES_PER_CLASS = int(os.getenv("EVAL_SAMPLES_PER_CLASS", "1") or "1")
+# 要跑的口径；想看裁剪门控 A/B 就加上 detect_nogate
+EVAL_MODES = os.getenv("EVAL_MODES", "cropped,raw,detect") or "cropped,raw,detect"
+
+# 每多少步做一次轻量更新（0 = 只在每轮结束时更新，写盘更少）
+REPORT_EVERY_STEPS = int(os.getenv("REPORT_EVERY_STEPS", "40") or "0")
+
 # ==================== 节点服务配置 ====================
 TCP_HOST = os.getenv("TCP_HOST", "127.0.0.1")
 TCP_PORT = int(os.getenv("TCP_PORT", "13137"))
@@ -486,6 +504,29 @@ if not _yolo_model_env:
 else:
     _yolo_path = Path(_yolo_model_env)
     YOLO_MODEL_PATH = _yolo_path if _yolo_path.is_absolute() else MODEL_DIR / _yolo_path.name
+# ==================== 训练基模（pretrained base） ====================
+# 取值：imagenet-resnet18（内置，torchvision IMAGENET1K_V1）或 saves/models/pretrained/<id>
+PRETRAINED_BASE = (os.getenv("PRETRAINED_BASE", "imagenet-resnet18") or "imagenet-resnet18").strip()
+
+
+def _base_mean_std(base_id: str):
+    """从基模描述读取 mean/std（缺省 ImageNet）。不 import models.* 以避免循环依赖。"""
+    if base_id and base_id != "imagenet-resnet18":
+        for name in ("37ac-base.json", "meta.json"):
+            try:
+                data = json.loads((MODEL_DIR / "pretrained" / base_id / name).read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            mean, std = data.get("mean"), data.get("std")
+            if mean and std:
+                return tuple(float(x) for x in mean), tuple(float(x) for x in std)
+            break
+    return (0.485, 0.456, 0.406), (0.229, 0.224, 0.225)
+
+
+# 预处理均值/方差：**训练与推理共用**（基模不同则不同，写死会导致精度不一致）
+MODEL_MEAN, MODEL_STD = _base_mean_std(PRETRAINED_BASE)
+
 # 统一成 Path（_DEFAULT_YOLO_MODEL 可能是字符串）
 YOLO_MODEL_PATH = Path(YOLO_MODEL_PATH)
 

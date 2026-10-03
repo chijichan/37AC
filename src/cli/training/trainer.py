@@ -104,12 +104,40 @@ def _write_model_config(version: str):
     classes_sha = _file_sha256(CLASSES_JSON_PATH)
 
     cfg = _load_model_config()
+
+    # 训练配置（自描述：拿到权重就能知道它是怎么训出来的）
+    from config.base import (BATCH_SIZE, EARLY_STOP_PATIENCE, IMAGE_SIZE, LABEL_SMOOTHING,
+                             NUM_EPOCHS, PHASE1_EPOCHS, PHASE1_LR, PHASE2_LR, PHASE2_MIN_LR,
+                             PRETRAINED_BASE, VAL_SPLIT_RATIO, WEIGHT_DECAY)
+    training = dict(_TRAINING_INFO)          # 训练过程中填的（数据集规模/类别数/设备/best 等）
+    training.update({
+        "arch": "resnet18+cbam",
+        "base": PRETRAINED_BASE,
+        "image_size": IMAGE_SIZE,
+        "batch_size": BATCH_SIZE,
+        "epochs": NUM_EPOCHS,
+        "phase1_epochs": PHASE1_EPOCHS,
+        "lr_schedule": {"phase1": PHASE1_LR, "phase2": PHASE2_LR, "phase2_min": PHASE2_MIN_LR},
+        "weight_decay": WEIGHT_DECAY,
+        "label_smoothing": LABEL_SMOOTHING,
+        "val_split_ratio": VAL_SPLIT_RATIO,
+        "early_stop_patience": EARLY_STOP_PATIENCE,
+        "optimizer": "AdamNoLerp(DirectML 友好)" if PRETRAINED_BASE is not None else "adam",
+        "trained_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    })
+    if training.get("class_count") is None:
+        try:
+            training["class_count"] = len(load_classes_from_file(str(CLASSES_JSON_PATH)) or [])
+        except Exception:
+            pass
+
     cfg.update({
         "model_id": "37ac",
         "version": version,
         "model": {"file": MODEL_PATH.name, "sha256": weights_sha},
         "classes": {"file": CLASSES_JSON_PATH.name, "sha256": classes_sha},
-        "trained_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "trained_at": training["trained_at"],
+        "training": training,
     })
     MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
     MODEL_INFO_PATH.write_text(
@@ -497,9 +525,118 @@ def _enrich_classes_with_llm_features(dataset, class_names):
     logger.info("=" * 50)
 
 
+# 本次训练的关键配置（供 _write_model_config 写进 config.json，形成自描述模型卡）
+_TRAINING_INFO = {}
+
+
 # 训练进度统计/刷新的间隔（步）：.item() 与 set_postfix 都会强制设备同步，
 # DML 上每步同步 2~3 次的代价很明显，改为每 N 步取一次值
 STAT_UPDATE_EVERY = 20
+
+
+def _safe_ckpt(kind, version, accuracy=None):
+    _save_checkpoint(kind, version, accuracy)
+
+
+def _run_final_eval() -> None:
+    """训练收尾：跑真实口径评估，结果写进训练报告与 config.json（失败只告警）。"""
+    try:
+        from config.base import EVAL_AFTER_TRAIN, EVAL_MODES, EVAL_SAMPLES_PER_CLASS
+
+        if not EVAL_AFTER_TRAIN:
+            logger.info("已跳过训练后评估（EVAL_AFTER_TRAIN=False）")
+            return
+        from services.eval_service import compare
+
+        modes = tuple(m.strip() for m in str(EVAL_MODES).split(",") if m.strip())
+        logger.info("训练后真实口径评估: %s（每类 %d 张）", ", ".join(modes), EVAL_SAMPLES_PER_CLASS)
+        results = compare(modes, per_class=EVAL_SAMPLES_PER_CLASS)
+
+        # 写进模型卡（不放 failures，避免 config.json 过大）
+        _TRAINING_INFO["eval"] = {
+            mode: {k: v for k, v in (r or {}).items() if k not in ("failures",)}
+            for mode, r in results.items()
+        }
+        for mode, r in results.items():
+            logger.info("真实口径 %-14s top-1 %s%%（%s/%s）", r.get("label") or mode,
+                        r.get("acc"), r.get("top1"), r.get("total"))
+        try:
+            from services import report_service as report
+
+            report.set_eval(results)
+        except Exception as rep_err:
+            logger.debug("评估结果写入报告失败: %s", rep_err)
+    except Exception as e:
+        logger.warning("训练后评估失败（不影响训练结果）: %s", e)
+
+
+def _report_phase(name: str, label: str, total: int) -> None:
+    try:
+        from services import report_service as report
+
+        report.set_phase(name, label, total)
+    except Exception as e:
+        logger.debug("报告阶段更新失败: %s", e)
+
+
+def _report_epoch(epoch: int, phase: str, loss, train_acc, val_acc, lr) -> None:
+    try:
+        from services import report_service as report
+
+        report.record_epoch(epoch, phase, loss, train_acc, val_acc, lr)
+    except Exception as e:
+        logger.debug("报告每轮更新失败: %s", e)
+
+
+def _report_start_once(version: str) -> None:
+    """首次上报时启动训练报告（拿不到配置就跳过，绝不影响训练）。"""
+    try:
+        from services import report_service as report
+
+        if report.run_dir() is not None:
+            return
+        from config.base import (BATCH_SIZE, DATASET_DIR, IMAGE_SIZE, PRETRAINED_BASE,
+                                 CROPPED_DATASET_DIR)
+        meta = {
+            "version": version,
+            "base": PRETRAINED_BASE,
+            "dataset": str(DATASET_DIR),
+            "cropped_dataset": str(CROPPED_DATASET_DIR),
+            "batch": BATCH_SIZE,
+            "image_size": IMAGE_SIZE,
+        }
+        try:
+            meta["device"] = str(__import__("config.base", fromlist=["get_device"]).get_device())
+        except Exception:
+            pass
+        report.start_run(meta, version=version)
+    except Exception as e:
+        logger.debug("训练报告启动失败: %s", e)
+
+
+def _save_checkpoint(kind: str, version: str, accuracy=None, note: str = "") -> None:
+    """把当前模型状态快照成检查点，并同步更新训练报告（失败只告警，绝不影响训练）。"""
+    try:
+        from services.checkpoint_service import create_checkpoint
+
+        meta = create_checkpoint(kind=kind, version=version, accuracy=accuracy, note=note)
+        try:
+            from services import report_service as report
+
+            _report_start_once(version)
+            if meta:
+                report.add_checkpoint(meta["name"], kind=kind, accuracy=accuracy,
+                                      size_mb=meta.get("size_mb"))
+            if kind in ("best", "final", "interrupt"):
+                report.add_event("%s: 保存模型（正确率 %s）" % (kind, accuracy))
+            if kind == "final":
+                report.set_status("finished", "训练完成")
+            elif kind == "interrupt":
+                report.set_status("interrupted", "训练被中断（已保存当前模型）")
+        except Exception as e:
+            logger.debug("训练报告更新失败: %s", e)
+    except Exception as e:                      # 检查点是增强功能，任何异常都不该中断训练
+        logger.warning("创建检查点失败（不影响训练）: %s", e)
 
 
 class TrainingCancelled(Exception):
@@ -633,7 +770,10 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None, cancel
             model_handler = CharacterRecognitionModel(NUM_CLASSES, pretrained=True)
             model = model_handler.get_model()
             skip_phase1 = False
-            logger.info("使用 torchvision.models.resnet18(weights=IMAGENET1K_V1)")
+            if PRETRAINED_BASE and PRETRAINED_BASE != "imagenet-resnet18":
+                logger.info("从头训练：backbone 由基模 %s 初始化（预训练域：动漫）", PRETRAINED_BASE)
+            else:
+                logger.info("从头训练：使用 torchvision.models.resnet18(weights=IMAGENET1K_V1)")
 
         criterion = LabelSmoothingCrossEntropy(smoothing=LABEL_SMOOTHING)
         logger.info("配置: smooth=%.1f | batch=%d | weight_decay=%.0e",
@@ -652,6 +792,19 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None, cancel
         if not skip_phase1 and PHASE1_EPOCHS > 0:
             model_handler.freeze_backbone()
             # 阶段1 优化器 — 只更新 requires_grad=True 的参数
+            try:
+                _TRAINING_INFO.update({
+                    "dataset": str(dataset_dir or ""),
+                    "resumed_from": str(resume_path) if resume_path else None,
+                    "class_count": len(class_names) if class_names else None,
+                    "train_size": len(train_subset) if 'train_subset' in dir() else None,
+                    "val_size": len(val_subset) if 'val_subset' in dir() else None,
+                    "device": str(get_device()),
+                    "skip_phase1": bool(skip_phase1),
+                })
+            except Exception as info_err:
+                logger.debug("训练信息采集失败: %s", info_err)
+
             phase1_optimizer = make_adam(
                 filter(lambda p: p.requires_grad, model.parameters()),
                 lr=PHASE1_LR, weight_decay=WEIGHT_DECAY
@@ -659,6 +812,7 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None, cancel
             logger.info("=" * 50)
             logger.info("阶段1: 冻结 backbone，仅训练 FC + CBAM (%d 轮, lr=%.0e)",
                          PHASE1_EPOCHS, PHASE1_LR)
+            _report_phase("P1", "冻结 backbone，仅训 FC+CBAM", PHASE1_EPOCHS)
 
             for epoch in range(PHASE1_EPOCHS):
                 if training_interrupted:
@@ -726,6 +880,7 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None, cancel
 
                 logger.info("P1 第 %d/%d 轮 | loss=%.4f | train=%.2f%% | val=%.2f%%",
                              epoch + 1, PHASE1_EPOCHS, epoch_loss, epoch_train_acc, val_acc)
+                _report_epoch(epoch + 1, "P1", epoch_loss, epoch_train_acc, val_acc, PHASE1_LR)
 
                 if val_acc > best_val_acc:
                     best_val_acc = val_acc
@@ -734,6 +889,8 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None, cancel
                     logger.info("保存最佳模型 (正确率: %.2f%%) → %s", best_val_acc, str(MODEL_PATH))
                     save_classes_to_json(CLASSES_JSON_PATH, class_names)
                     _write_model_config(training_version)
+                    _TRAINING_INFO["best_val_acc"] = round(float(val_acc), 2)
+                    _safe_ckpt("best", training_version, val_acc)
                 elif EARLY_STOP_PATIENCE > 0:
                     epochs_no_improve += 1
         else:
@@ -756,6 +913,7 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None, cancel
         logger.info("=" * 50)
         logger.info("阶段2: 解冻全部，全局精调 (%d 轮, lr=%.0e → %.0e)",
                      phase2_epochs, PHASE2_LR, PHASE2_MIN_LR)
+        _report_phase("P2", "解冻全部，余弦退火精调", phase2_epochs)
 
         for epoch in range(phase2_epochs):
             if training_interrupted:
@@ -825,6 +983,7 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None, cancel
 
             logger.info("P2 第 %d/%d 轮 | loss=%.4f | train=%.2f%% | val=%.2f%% | lr=%.0e",
                          epoch + 1, phase2_epochs, epoch_loss, epoch_train_acc, val_acc, current_lr)
+            _report_epoch(epoch + 1, "P2", epoch_loss, epoch_train_acc, val_acc, current_lr)
 
             if val_acc > best_val_acc:
                 best_val_acc = val_acc
@@ -834,6 +993,8 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None, cancel
                 save_classes_to_json(CLASSES_JSON_PATH, class_names)
                 # 权重/类别都换了，config.json 必须一起更新（节点同步靠它的 version + sha256 比对）
                 _write_model_config(training_version)
+                _TRAINING_INFO["best_val_acc"] = round(float(val_acc), 2)
+                _safe_ckpt("best", training_version, val_acc)
             elif EARLY_STOP_PATIENCE > 0:
                 epochs_no_improve += 1
                 if epochs_no_improve >= EARLY_STOP_PATIENCE:
@@ -852,10 +1013,15 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None, cancel
         # 训练结束后：使用 LLM 为每个角色补充 features_used / tags（可选，需 LLM_ENRICH_FEATURES=True）
         _enrich_classes_with_llm_features(full_dataset, class_names)
 
+        # 训练收尾：先跑真实口径评估（结果会被下面的 _write_model_config 写进 config.json）
+        _run_final_eval()
+
         # 收尾统一刷新一次 config.json：
         # 上面可能刚改过 classes.json（LLM 补全），哈希必须重新计算；
         # 另外早停/无提升（阶段2 从未保存）等情况也需要这一次兜底写入
         _write_model_config(training_version)
+        _TRAINING_INFO["best_val_acc"] = round(float(best_val_acc), 2)
+        _save_checkpoint("final", training_version, best_val_acc)
         logger.info("模型配置已刷新: %s（version=%s，最佳正确率 %.2f%%）",
                     str(MODEL_INFO_PATH), training_version, best_val_acc)
 
@@ -867,6 +1033,8 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None, cancel
                 model_handler.save_model(MODEL_PATH)
                 save_classes_to_json(CLASSES_JSON_PATH, class_names)
                 _write_model_config(training_version)
+                _TRAINING_INFO["best_val_acc"] = round(float(best_val_acc), 2)
+                _save_checkpoint("interrupt", training_version, best_val_acc)
                 logger.warning("已保存当前模型至: %s (正确率: %.2f%%)", str(MODEL_PATH), best_val_acc)
             else:
                 logger.warning("模型尚未初始化，无需保存")

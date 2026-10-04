@@ -24,7 +24,12 @@ logger = get_logger("json_protocol")
 
 
 class JsonProtocol:
-    """JSON 消息发送和接收类，使用自定义消息头长度前缀协议"""
+    """JSON 消息发送和接收类，使用自定义消息头长度前缀协议。
+
+    **实例不线程安全**：recv_json() 会把"粘包余量"存进 self._recv_buffer，
+    因此**每个连接必须独占一个实例**（send_json 无状态，可以共用）。
+    多连接共享同一实例会出现帧串包（A 连接读走 B 连接的半截帧）。
+    """
 
     def __init__(self, send_header: str = PROTOCOL_HEADER_NODE,
                  expected_headers: list[str] | None = None):

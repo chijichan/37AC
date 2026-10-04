@@ -31,9 +31,17 @@ def handle_client(conn, addr):
     node_id = None
     authenticated = False
 
+    # 每个连接独享一个协议实例：JsonProtocol 的 _recv_buffer 保存"粘包余量"，
+    # 跨连接共享会让 A 连接的半截帧被 B 连接读走（并发下的帧串包）。
+    # send_json 是无状态的，因此发送侧可以继续用共享实例。
+    protocol = type(json_protocol)(
+        send_header=json_protocol.send_header,
+        expected_headers=list(getattr(json_protocol, "expected_headers", []) or []),
+    )
+
     try:
         while True:
-            msg = json_protocol.recv_json(conn)
+            msg = protocol.recv_json(conn)
             if msg is None:
                 break  # 客户端断开或数据错误
 

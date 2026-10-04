@@ -208,7 +208,7 @@ src\www\stop-nginx.bat
 
 访问：`http://127.0.0.1:8000`
 
-### 6. 裁剪质量门控与"要不要裁剪"（实测驱动）
+### 4. 裁剪质量门控与"要不要裁剪"（实测驱动）
 
 **结论：当前模型下，裁剪是负收益；精度优先就把裁剪关掉。**
 
@@ -277,7 +277,7 @@ YOLOv8n 是 **COCO 真人检测器**，在二次元/插画上会误检、多检�
 - 服务器主要出 LLM 结果时：`LOCAL_RECOGNITION_ENABLED=false`，节点注册的 capabilities 只剩 `["llm"]`，服务端不会再派本地任务给它。
 - CPU 型 VPS 另外把 `TORCH_NUM_THREADS=2`（或 1）、`YOLO_CROP_WORKERS=1` 一起设上。
 
-### 4. 启动边缘节点
+### 6. 启动边缘节点
 
 ```bash
 python src/cli/main.py node
@@ -300,7 +300,7 @@ python src/cli/main.py node
 
 ---
 
-### 8. 源数据集「不处理列表」（完全忽略）
+### 7. 源数据集「不处理列表」（完全忽略）
 
 有些源目录**根本不该进数据集**（例如素材堆、草稿、临时的额外图集），
 把它们写进 src/cli/.env 的 DATASET_IGNORE_PATHS：
@@ -344,14 +344,14 @@ crop_dataset 每张图的处理不再经过临时文件：
 > 数据集构建 / 保留），所有可配置键都写在文件里且每行上方有中文注释；**删掉某一行即回落到代码内置默认值**。
 > 代码目前未读取的键（HTTP/WS 代理）集中放在最后一段作记录，完整模板见 .env.example。
 
-### 7. 运行测试
+### 8. 运行测试
 
 ```bash
 python -m pytest tests/cli -q --no-cov      # CLI（src/cli）
 python -m pytest tests/server -q --no-cov   # 服务端（src/server）
 ```
 
-两套必须**分开进程**运行（各自持有独立的 `config` 包，同进程会互相串）。当前状态：CLI 252 通过、服务端 194 通过。
+两套必须**分开进程**运行（各自持有独立的 `config` 包，同进程会互相串）。当前状态：CLI 306 通过、服务端 194 通过。
 
 受限环境（系统 TEMP 不可写、`mkdir(mode=0o700)` 建出的目录后续连列举/写入都被拒）下，`tests/conftest.py` 会自动：
 
@@ -359,3 +359,52 @@ python -m pytest tests/server -q --no-cov   # 服务端（src/server）
 - 在测试进程内忽略 `os.mkdir` 的 `mode` 参数（pytest 的 basetemp / `tmp_path` / `tempfile.mkdtemp` 全用 `0o700` 建目录，正是被拒的根源）。
 
 普通开发机上不受影响，无需额外配置。
+
+---
+
+## 本阶段（2026-09 ~ 10）变更汇总
+
+> 设计取舍的详细记录在 `.dsh-scratch/CONTEXT.md`，这里只列「用什么、去哪调」。
+
+### 识别链路
+
+- **一图多角（LLM）**：先用检测器把每个人切成子图，再逐张问大模型；人物框来自检测器，
+  `crop_method` 形如 `llm_yolo`（整图回退时为 `llm`、该条无框）。
+  开关：`LLM_MULTI_CHARACTER` / `LLM_MAX_CHARACTERS`（每人一次调用）/ `LLM_CROP_METHOD` / `LLM_CROP_MAX_SIDE`。
+- **限流重试**：429/5xx/超时/连接断开自动退避重试（优先 `Retry-After`，指数退避 + 抖动）；
+  `LLM_MAX_ATTEMPTS` / `LLM_RETRY_BASE_SEC` / `LLM_RETRY_MAX_SEC` / `LLM_MAX_TOTAL_SEC`（单图总预算）。
+  一图多角时某个人物重试仍失败只记为「该人物未识别」（`failed_characters` / `character_failed_count` / `warnings`），
+  其它人物照常返回、整图不算失败。
+- **features_used / tags 上限 3 条**：`LLM_MAX_FEATURES` / `LLM_MAX_TAGS`（0=不限制）；
+  训练后的角色档案补全，两个字段都已达标就跳过、不再调用 LLM。
+- **裁剪质量门控**：置信度 + 面积占比 + **长宽比**；识别与数据集**两套参数分开**
+  （`CROP_*` vs `DATASET_CROP_*`：数据集侧面积下限更高、上限不限、外扩更大）。
+- **本地 / LLM 通道可任关其一**：`LOCAL_RECOGNITION_ENABLED`（关掉即只做 LLM，torch 不加载）。
+- **内存**：torch / torchvision / mediapipe 全部惰性加载；空闲节点约 21MB，首次本地任务后约 450MB
+  （详见上文「节点内存占用与调优」）。
+
+### 节点与模型
+
+- **模型同步**：`config.json` 记录 `version` 与权重/类别的 `sha256`；
+  训练保存（阶段2、训练收尾、中断）都会刷新它 —— 漏更新会让服务端永远认为没有新模型。
+- **设备**：`DEVICE=cpu/cuda/dml`（`AUTO_DEVICE=False` 时生效）；
+  `USE_DIRECTML` 为自动模式下的 DirectML 尝试。注意 torch-directml 与 torch 版本强耦合
+  （当前 torch 2.13 下已无法加载，会自动回退 CPU）；AMD 显卡更稳的路线是 ONNX Runtime + DirectML（尚未接入）。
+
+### 数据集
+
+- **裁剪链路**：读原图 → 缩略图检测 → 坐标映射回原图 → **从原图裁剪** → 缩放 + JPEG 编码 → **直写数据集**（无临时文件）。
+- **产物命名统一**：裁剪与整图补足都是 `<名>_37ac.jpg`（最长边 `DATASET_COMPRESS_SIZE`、质量 `DATASET_COMPRESS_QUALITY`）。
+- **裁剪不足用整图补足**：`DATASET_FILL_UNCROPPED`（默认 True；False=直接丢弃）。
+- **不处理列表**：`DATASET_IGNORE_PATHS`（命中的源目录完全忽略；旧名 `DATASET_NO_CROP_PATHS` 兼容），
+  `DATASET_IGNORE_CLEAN` 控制是否顺手清理其在数据集中的旧产物。
+- **可中断**：裁剪 / 压缩 / 训练期间按 **ESC / Ctrl+Z** 停止并返回上级菜单，**Ctrl+C** 结束程序
+  （训练会保存当前模型；已完成的数据集图片保留，续跑自动跳过）。
+
+### 交互按键
+
+| 按键 | 行为 |
+|------|------|
+| ESC / Ctrl+Z / 回车 | 返回上一级菜单（长任务运行期间同样生效） |
+| Ctrl+C | 结束程序（长任务先停止再退出） |
+| 数字 + 回车 | 选择菜单项 |

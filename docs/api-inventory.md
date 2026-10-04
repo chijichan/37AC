@@ -226,6 +226,10 @@ Werkzeug 默认的 HTML 错误页（404/405/413/500…）也换成了同款 JSON
   `characters[].source` 为 `llm`，`crop_method` 形如 `llm_yolo`（整图回退时为 `llm`，该条无框）。
   开关：`LLM_MULTI_CHARACTER` / `LLM_MAX_CHARACTERS`（**每人一次调用**）/ `LLM_CROP_METHOD` / `LLM_CROP_MAX_SIDE`。
   代价：N 个人物 = N 次 LLM 调用，耗时与 token 随人数线性增长（可用 `LLM_MAX_CHARACTERS` 封顶）。
+- **llm 通道的部分失败**：模型接口限流（429）/5xx/超时会让节点自动退避重试（最多 `LLM_MAX_ATTEMPTS` 次）；
+  一图多角时某个人物重试仍失败，只把该人物记为「未识别」：结果里多了
+  `failed_characters`（含 `index` / `bbox_percent` / `reason` / `message`）、`character_failed_count` 与 `warnings`，
+  其余人物照常返回且 `success=true`、`error=null`；整图路径失败才 `success=false`。
 - **部分完成**：37ac/llm 几秒回来、人工可能永远不来；`channel_status` 给出每通道状态，
   任务整体 status ∈ pending / partial / completed / failed。
 - **通道归属（2026-09-26 加固）**：结果落哪个通道由服务端按可靠性判定 ——

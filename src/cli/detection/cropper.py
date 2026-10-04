@@ -25,6 +25,8 @@ from config.base import (
     CROP_METHOD,
     CROP_MIN_AREA_RATIO,
     CROP_MIN_CONFIDENCE,
+    CROP_MAX_ASPECT_RATIO,
+    CROP_MIN_ASPECT_RATIO,
     CROP_QUALITY_GATE,
     MAX_CHARACTERS,
     YOLO_DETECT_MAX_SIZE,
@@ -83,8 +85,29 @@ def gate_detections(items, image_size):
             continue
         if CROP_MAX_AREA_RATIO > 0 and ratio > CROP_MAX_AREA_RATIO:
             continue
+
+        aspect = _box_aspect_ratio(item)
+        if aspect:
+            if CROP_MIN_ASPECT_RATIO > 0 and aspect < CROP_MIN_ASPECT_RATIO:
+                continue
+            if CROP_MAX_ASPECT_RATIO > 0 and aspect > CROP_MAX_ASPECT_RATIO:
+                continue
         passed.append(item)
     return passed
+
+
+def _box_aspect_ratio(item):
+    """框的长宽比 w/h（优先用归一化框，缺失则用像素框）；拿不到返回 0。"""
+    box = item.get("bbox_norm") or {}
+    width, height = float(box.get("w") or 0), float(box.get("h") or 0)
+    if not (width and height):
+        raw = item.get("bbox") or ()
+        if len(raw) == 4:
+            width = max(0.0, float(raw[2]) - float(raw[0]))
+            height = max(0.0, float(raw[3]) - float(raw[1]))
+    if not (width and height):
+        return 0.0
+    return width / float(height)
 
 
 def crop_quality_ok(crop_path, image_path, confidence=None):
@@ -93,8 +116,23 @@ def crop_quality_ok(crop_path, image_path, confidence=None):
         return True
     if confidence is not None and CROP_MIN_CONFIDENCE > 0 and float(confidence) < CROP_MIN_CONFIDENCE:
         return False
-    if CROP_MIN_AREA_RATIO <= 0 and CROP_MAX_AREA_RATIO <= 0:
+    if CROP_MIN_AREA_RATIO <= 0 and CROP_MAX_AREA_RATIO <= 0 \
+            and CROP_MIN_ASPECT_RATIO <= 0 and CROP_MAX_ASPECT_RATIO <= 0:
         return True
+    # 长宽比过滤：直接看裁图本身的比例（它就是框本身，可能带外扩）
+    if CROP_MIN_ASPECT_RATIO > 0 or CROP_MAX_ASPECT_RATIO > 0:
+        try:
+            from PIL import Image as _Image
+            with _Image.open(crop_path) as _crop:
+                crop_w, crop_h = _crop.size
+            if crop_h:
+                crop_aspect = crop_w / float(crop_h)
+                if CROP_MIN_ASPECT_RATIO > 0 and crop_aspect < CROP_MIN_ASPECT_RATIO:
+                    return False
+                if CROP_MAX_ASPECT_RATIO > 0 and crop_aspect > CROP_MAX_ASPECT_RATIO:
+                    return False
+        except Exception:
+            pass
     try:
         from PIL import Image
         with Image.open(crop_path) as crop:
@@ -196,6 +234,7 @@ def crop_characters_by_method(image_path, method=None, max_characters=None, marg
                 logger.info(
                     "裁剪门控过滤: %d -> %d 个候选（置信度<%.2f 或面积占比<%.2f）",
                     len(characters), len(gated), CROP_MIN_CONFIDENCE, CROP_MIN_AREA_RATIO,
+            # 长宽比阈值也一并打印，便于核对门控行为
                 )
             characters = gated
         if characters:

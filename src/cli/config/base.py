@@ -460,6 +460,10 @@ CROP_MIN_CONFIDENCE = float(os.getenv("CROP_MIN_CONFIDENCE", "0.35"))
 # 框面积占原图比例的下限/上限（太小是误检碎片，太大等于没裁）
 CROP_MIN_AREA_RATIO = float(os.getenv("CROP_MIN_AREA_RATIO", "0.06"))
 CROP_MAX_AREA_RATIO = float(os.getenv("CROP_MAX_AREA_RATIO", "0.98"))
+# 门控：框的长宽比（w/h）过滤——太扁/太细的框基本不是人物主体（例如二次元图上的 kite/banner 误检）
+# 站立人物常见 0.3~0.6，半身/特写 0.6~1.2；默认放行 0.15~4.0，0=不限制
+CROP_MIN_ASPECT_RATIO = float(os.getenv("CROP_MIN_ASPECT_RATIO", "0.15") or "0.15")
+CROP_MAX_ASPECT_RATIO = float(os.getenv("CROP_MAX_ASPECT_RATIO", "4.0") or "4.0")
 
 # ==================== 资源占用开关（内存敏感机器按需关闭） ====================
 # 本地模型识别（YOLO + ResNet）：关闭后节点不再下载/加载本地模型，只做 LLM 识别。

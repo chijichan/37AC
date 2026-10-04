@@ -111,8 +111,86 @@ class CharacterRecognitionModel:
         from config.base import PRETRAINED_BASE
 
         _log = logging.getLogger(__name__)
-        use_base = bool(pretrained) and PRETRAINED_BASE not in ("", "imagenet-resnet18")
-        # 用外部基模时不再下载 ImageNet 权重；流程：裸 resnet18 → 灌基模 → 插 CBAM → 换 fc
+        _log_warn = None
+        try:
+            from models.pretrained import get_base, is_builtin
+
+            if not is_builtin(PRETRAINED_BASE):
+                _info = get_base(PRETRAINED_BASE)
+                if _info.get("builtin"):
+                    # 指定的基模不存在/已丢失 → 回退内置 resnet18 + ImageNet 权重
+                    _log_warn = "基模 %s 不可用（目录缺失或无权重），已回退 imagenet-resnet18" % PRETRAINED_BASE
+                    use_base = False
+                else:
+                    use_base = bool(pretrained) and bool(_info.get("weights"))
+                    if pretrained and not use_base:
+                        _log_warn = "基模 %s 没有权重文件，已回退 ImageNet 预训练" % PRETRAINED_BASE
+            else:
+                use_base = False
+        except Exception as e:
+            use_base = bool(pretrained) and PRETRAINED_BASE not in ("", "imagenet-resnet18")
+            _log_warn = "基模解析失败: %s" % e
+
+        try:
+            from models.pretrained import current_arch
+
+            arch = current_arch()
+        except Exception:
+            arch = "resnet18"
+        if _log_warn:
+            _log.warning(_log_warn)
+
+        # DML_ARCH_BLOCK: torch-directml 对 torchvision EfficientNet 算子覆盖不全，
+        # 前向 conv2d 会抛 "unbox expects Dml at::Tensor as inputs"（实测 batch 88 才炸，
+        # 白等一场）。这里在构建时就拦下并给出可行方案。
+        if arch.startswith("efficientnet"):
+            try:
+                # 用别名导入：否则函数内的 get_device 会被当成局部变量，
+                # 导致下面的 model.to(get_device()) 抛 UnboundLocalError
+                from config.base import get_device as _resolve_device
+
+                _dev = _resolve_device()
+                _dev_type = getattr(_dev, "type", str(_dev))
+            except Exception:
+                _dev_type = "cpu"
+            if _dev_type == "privateuseone":
+                raise RuntimeError(
+                    "架构 %s 无法在 DirectML 上运行（torch-directml 算子不完整，前向 conv2d 会断言失败）。"
+                    "解决：① .env 设 PRETRAINED_BASE=dbv4-resnet18（或 imagenet-resnet18）用 ResNet 训练；"
+                    "② 或改用 CPU 训练（.env: AUTO_DEVICE=False + DEVICE=cpu）。" % arch)
+
+        # ---------- EfficientNet 分支（b0/b3）：无 CBAM，换 classifier 头 ----------
+        if arch.startswith("efficientnet"):
+            from torchvision.models import efficientnet_b0, efficientnet_b3
+
+            factory = {"efficientnet_b0": efficientnet_b0, "efficientnet_b3": efficientnet_b3}.get(arch)
+            if factory is None:
+                _log.warning("未知架构 %s，回退 resnet18", arch)
+                arch = "resnet18"
+            else:
+                # 内置基模：直接用 torchvision 的 ImageNet 权重（零下载 HF 权重）
+                imagenet_weights = None if use_base else ("IMAGENET1K_V1" if pretrained else None)
+                model = factory(weights=imagenet_weights)
+                if use_base:
+                    try:
+                        from models.pretrained import apply_base_to_model
+
+                        result = apply_base_to_model(model, PRETRAINED_BASE)
+                        if not result.get("applied"):
+                            _log.warning("基模 %s 未能应用（%s），backbone 为随机初始化",
+                                         PRETRAINED_BASE, result.get("reason"))
+                    except Exception as e:
+                        _log.warning("基模 %s 加载失败: %s（回退随机初始化）", PRETRAINED_BASE, e)
+                elif not pretrained:
+                    _log.warning("架构 %s：pretrained=False，backbone 为随机初始化", arch)
+                in_features = model.classifier[1].in_features
+                model.classifier[1] = nn.Linear(in_features, num_classes)
+                _log.info("已构建 %s（无 CBAM，%s）：%d 类，分类头 %d→%d", arch,
+                          "ImageNet 预训练" if imagenet_weights else "随机初始化",
+                          num_classes, in_features, num_classes)
+                return model
+
+        # ---------- ResNet18 分支（默认）：裸 resnet18 → 灌基模 → 插 CBAM → 换 fc ----------
         model = resnet18(weights=None if use_base else ("IMAGENET1K_V1" if pretrained else None))
         if use_base:
             try:
@@ -135,19 +213,42 @@ class CharacterRecognitionModel:
         return model.to(get_device())
 
     def freeze_backbone(self):
-        """冻结 ResNet backbone，仅训练 FC + CBAM（阶段1）。"""
+        """冻结 backbone（阶段1），仅训练分类头（+CBAM，若有）。
+
+        resnet18：冻结 conv1/bn1/layer1-4；efficientnet_b0/b3：冻结 features.*
+        """
+        try:
+            from models.pretrained import current_arch
+
+            arch = current_arch()
+        except Exception:
+            arch = "resnet18"
+        prefixes = ("features",) if arch.startswith("efficientnet") else (
+            "conv1", "bn1", "layer1", "layer2", "layer3", "layer4")
         for name, param in self.model.named_parameters():
-            # 冻结 ResNet backbone
-            if name.startswith(("conv1", "bn1", "layer1", "layer2", "layer3", "layer4")):
-                param.requires_grad = False
-            # CBAM 和 fc 保持可训练
-            else:
-                param.requires_grad = True
+            param.requires_grad = not name.startswith(prefixes)
 
     def unfreeze_all(self):
         """解冻所有参数（阶段2）。"""
         for param in self.model.parameters():
             param.requires_grad = True
+
+    # ---------- 架构无关分类头访问（resnet: fc；efficientnet: classifier[1]） ----------
+    @staticmethod
+    def _head_of(model):
+        if model is None:
+            return None
+        if hasattr(model, "fc"):
+            return model.fc
+        if hasattr(model, "classifier") and len(model.classifier) > 1:
+            return model.classifier[1]
+        return None
+
+    @staticmethod
+    def _head_prefix(model) -> str:
+        if model is not None and hasattr(model, "classifier") and not hasattr(model, "fc"):
+            return "classifier.1."
+        return "fc."
 
     def get_model(self) -> nn.Module:
         return self.model
@@ -192,12 +293,20 @@ class CharacterRecognitionModel:
         state_dict = _load_state_dict_any(load_path)
 
         # 仅当模型未构建或类别数不匹配时才重建，避免重复构建
+        _head = self._head_of(getattr(self, 'model', None))
         if not hasattr(self, 'model') or self.model is None \
-                or self.model.fc.out_features != num_classes:
+                or _head is None or _head.out_features != num_classes:
             self.model = self._build_model(num_classes, self.pretrained)
 
         # 检查 fc 层权重尺寸是否匹配
-        fc_key = "fc.weight"
+        _hp = self._head_prefix(self.model)
+        fc_key = _hp + "weight"
+        if fc_key not in state_dict:                     # 兼容另一种架构/命名
+            for _alt in ("classifier.1.weight", "fc.weight", "classifier.weight"):
+                if _alt in state_dict:
+                    _hp = _alt[: -len("weight")]
+                    fc_key = _alt
+                    break
         if fc_key in state_dict:
             old_num_classes = state_dict[fc_key].size(0)
             if old_num_classes != num_classes:
@@ -206,7 +315,7 @@ class CharacterRecognitionModel:
                 logger.info("类别数变化: %d → %d，跳过 fc 层权重，保留 backbone + CBAM",
                             old_num_classes, num_classes)
                 # 移除 fc 层的 weight 和 bias（如果有）
-                keys_to_remove = [k for k in state_dict if k.startswith("fc.")]
+                keys_to_remove = [k for k in state_dict if k.startswith(_hp)]
                 for k in keys_to_remove:
                     del state_dict[k]
 

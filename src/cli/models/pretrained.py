@@ -19,6 +19,12 @@ logger = get_logger("pretrained")
 PRETRAINED_DIR_NAME = "pretrained"
 DESC_NAME = "37ac-base.json"
 DEFAULT_BASE = "imagenet-resnet18"
+# 内置基模（torchvision 自带 ImageNet 权重，**无需下载任何 HF 权重**）
+BUILTIN_BASES = {
+    "imagenet-resnet18": {"arch": "resnet18", "input_size": 224},
+    "imagenet-efficientnet_b0": {"arch": "efficientnet_b0", "input_size": 224},
+    "imagenet-efficientnet_b3": {"arch": "efficientnet_b3", "input_size": 300},
+}
 IMAGENET_MEAN = (0.485, 0.456, 0.406)
 IMAGENET_STD = (0.229, 0.224, 0.225)
 
@@ -74,10 +80,15 @@ def list_bases() -> list:
     return bases
 
 
+def is_builtin(base_id: str) -> bool:
+    return (not base_id) or base_id in BUILTIN_BASES
+
+
 def get_base(base_id: str) -> dict:
-    if not base_id or base_id == DEFAULT_BASE:
-        return {"id": DEFAULT_BASE, "builtin": True, "mean": list(IMAGENET_MEAN),
-                "std": list(IMAGENET_STD), "input_size": 224, "arch": "resnet18"}
+    if is_builtin(base_id):
+        info = BUILTIN_BASES.get(base_id or DEFAULT_BASE) or BUILTIN_BASES[DEFAULT_BASE]
+        return {"id": base_id or DEFAULT_BASE, "builtin": True, "mean": list(IMAGENET_MEAN),
+                "std": list(IMAGENET_STD), "input_size": info["input_size"], "arch": info["arch"]}
     for item in list_bases():
         if item["id"] == base_id:
             item["builtin"] = False
@@ -85,6 +96,15 @@ def get_base(base_id: str) -> dict:
     logger.warning("基模不存在: %s（回退 %s）", base_id, DEFAULT_BASE)
     return {"id": DEFAULT_BASE, "builtin": True, "mean": list(IMAGENET_MEAN),
             "std": list(IMAGENET_STD), "input_size": 224, "arch": "resnet18"}
+
+
+def current_arch() -> str:
+    """当前所选基模的架构（缺省 resnet18）。"""
+    try:
+        from config.base import PRETRAINED_BASE
+    except Exception:
+        return "resnet18"
+    return str(get_base(PRETRAINED_BASE).get("arch") or "resnet18")
 
 
 def mean_std(base_id: str):
@@ -171,13 +191,24 @@ def apply_base_to_model(model, base_id: str) -> dict:
     if not state:
         return {"applied": False, "reason": "no_weights"}
     missing, unexpected = model.load_state_dict(state, strict=False)
-    if missing or unexpected:
+    total = max(1, len(state) + len(missing))
+    match_ratio = round((len(state) - len(unexpected)) / total, 3)
+    if match_ratio < 0.5:
+        # 典型场景：timm 命名（conv_stem/blocks.*）与 torchvision 不一致 → 权重几乎全部对不上，
+        # 等于随机初始化。必须说清楚，否则用户会白训一场。
+        logger.error("基模 %s 权重与当前架构匹配度过低（%.0f%%，仅 %d/%d 命中）："
+                     "多半是 timm 命名与 torchvision 不一致。本次实际是**随机初始化**，"
+                     "建议改用内置基模（imagenet-resnet18 / imagenet-efficientnet_b0/b3）"
+                     "或 arch 匹配的 torchvision 权重。",
+                     base_id, match_ratio * 100, len(state) - len(unexpected), total)
+    elif missing or unexpected:
         logger.warning("基模加载差异: 缺失 %d（如 %s）/ 多余 %d（如 %s）",
                        len(missing), ", ".join(list(missing)[:3]),
                        len(unexpected), ", ".join(list(unexpected)[:3]))
     logger.info("已用基模 %s 初始化 backbone（%d 个张量）", base_id, len(state))
     return {
         "applied": True,
+        "match_ratio": match_ratio,
         "loaded": len(state),
         "missing": len(missing),
         "unexpected": len(unexpected),

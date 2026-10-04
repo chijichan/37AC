@@ -63,8 +63,11 @@ def _patch(monkeypatch, fake, cap, fill=True):
 
 
 def _counts(out_dir: Path):
+    """整图补足现在也带 _37ac 标记，用扩展名区分：裁剪统一输出 .jpg，整图保留源后缀。"""
     files = sorted(p.name for p in out_dir.iterdir())
-    return [f for f in files if "_37ac" in f], [f for f in files if "_37ac" not in f]
+    cropped = [f for f in files if f.endswith("_37ac.jpg")]
+    whole = [f for f in files if f.endswith("_37ac.png")]
+    return cropped, whole
 
 
 def test_all_crops_fail_fills_with_whole_images(tree, monkeypatch):

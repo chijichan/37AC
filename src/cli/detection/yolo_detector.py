@@ -859,7 +859,10 @@ def crop_dataset(source_dir: str, output_dir: str, target_classes=None,
             for src_img, fname in uncropped_candidates:
                 if need <= 0 or (token is not None and token.cancelled()):
                     break
-                original_out = os.path.join(out_role_dir, fname)
+                # 整图补足同样带 _37ac 标记：数据集里所有产物命名统一，
+                # 便于区分「数据集产物」与源图、也让续跑判定只认一种命名
+                fill_base, fill_ext = os.path.splitext(fname)
+                original_out = os.path.join(out_role_dir, f"{fill_base}{CROP_SUFFIX}{fill_ext}")
                 if os.path.exists(original_out):
                     local["skipped"] += 1
                     continue

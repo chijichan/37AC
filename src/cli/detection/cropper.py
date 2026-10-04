@@ -56,8 +56,11 @@ def available_methods() -> list:
     return methods
 
 
-def gate_detections(items, image_size):
-    """裁剪质量门控：按检测置信度与框面积占比过滤候选框。
+def gate_detections(items, image_size, check_max_area: bool = True):
+    """裁剪质量门控：按检测置信度、框面积占比、长宽比过滤候选框。
+
+    check_max_area=False 用于**数据集裁剪**：源图本身常常就是紧裁剪的立绘，
+    "框几乎占满整张图"完全正常（识别路径才把它当可疑信号）。
 
     实测背景（91 类原始网图抽样）：直接裁剪 71.3% vs 不裁剪 79.0%，
     因为 COCO 模型在二次元图上会误检/多检，裁出的框常常不是角色主体。
@@ -83,7 +86,7 @@ def gate_detections(items, image_size):
                 ratio = max(0.0, (raw[2] - raw[0]) * (raw[3] - raw[1]) / total_area)
         if CROP_MIN_AREA_RATIO > 0 and ratio and ratio < CROP_MIN_AREA_RATIO:
             continue
-        if CROP_MAX_AREA_RATIO > 0 and ratio > CROP_MAX_AREA_RATIO:
+        if check_max_area and CROP_MAX_AREA_RATIO > 0 and ratio > CROP_MAX_AREA_RATIO:
             continue
 
         aspect = _box_aspect_ratio(item)

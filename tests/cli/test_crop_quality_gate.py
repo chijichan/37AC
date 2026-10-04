@@ -77,3 +77,59 @@ def test_crop_quality_ok_checks_aspect():
         assert C.crop_quality_ok(str(wide), str(original), confidence=0.9) is False
     finally:
         shutil.rmtree(root, ignore_errors=True)
+
+# ---------------- 数据集裁剪路径也走门控 ----------------
+
+def test_check_max_area_can_be_skipped():
+    """数据集场景：框几乎占满整图是正常的（源图本身就是紧裁剪立绘）。"""
+    full_frame = _item(0.99, 1.0)                      # 面积 0.99 > CROP_MAX_AREA_RATIO
+    assert C.gate_detections([full_frame], (1000, 1000)) == []
+    assert C.gate_detections([full_frame], (1000, 1000), check_max_area=False) == [full_frame]
+
+
+def _detector_with(box, confidence=0.9):
+    from detection import yolo_detector as YD
+
+    det = YD.YoloDetector()
+    det._loaded = True
+    det.detect = lambda image: [
+        {"bbox": box, "confidence": confidence, "class_id": 0, "class_name": "person"}
+    ]
+    return det
+
+
+def test_dataset_crop_applies_gate(monkeypatch):
+    root = _root()
+    try:
+        from PIL import Image as _Image
+
+        src = root / "src.png"
+        _Image.new("RGB", (1000, 1000), (5, 5, 5)).save(src)
+
+        # 极扁的误检框（1000x100 = 10.0）→ 门控拦下，当作"没检出人物"
+        bad = _detector_with((0, 0, 1000, 100))          # 面积 0.1、长宽比 10
+        data, _info = bad.detect_and_crop_bytes(str(src), max_size=0, detect_max_size=1000)
+        assert data is None
+
+        # 正常人物框 → 正常裁剪
+        good = _detector_with((200, 100, 500, 900))      # 长宽比 0.375、面积 0.24
+        data2, info2 = good.detect_and_crop_bytes(str(src), max_size=0, detect_max_size=1000)
+        assert data2 and info2["bbox"] == (200, 100, 500, 900)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_dataset_crop_gate_can_be_disabled(monkeypatch):
+    root = _root()
+    try:
+        from PIL import Image as _Image
+
+        monkeypatch.setattr(C, "CROP_QUALITY_GATE", False)
+        src = root / "src.png"
+        _Image.new("RGB", (1000, 1000), (5, 5, 5)).save(src)
+
+        bad = _detector_with((0, 0, 1000, 100))
+        data, info = bad.detect_and_crop_bytes(str(src), max_size=0, detect_max_size=1000)
+        assert data and info["bbox"] == (0, 0, 1000, 100)   # 关掉门控 → 不再拦截
+    finally:
+        shutil.rmtree(root, ignore_errors=True)

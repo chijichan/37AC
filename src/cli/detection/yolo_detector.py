@@ -410,15 +410,31 @@ class YoloDetector:
         if not detections:
             return None, None
 
-        # ② 坐标映射回原图（面积大者优先）
-        best, best_area = None, -1.0
+        # ② 坐标映射回原图 → 质量门控 → 面积大者优先
+        candidates = []
         for det in detections:
             box = scale_bbox(det["bbox"], detected_size, original_size)
-            area = bbox_area(box)
-            if area > best_area:
-                best, best_area = dict(det, bbox=box), area
-        if best is None:
+            candidates.append({
+                "bbox": box,
+                "detector_confidence": det.get("confidence"),
+                "_det": det,
+            })
+
+        try:
+            from detection.cropper import gate_detections
+            # 数据集裁剪：源图常常本身就是紧裁剪的立绘，"框几乎占满整图"是正常的，
+            # 因此只按置信度 / 面积下限 / 长宽比过滤，不套用识别路径的"最大面积"规则
+            gated = gate_detections(candidates, original_size, check_max_area=False)
+        except Exception as gate_err:
+            logger.debug("裁剪质量门控不可用，跳过: %s", gate_err)
+            gated = candidates
+
+        if not gated:
+            logger.debug("候选框全部被裁剪质量门控过滤: %s", image_path)
             return None, None
+
+        best_item = max(gated, key=lambda item: bbox_area(item["bbox"]))
+        best = dict(best_item["_det"], bbox=best_item["bbox"])
 
         box = expand_bbox(best["bbox"], original_size, margin_ratio)
 

@@ -173,7 +173,7 @@ def crop_characters_by_method(image_path, method=None, max_characters=None, marg
         "mediapipe": ["mediapipe"],
     }.get(method, ["yolo"])
     image_size = _image_size(image_path)
-    tmp_dir = output_dir or tempfile.mkdtemp(prefix="37ac_crop_")
+    tmp_dir = output_dir or tempfile.mkdtemp(prefix="37ac_crop_", dir=str(_tmp_root()))
 
     for name in chain:
         try:

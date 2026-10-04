@@ -567,6 +567,20 @@ def _role_matches(key: str, patterns) -> bool:
     return False
 
 
+def _tmp_root() -> Path:
+    """临时根目录：固定在 saves/tmp 下。
+
+    为什么不用默认的 tempfile.gettempdir()：当 TMPDIR/TEMP 等候选目录都不可用时，
+    tempfile 会**退回到当前工作目录**，于是 mkdtemp 会在仓库根留下 37ac_yolo_* 目录
+    （而且 mkdtemp 用 0o700 建目录，沙箱/普通权限下连删除都困难）。
+    """
+    from config.base import ROOT_PATH
+
+    root = Path(ROOT_PATH) / "saves" / "tmp"
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
 # 模块级便捷函数
 def _new_detector() -> YoloDetector:
     """创建一个新的 YOLO 检测器（供线程独立使用）。"""
@@ -949,7 +963,7 @@ def crop_characters(image_path: str, max_characters: int = None, max_size: int =
         found = detector.detect_all(image_path, max_size=max_size, target_classes=None)
         detections = found["detections"][:max(1, int(max_characters))]
 
-    tmp_dir = output_dir or tempfile.mkdtemp(prefix="37ac_multi_")
+    tmp_dir = output_dir or tempfile.mkdtemp(prefix="37ac_multi_", dir=str(_tmp_root()))
     crops = detector.crop_all(image_path, detections, tmp_dir, margin_ratio=margin_ratio)
     size = found["image_size"]
     for item in crops:
@@ -969,7 +983,7 @@ def crop_best_character(image_path: str) -> tuple:
     """
     import tempfile
     import shutil
-    tmp_dir = tempfile.mkdtemp(prefix="37ac_yolo_")
+    tmp_dir = tempfile.mkdtemp(prefix="37ac_yolo_", dir=str(_tmp_root()))
     try:
         detector = get_detector()
         crop_path, info = detector.detect_and_crop(

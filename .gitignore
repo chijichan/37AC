@@ -52,3 +52,7 @@ logs/
 src/cli/saves/models/pretrained/
 src/cli/saves/models/checkpoints/
 src/cli/saves/models/_bak/
+# YOLO/裁剪临时目录（若再次意外落到工作目录）
+37ac_yolo_*/
+37ac_multi_*/
+37ac_crop_*/

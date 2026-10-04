@@ -46,6 +46,71 @@ from config.base import (
 logger = get_logger("node_service")
 
 
+def _safe_name_part(value, limit: int = 48) -> str:
+    """把任务 id / 通道名转成安全文件名片段（防路径遍历）。"""
+    text = re.sub(r"[^A-Za-z0-9._-]", "_", str(value or ""))
+    text = text.replace("..", "_").strip("._")      # 纵深防御：连 .. 也不保留
+    return (text[:limit] or "task")
+
+
+def _content_digest(data: bytes) -> str:
+    import hashlib
+
+    return hashlib.md5(data).hexdigest()
+
+
+def _store_task_image(image_bytes: bytes, task_id: str, channel: str = None, ext: str = ".jpg") -> str:
+    """保存任务图片：文件名 = <任务id>[_<通道>]_<内容哈希前10><ext>。
+
+    - **可追溯**：磁盘文件名就带任务与通道，不需要额外索引，重启后也能反查；
+    - **内容级去重**：同一张图被多通道扇出（task_id 形如 "<父id>:<通道>"）时
+      只在磁盘留下一份，避免 uploads 里出现成对的重复文件。
+    """
+    os.makedirs(IMAGE_PATH, exist_ok=True)
+    digest = _content_digest(image_bytes)
+    tag = digest[:10]
+    name = "%s_%s%s" % (_safe_name_part(task_id), tag, ext)
+    path = os.path.join(IMAGE_PATH, name)
+    if os.path.exists(path):
+        return path
+    # 同内容（不同任务/通道）→ 复用已有文件，不再落盘
+    try:
+        for existing in os.listdir(IMAGE_PATH):
+            if existing.endswith("_%s%s" % (tag, ext)):
+                return os.path.join(IMAGE_PATH, existing)
+    except OSError:
+        pass
+    with open(path, "wb") as f:
+        f.write(image_bytes)
+    return path
+
+
+def _sweep_uploads(min_age_sec: int = None) -> int:
+    """启动清扫：删除 uploads 里超过保留期的历史图片（跨重启残留）。
+
+    正在处理的任务图片由 retained_images 记录、且都很新，不会命中这里。
+    """
+    import time
+
+    limit = int(min_age_sec or max(IMAGE_RETAIN_SEC, 3600))
+    now = time.time()
+    removed = 0
+    try:
+        for name in os.listdir(IMAGE_PATH):
+            p = os.path.join(IMAGE_PATH, name)
+            try:
+                if os.path.isfile(p) and (now - os.path.getmtime(p)) > limit:
+                    os.remove(p)
+                    removed += 1
+            except OSError:
+                continue
+    except OSError:
+        pass
+    if removed:
+        logger.info("uploads 启动清扫: 删除 %d 个过期图片（保留期 %ds）", removed, limit)
+    return removed
+
+
 def build_image_response_payload(node_id, request_id, task_id, image_path):
     """组装补拉响应（需求3 后半）：图片存在则带 base64，否则带 error。
 
@@ -284,6 +349,12 @@ def start_node_service(auto_update_model=None):
     pending_tasks_lock = threading.Lock()  # 保护 pending_tasks 的线程安全
     # 推理完成后仍保留一段时间的图片（供服务端回收后补拉，需求3 后半）
     retained_images = {}  # task_id -> {"path": str, "expires_at": float}
+
+    # 启动清扫：清掉上次运行残留的过期图片（不影响本次任务）
+    try:
+        _sweep_uploads()
+    except Exception as _sweep_err:
+        logger.warning("uploads 清扫失败（不影响服务）: %s", _sweep_err)
     retained_lock = threading.Lock()
     consecutive_none_count = 0  # recv_json 连续返回 None 的计数，超过阈值触发重连
 
@@ -751,13 +822,11 @@ def start_node_service(auto_update_model=None):
                                     image_size, len(image_bytes),
                                 )
 
-                            # 保存图片（使用 UUID 作为磁盘文件名，防止路径遍历）
-                            os.makedirs(IMAGE_PATH, exist_ok=True)
+                            # 保存图片：文件名 = 任务id[_通道]_内容哈希（可追溯 + 内容级去重）
                             safe_ext = _safe_image_extension(image_filename)
-                            local_image_filename = f"{uuid.uuid4().hex}{safe_ext}"
-                            local_image_path = os.path.join(IMAGE_PATH, local_image_filename)
-                            with open(local_image_path, "wb") as f:
-                                f.write(image_bytes)
+                            local_image_path = _store_task_image(
+                                image_bytes, task_id, task_channel, safe_ext)
+                            local_image_filename = os.path.basename(local_image_path)
                             logger.info("图片已保存到: %s", local_image_path)
 
                             # 根据 recognition_type 选择推理方式

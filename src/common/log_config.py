@@ -1,3 +1,5 @@
+import logging
+import sys
 """统一日志配置（CLI 与 Server 共享）
 
 设计：
@@ -6,9 +8,36 @@
 - 通过 init_logging(log_file, debug) 在应用启动时初始化一次
 """
 
-import logging
-import sys
 from logging.handlers import RotatingFileHandler
+
+
+# 多进程（CLI + 节点服务）可能同时写同一个日志文件，Windows 下 rotate() 会因文件被占用抛
+# PermissionError；Python 默认会给**每条日志**都附一段 "--- Logging error ---" 栈（非常吓人）。
+# 这里吞掉轮转失败：先尝试换个带时间戳的文件名，仍失败就继续写当前文件。
+logging.raiseExceptions = False
+
+
+class _SafeRotatingFileHandler(RotatingFileHandler):
+    """轮转失败不抛异常（文件被其它进程占用时尤其重要）。"""
+
+    def doRollover(self):  # type: ignore[override]
+        try:
+            super().doRollover()
+        except PermissionError:
+            try:
+                import os
+                import time
+
+                if self.stream:
+                    self.stream.close()
+                    self.stream = None
+                os.replace(self.baseFilename,
+                           "%s.%s" % (self.baseFilename, time.strftime("%Y%m%d_%H%M%S")))
+            except Exception:
+                pass
+            finally:
+                if self.stream is None:
+                    self.stream = self._open()
 from pathlib import Path
 
 # 日志格式模板
@@ -97,7 +126,7 @@ def init_logging(
     noise_filter = ThirdPartyNoiseFilter()
 
     # 文件处理器（轮转）
-    file_handler = RotatingFileHandler(
+    file_handler = _SafeRotatingFileHandler(
         log_path,
         maxBytes=max_bytes,
         backupCount=backup_count,

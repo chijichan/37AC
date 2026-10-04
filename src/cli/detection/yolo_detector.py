@@ -859,10 +859,10 @@ def crop_dataset(source_dir: str, output_dir: str, target_classes=None,
             for src_img, fname in uncropped_candidates:
                 if need <= 0 or (token is not None and token.cancelled()):
                     break
-                # 整图补足同样带 _37ac 标记：数据集里所有产物命名统一，
-                # 便于区分「数据集产物」与源图、也让续跑判定只认一种命名
-                fill_base, fill_ext = os.path.splitext(fname)
-                original_out = os.path.join(out_role_dir, f"{fill_base}{CROP_SUFFIX}{fill_ext}")
+                # 整图补足：命名与裁剪产物统一（_37ac + JPEG），
+                # 同样走内存压缩（缩放 + JPEG 质量），不再原样复制大体积 PNG
+                fill_base, _fill_ext = os.path.splitext(fname)
+                original_out = os.path.join(out_role_dir, f"{fill_base}{CROP_SUFFIX}.jpg")
                 if os.path.exists(original_out):
                     local["skipped"] += 1
                     continue
@@ -870,8 +870,19 @@ def crop_dataset(source_dir: str, output_dir: str, target_classes=None,
                     if not created_role_dir:
                         os.makedirs(out_role_dir, exist_ok=True)
                         created_role_dir = True
-                    shutil.copy2(src_img, original_out)
-                    compress_image_file(original_out, max_size=DATASET_COMPRESS_SIZE)
+                    from PIL import Image as _Image
+                    from utils.image_utils import encode_image_bytes
+                    with _Image.open(src_img) as _raw:
+                        _rgb = _raw.convert("RGB")
+                    _data, _ = encode_image_bytes(
+                        _rgb, max_size=DATASET_COMPRESS_SIZE,
+                        quality=DATASET_COMPRESS_QUALITY,
+                    )
+                    _rgb.close()
+                    if not _data:
+                        raise ValueError("整图编码失败")
+                    with open(original_out, "wb") as _fh:
+                        _fh.write(_data)
                     local["processed"] += 1
                     local["whole"] += 1
                     saved_count += 1

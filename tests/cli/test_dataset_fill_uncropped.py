@@ -63,10 +63,13 @@ def _patch(monkeypatch, fake, cap, fill=True):
 
 
 def _counts(out_dir: Path):
-    """整图补足现在也带 _37ac 标记，用扩展名区分：裁剪统一输出 .jpg，整图保留源后缀。"""
-    files = sorted(p.name for p in out_dir.iterdir())
-    cropped = [f for f in files if f.endswith("_37ac.jpg")]
-    whole = [f for f in files if f.endswith("_37ac.png")]
+    """两类产物都叫 <名>_37ac.jpg，用尺寸区分：裁剪来自假检测器(60x80)，整图补足是源图尺寸。"""
+    from PIL import Image as _Image
+
+    cropped, whole = [], []
+    for path in sorted(out_dir.iterdir()):
+        with _Image.open(path) as img:
+            (cropped if img.size == (60, 80) else whole).append(path.name)
     return cropped, whole
 
 

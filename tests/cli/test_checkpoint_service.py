@@ -99,7 +99,8 @@ def test_current_info(env):
     assert info["version"] == "0.0.12"
     assert info["class_count"] == 1
     assert info["model_exists"] is True and info["model_size_mb"] > 0
-    assert info["base"] == "imagenet-resnet18"
+    # 基模取自 config.json 的 training.base；老模型没有该字段时给出明确提示
+    assert info["base"] == "未知（旧模型无记录）"
 
 
 def test_create_skips_when_no_weights(env):

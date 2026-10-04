@@ -242,6 +242,14 @@ def current_info() -> dict:
         "model_exists": weights.exists(),
         "model_size_mb": round(weights.stat().st_size / 1024 / 1024, 2) if weights.exists() else 0,
         "model_sha256": ((info.get("model") or {}).get("sha256")) or None,
-        "base": info.get("base") or info.get("pretrained_base") or "imagenet-resnet18",
+        # 基模来自 config.json 的 training.base（顶层没有 base 字段，
+        # 旧写法会永远显示 imagenet-resnet18，与实际训练用的基模不符）
+        "base": ((info.get("training") or {}).get("base")
+                 or info.get("base") or info.get("pretrained_base") or "未知（旧模型无记录）"),
+        "best_val_acc": (info.get("training") or {}).get("best_val_acc"),
+        "dataset": (info.get("training") or {}).get("dataset"),
+        "image_size": (info.get("training") or {}).get("image_size"),
+        "batch_size": (info.get("training") or {}).get("batch_size"),
+        "eval": (info.get("training") or {}).get("eval"),
         "checkpoints": len(load_index()),
     }

@@ -778,6 +778,10 @@ paths:
         注意：当前实现只校验 API Key 有效性，未校验任务归属（见 docs/api-inventory.md 3.1，按需求保留为特性）。
         2026-09-13 起 result 可能包含多人物结果 characters[]（每人一组 bbox/bbox_percent + class_probs），
         顶层 class_probs 保持旧语义（= 置信度最高的人物）；响应新增 image 元数据（可用性 + 取图 URL）。
+        2026-10-01 起：llm 通道一图多角时，某个子图因限流(429)/5xx/超时重试仍失败，只记该人物「未识别」——
+        result 会多出 failed_characters[]（每项含 index / bbox_percent / reason / message）、character_failed_count、
+        warnings[]；此时只要还有人物成功，success 仍为 true 且 error 为 null（整图路径失败才 success=false）。
+        节点侧重试参数：LLM_MAX_ATTEMPTS / LLM_RETRY_BASE_SEC / LLM_RETRY_MAX_SEC / LLM_MAX_TOTAL_SEC。
         结构详见 docs/api-inventory.md 2.9。
       security:
         - apiKeyAuth: []

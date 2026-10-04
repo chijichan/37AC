@@ -52,7 +52,9 @@ def test_epochs_and_charts(env):
     data = _load(folder)
     assert len(data["epochs"]) == 5
     html = (folder / "index.html").read_text(encoding="utf-8")
-    assert html.count("<polyline") == 2                     # val + loss 两条折线
+    # 准确率图 = train + val 两条折线；损失图 = 1 条 → 共 3 条
+    assert html.count("<polyline") == 3
+    assert '准确率（每轮 %）' in html and ">train<" in html and ">val<" in html
     assert "17.00%" in html or "17.0" in html               # 第 5 轮 val
     assert "5.00%" in html or "5.0" in html
 

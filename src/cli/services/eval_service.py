@@ -69,7 +69,21 @@ def _classifier():
     from prediction.predictor import get_predict_transforms
     from utils.file_utils import load_classes_from_file
 
-    classes = load_classes_from_file(str(CLASSES_JSON_PATH)) or []
+    # 必须按 classes.json 里的 id 排序还原**训练时的类别顺序**：
+    # 直接用文件返回的顺序会导致 top-1 索引与名称错位（表现为 193 张全错、0%）
+    from utils.file_utils import load_classes_json_data
+
+    data = load_classes_json_data(str(CLASSES_JSON_PATH)) or {}
+
+    def _order(kv):
+        # 正常类别 id 是数字（训练时的索引）；脏数据/手工条目可能是字符串 → 排到后面且不报错
+        try:
+            return (0, int((kv[1] or {}).get("id")))
+        except Exception:
+            return (1, 0)
+
+    classes = [k for k, _v in sorted(data.items(), key=_order)] \
+        or (load_classes_from_file(str(CLASSES_JSON_PATH)) or [])
     model = CharacterRecognitionModel(len(classes)).load_model(str(MODEL_PATH), len(classes))
     model.eval()
     return model, classes, get_predict_transforms(), torch

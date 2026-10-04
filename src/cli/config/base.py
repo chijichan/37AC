@@ -54,6 +54,10 @@ else:
 
 NUM_EPOCHS = int(os.getenv("NUM_EPOCHS", "50") or "50")
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", "16") or "16")
+# 分阶段批大小：P1 冻结 backbone（显存占用低，可开大）；留空则沿用 BATCH_SIZE
+BATCH_SIZE_P1 = int(os.getenv("BATCH_SIZE_P1", "0") or "0") or BATCH_SIZE
+BATCH_SIZE_P2 = int(os.getenv("BATCH_SIZE_P2", "0") or "0") or BATCH_SIZE
+
 IMAGE_SIZE = int(os.getenv("IMAGE_SIZE", "224") or "224")
 LEARNING_RATE = float(os.getenv("LEARNING_RATE", "1e-4") or "1e-4")
 # === 分阶段微调（基于 ImageNet 预训练权重） ===

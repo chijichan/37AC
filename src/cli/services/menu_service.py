@@ -143,11 +143,13 @@ def crop_dataset_function():
             logger.warning("没有输入角色，已取消")
             return
         try:
-            reset = ask("  先清空这些角色在数据集里的旧产物再重裁？(y/N): ", valid=("y", "Y", "n", "N"))
+            reset = ask("  先清空这些角色在数据集里的旧产物再重裁？(y/n): ", valid=("y", "Y", "n", "N"))
         except GoBack:
             print()
             return
         reset_roles = reset.lower() == "y"
+        if not reset_roles:
+            logger.info("不清空旧产物，只增量写入匹配到的角色目录")
         logger.info("指定裁剪角色: %s%s", ", ".join(only_roles),
                     "（先清空旧产物）" if reset_roles else "")
 
@@ -538,22 +540,27 @@ def run_checkpoint_settings():
             continue
         if choice == "r":
             try:
-                confirm = ask("  回滚到 %s ？当前模型会先自动备份 (y/N): " % item["name"],
+                confirm = ask("  回滚到 %s ？当前模型会先自动备份 (y/n): " % item["name"],
                               valid=("y", "Y", "n", "N"))
             except GoBack:
                 continue
             if confirm.lower() != "y":
+                logger.info("已取消回滚: %s（返回检查点列表）", item["name"])
+                print()
                 continue
             result = CS.restore_checkpoint(item["name"])
             if result:
                 logger.warning("已回滚到 %s（回滚前状态已存为 %s）", item["name"], result.get("backup"))
         elif choice == "d":
             try:
-                confirm = ask("  删除 %s ？(y/N): " % item["name"], valid=("y", "Y", "n", "N"))
+                confirm = ask("  删除 %s ？(y/n): " % item["name"], valid=("y", "Y", "n", "N"))
             except GoBack:
                 continue
             if confirm.lower() == "y":
                 CS.delete_checkpoint(item["name"])
+            else:
+                logger.info("已取消删除: %s（返回检查点列表）", item["name"])
+                print()
 
 
 def run_model_settings(args=None):
@@ -606,7 +613,9 @@ def _show_base_model():
         print("  当前基模: %s" % PRETRAINED_BASE)
         print("  预处理均值: %s   方差: %s" % (list(MODEL_MEAN), list(MODEL_STD)))
         print("-" * 56)
-        print("  [0] imagenet-resnet18（内置：torchvision IMAGENET1K_V1）")
+        print("  [0] imagenet-resnet18（内置 ImageNet，默认）")
+        print("  [b] imagenet-efficientnet_b0（内置 ImageNet，零下载）")
+        print("  [B] imagenet-efficientnet_b3（内置 ImageNet，零下载，输入 300）")
         for idx, b in enumerate(bases, 1):
             mark = " ←当前" if b["id"] == PRETRAINED_BASE else ""
             print("  [%d] %-20s %-9s %7sMB  输入%4s  %s%s" % (
@@ -617,19 +626,59 @@ def _show_base_model():
         print("-" * 56)
         print("  说明：切换只改 .env 的 PRETRAINED_BASE，重启程序后对新训练生效")
         try:
-            pick = ask("选择要使用的基模序号（0=内置，回车返回）: ", blank_means_back=True)
+            pick = ask("选择基模序号（0=内置，d=下载，l=登录HF，回车返回）: ", blank_means_back=True)
         except GoBack:
             print()
             return
+        if str(pick).strip().lower() == "l":
+            try:
+                token = ask("  粘贴 Hugging Face Access Token（输入不回显，回车取消）: ")
+            except GoBack:
+                print()
+                return
+            try:
+                from services.hf_download import login
+
+                info = login(token.strip())
+                logger.info("已登录 HF: %s（token 已写入 .env）", info.get("name"))
+            except Exception as e:
+                logger.error("HF 登录失败: %s", e)
+            continue
+        if str(pick).strip().lower() == "d":
+            try:
+                repo = ask("  输入 HF 仓库名（如 timm/efficientnet_b3.ra2_in1k 或 animetimm/resnet18.dbv4-full）: ")
+            except GoBack:
+                print()
+                return
+            try:
+                from services.hf_download import download_base
+
+                info = download_base(repo.strip())
+                logger.info("基模已就绪: %s（arch=%s, 输入 %s）→ 可重新进入本菜单选择它",
+                            info["id"], info["desc"].get("arch"), info["desc"].get("input_size"))
+            except Exception as e:
+                logger.error("下载失败: %s", e)
+                logger.info("提示：国内网络默认已启用 hf-mirror 镜像；私有/受限仓库需要 hf auth login")
+            continue
         chosen = "imagenet-resnet18"
-        if pick != "0":
+        if str(pick).strip() in ("b", "B"):
+            chosen = "imagenet-efficientnet_b0" if pick == "b" else "imagenet-efficientnet_b3"
+        elif pick != "0":
             try:
                 chosen = bases[int(pick) - 1]["id"]
             except (ValueError, IndexError):
                 logger.warning("无效序号: %s", pick)
                 continue
         _write_env_value("PRETRAINED_BASE", chosen)
-        logger.info("已切换训练基模为 %s（写入 .env，重启后生效）", chosen)
+        logger.info("已切换训练基模为 %s（已写入 .env）", chosen)
+
+        # .env 只在进程启动时读取 → 这里不自动重启，只明确提示何时生效、怎么生效
+        print()
+        logger.info("新基模 %s 将在**下次启动程序**时生效（.env 已更新）", chosen)
+        print("  提示：当前进程仍使用旧基模；退出后重新运行即可生效：")
+        print("        py main.py      （在 src\\cli 目录下执行）")
+        print()
+        return
         return
 
 

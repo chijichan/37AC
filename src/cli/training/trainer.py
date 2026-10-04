@@ -106,7 +106,8 @@ def _write_model_config(version: str):
     cfg = _load_model_config()
 
     # 训练配置（自描述：拿到权重就能知道它是怎么训出来的）
-    from config.base import (BATCH_SIZE, EARLY_STOP_PATIENCE, IMAGE_SIZE, LABEL_SMOOTHING,
+    from config.base import (BATCH_SIZE, BATCH_SIZE_P1, BATCH_SIZE_P2, EARLY_STOP_PATIENCE,
+                         IMAGE_SIZE, LABEL_SMOOTHING,
                              NUM_EPOCHS, PHASE1_EPOCHS, PHASE1_LR, PHASE2_LR, PHASE2_MIN_LR,
                              PRETRAINED_BASE, VAL_SPLIT_RATIO, WEIGHT_DECAY)
     training = dict(_TRAINING_INFO)          # 训练过程中填的（数据集规模/类别数/设备/best 等）
@@ -115,6 +116,8 @@ def _write_model_config(version: str):
         "base": PRETRAINED_BASE,
         "image_size": IMAGE_SIZE,
         "batch_size": BATCH_SIZE,
+        "batch_size_p1": BATCH_SIZE_P1,
+        "batch_size_p2": BATCH_SIZE_P2,
         "epochs": NUM_EPOCHS,
         "phase1_epochs": PHASE1_EPOCHS,
         "lr_schedule": {"phase1": PHASE1_LR, "phase2": PHASE2_LR, "phase2_min": PHASE2_MIN_LR},
@@ -570,6 +573,15 @@ def _run_final_eval() -> None:
         logger.warning("训练后评估失败（不影响训练结果）: %s", e)
 
 
+def _report_step(step, total, epochs_done=None, loss=None, acc=None) -> None:
+    try:
+        from services import report_service as report
+
+        report.record_step(step, total, epochs_done=epochs_done, loss=loss, acc=acc)
+    except Exception as e:
+        logger.debug("报告步级更新失败: %s", e)
+
+
 def _report_phase(name: str, label: str, total: int) -> None:
     try:
         from services import report_service as report
@@ -583,19 +595,30 @@ def _report_epoch(epoch: int, phase: str, loss, train_acc, val_acc, lr) -> None:
     try:
         from services import report_service as report
 
+        report.set_meta({
+            "class_count": _TRAINING_INFO.get("class_count"),
+            "train": _TRAINING_INFO.get("train_size"),
+            "val": _TRAINING_INFO.get("val_size"),
+            "device": _TRAINING_INFO.get("device"),
+            "base": _TRAINING_INFO.get("base"),
+        })
         report.record_epoch(epoch, phase, loss, train_acc, val_acc, lr)
     except Exception as e:
         logger.debug("报告每轮更新失败: %s", e)
 
 
-def _report_start_once(version: str) -> None:
-    """首次上报时启动训练报告（拿不到配置就跳过，绝不影响训练）。"""
+def _report_start_once(version: str, extra: dict = None) -> None:
+    """启动训练报告（幂等；拿不到配置就跳过，绝不影响训练）。
+
+    训练**一开始**就调用它，这样一进入训练报告文件就存在了（不必等第一次保存模型）。
+    """
     try:
         from services import report_service as report
 
         if report.run_dir() is not None:
             return
-        from config.base import (BATCH_SIZE, DATASET_DIR, IMAGE_SIZE, PRETRAINED_BASE,
+        from config.base import (BATCH_SIZE, BATCH_SIZE_P1, BATCH_SIZE_P2, DATASET_DIR,
+                                 IMAGE_SIZE, PRETRAINED_BASE,
                                  CROPPED_DATASET_DIR)
         meta = {
             "version": version,
@@ -603,12 +626,16 @@ def _report_start_once(version: str) -> None:
             "dataset": str(DATASET_DIR),
             "cropped_dataset": str(CROPPED_DATASET_DIR),
             "batch": BATCH_SIZE,
+            "batch_p1": BATCH_SIZE_P1,
+            "batch_p2": BATCH_SIZE_P2,
             "image_size": IMAGE_SIZE,
         }
         try:
             meta["device"] = str(__import__("config.base", fromlist=["get_device"]).get_device())
         except Exception:
             pass
+        if extra:
+            meta.update({k: v for k, v in extra.items() if v is not None})
         report.start_run(meta, version=version)
     except Exception as e:
         logger.debug("训练报告启动失败: %s", e)
@@ -718,6 +745,11 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None, cancel
 
         # 拆分训练/验证集
         use_val = 0 < VAL_SPLIT_RATIO < 1.0 and len(full_dataset) >= 20
+        def _make_loader(bs):
+            """按批大小重建训练 DataLoader（数据集已构建，重建开销可忽略）。"""
+            return DataLoader(train_subset, batch_size=max(1, int(bs)), shuffle=True,
+                              num_workers=0, pin_memory=False)
+
         if use_val:
             train_idx, val_idx = _split_dataset(full_dataset, VAL_SPLIT_RATIO)
             train_subset = Subset(full_dataset, train_idx)
@@ -741,8 +773,6 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None, cancel
                 num_workers=0
             )
             val_loader = None
-            logger.info("使用全部 %d 张图片训练（无验证集）", len(full_dataset))
-
         # ======================
         # === 模型定义 ===
         # ======================
@@ -789,22 +819,37 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None, cancel
         # === 阶段1: 冻结 backbone，仅训练 FC + CBAM ===
         # ======================
         # 继续训练模式跳过阶段1，因为模型已经训练过
+        # 训练信息采集 + **训练一开始就生成报告**（不必等第一次保存模型）
+        try:
+            train_size = val_size = None
+            if "train_subset" in dir():
+                train_size = len(train_subset)
+            if "val_subset" in dir():
+                val_size = len(val_subset)
+            _TRAINING_INFO.update({
+                "dataset": str(dataset_dir or ""),
+                "resumed_from": str(resume_path) if resume_path else None,
+                "class_count": len(class_names) if class_names else None,
+                "train_size": train_size,
+                "val_size": val_size,
+                "device": str(get_device()),
+                "skip_phase1": bool(skip_phase1),
+            })
+            _report_start_once(training_version, extra={
+                "class_count": _TRAINING_INFO.get("class_count"),
+                "train": train_size,
+                "val": val_size,
+                "device": _TRAINING_INFO.get("device"),
+                "dataset": _TRAINING_INFO.get("dataset"),
+            })
+        except Exception as info_err:
+            logger.debug("训练信息采集/报告启动失败: %s", info_err)
+
         if not skip_phase1 and PHASE1_EPOCHS > 0:
+            train_loader = _make_loader(BATCH_SIZE_P1)
+            logger.info("阶段1 批大小: %d（P1 冻结 backbone，可开大）", BATCH_SIZE_P1)
             model_handler.freeze_backbone()
             # 阶段1 优化器 — 只更新 requires_grad=True 的参数
-            try:
-                _TRAINING_INFO.update({
-                    "dataset": str(dataset_dir or ""),
-                    "resumed_from": str(resume_path) if resume_path else None,
-                    "class_count": len(class_names) if class_names else None,
-                    "train_size": len(train_subset) if 'train_subset' in dir() else None,
-                    "val_size": len(val_subset) if 'val_subset' in dir() else None,
-                    "device": str(get_device()),
-                    "skip_phase1": bool(skip_phase1),
-                })
-            except Exception as info_err:
-                logger.debug("训练信息采集失败: %s", info_err)
-
             phase1_optimizer = make_adam(
                 filter(lambda p: p.requires_grad, model.parameters()),
                 lr=PHASE1_LR, weight_decay=WEIGHT_DECAY
@@ -844,6 +889,9 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None, cancel
                         _, preds = torch.max(outputs, 1)
                         correct += (preds == labels).sum().detach()
                         total += labels.size(0)
+                        _report_step(batch_idx, len(train_loader), total_epoch,
+                                     float(running_loss) / (batch_idx + 1),
+                                     (100.0 * float(correct) / total) if total else None)
                         if batch_idx % STAT_UPDATE_EVERY == 0:
                             loop.set_postfix(
                                 loss=f"{float(running_loss)/(loop.n+1):.4f}",
@@ -915,6 +963,8 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None, cancel
                      phase2_epochs, PHASE2_LR, PHASE2_MIN_LR)
         _report_phase("P2", "解冻全部，余弦退火精调", phase2_epochs)
 
+        train_loader = _make_loader(BATCH_SIZE_P2)
+        logger.info("阶段2 批大小: %d", BATCH_SIZE_P2)
         for epoch in range(phase2_epochs):
             if training_interrupted:
                 break
@@ -946,6 +996,9 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None, cancel
                     _, preds = torch.max(outputs, 1)
                     correct += (preds == labels).sum().detach()
                     total += labels.size(0)
+                    _report_step(batch_idx, len(train_loader), total_epoch,
+                                 float(running_loss) / (batch_idx + 1),
+                                 (100.0 * float(correct) / total) if total else None)
                     if batch_idx % STAT_UPDATE_EVERY == 0:
                         loop.set_postfix(
                             loss=f"{float(running_loss)/(loop.n+1):.4f}",

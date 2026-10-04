@@ -28,6 +28,12 @@ from config.base import (
     CROP_MAX_ASPECT_RATIO,
     CROP_MIN_ASPECT_RATIO,
     CROP_QUALITY_GATE,
+    DATASET_CROP_MAX_AREA_RATIO,
+    DATASET_CROP_MAX_ASPECT_RATIO,
+    DATASET_CROP_MIN_AREA_RATIO,
+    DATASET_CROP_MIN_ASPECT_RATIO,
+    DATASET_CROP_MIN_CONFIDENCE,
+    DATASET_CROP_QUALITY_GATE,
     MAX_CHARACTERS,
     YOLO_DETECT_MAX_SIZE,
 )
@@ -56,7 +62,28 @@ def available_methods() -> list:
     return methods
 
 
-def gate_detections(items, image_size, check_max_area: bool = True):
+def gate_thresholds(dataset: bool = False) -> dict:
+    """取一套门控阈值：dataset=True 用数据集裁剪专用参数（DATASET_CROP_*），否则用识别参数。"""
+    if dataset:
+        return {
+            "enabled": DATASET_CROP_QUALITY_GATE,
+            "min_confidence": DATASET_CROP_MIN_CONFIDENCE,
+            "min_area": DATASET_CROP_MIN_AREA_RATIO,
+            "max_area": DATASET_CROP_MAX_AREA_RATIO,
+            "min_aspect": DATASET_CROP_MIN_ASPECT_RATIO,
+            "max_aspect": DATASET_CROP_MAX_ASPECT_RATIO,
+        }
+    return {
+        "enabled": CROP_QUALITY_GATE,
+        "min_confidence": CROP_MIN_CONFIDENCE,
+        "min_area": CROP_MIN_AREA_RATIO,
+        "max_area": CROP_MAX_AREA_RATIO,
+        "min_aspect": CROP_MIN_ASPECT_RATIO,
+        "max_aspect": CROP_MAX_ASPECT_RATIO,
+    }
+
+
+def gate_detections(items, image_size, dataset: bool = False):
     """裁剪质量门控：按检测置信度、框面积占比、长宽比过滤候选框。
 
     check_max_area=False 用于**数据集裁剪**：源图本身常常就是紧裁剪的立绘，
@@ -67,7 +94,8 @@ def gate_detections(items, image_size, check_max_area: bool = True):
     返回通过门控的候选；CROP_QUALITY_GATE=false 时原样返回（旧行为）。
     """
     items = list(items or [])
-    if not CROP_QUALITY_GATE or not items:
+    th = gate_thresholds(dataset)
+    if not th["enabled"] or not items:
         return items
 
     width, height = image_size or (0, 0)
@@ -75,7 +103,7 @@ def gate_detections(items, image_size, check_max_area: bool = True):
     passed = []
     for item in items:
         confidence = item.get("detector_confidence")
-        if confidence is not None and CROP_MIN_CONFIDENCE > 0 and float(confidence) < CROP_MIN_CONFIDENCE:
+        if confidence is not None and th["min_confidence"] > 0 and float(confidence) < th["min_confidence"]:
             continue
 
         box = item.get("bbox_norm") or {}
@@ -84,16 +112,16 @@ def gate_detections(items, image_size, check_max_area: bool = True):
             raw = item.get("bbox") or ()
             if len(raw) == 4:
                 ratio = max(0.0, (raw[2] - raw[0]) * (raw[3] - raw[1]) / total_area)
-        if CROP_MIN_AREA_RATIO > 0 and ratio and ratio < CROP_MIN_AREA_RATIO:
+        if th["min_area"] > 0 and ratio and ratio < th["min_area"]:
             continue
-        if check_max_area and CROP_MAX_AREA_RATIO > 0 and ratio > CROP_MAX_AREA_RATIO:
+        if th["max_area"] > 0 and ratio > th["max_area"]:
             continue
 
         aspect = _box_aspect_ratio(item)
         if aspect:
-            if CROP_MIN_ASPECT_RATIO > 0 and aspect < CROP_MIN_ASPECT_RATIO:
+            if th["min_aspect"] > 0 and aspect < th["min_aspect"]:
                 continue
-            if CROP_MAX_ASPECT_RATIO > 0 and aspect > CROP_MAX_ASPECT_RATIO:
+            if th["max_aspect"] > 0 and aspect > th["max_aspect"]:
                 continue
         passed.append(item)
     return passed

@@ -465,6 +465,20 @@ CROP_MAX_AREA_RATIO = float(os.getenv("CROP_MAX_AREA_RATIO", "0.98"))
 CROP_MIN_ASPECT_RATIO = float(os.getenv("CROP_MIN_ASPECT_RATIO", "0.15") or "0.15")
 CROP_MAX_ASPECT_RATIO = float(os.getenv("CROP_MAX_ASPECT_RATIO", "4.0") or "4.0")
 
+# ==================== 数据集裁剪专用门控（与识别路径分开） ====================
+# 目标不同：识别时"宁可不裁也别裁错"；创建数据集时希望**人物在框里占更大面积**、
+# 外扩更多（保留头发/裙摆），因此单独一套参数，互不影响。
+DATASET_CROP_QUALITY_GATE = os.getenv("DATASET_CROP_QUALITY_GATE", "True").lower() == "true"
+DATASET_CROP_MIN_CONFIDENCE = float(os.getenv("DATASET_CROP_MIN_CONFIDENCE", "0.35") or "0.35")
+# 面积下限默认比识别路径高（0.10 vs 0.06）：太小的框裁出来是糊图，交给「整图补足」更划算
+DATASET_CROP_MIN_AREA_RATIO = float(os.getenv("DATASET_CROP_MIN_AREA_RATIO", "0.10") or "0.10")
+# 面积上限默认 0=不限制：源图本身常常就是紧裁剪的立绘，「框占满整图」是正常的
+DATASET_CROP_MAX_AREA_RATIO = float(os.getenv("DATASET_CROP_MAX_AREA_RATIO", "0") or "0")
+DATASET_CROP_MIN_ASPECT_RATIO = float(os.getenv("DATASET_CROP_MIN_ASPECT_RATIO", "0.15") or "0.15")
+DATASET_CROP_MAX_ASPECT_RATIO = float(os.getenv("DATASET_CROP_MAX_ASPECT_RATIO", "4.0") or "4.0")
+# 数据集裁剪的外扩比例（比识别路径的 0.08 略大）
+DATASET_CROP_MARGIN_RATIO = float(os.getenv("DATASET_CROP_MARGIN_RATIO", "0.12") or "0.12")
+
 # ==================== 资源占用开关（内存敏感机器按需关闭） ====================
 # 本地模型识别（YOLO + ResNet）：关闭后节点不再下载/加载本地模型，只做 LLM 识别。
 # 配合下面的惰性加载，空闲节点可省下约 255MB（torch 175MB + torchvision 80MB）。

@@ -424,7 +424,7 @@ class YoloDetector:
             from detection.cropper import gate_detections
             # 数据集裁剪：源图常常本身就是紧裁剪的立绘，"框几乎占满整图"是正常的，
             # 因此只按置信度 / 面积下限 / 长宽比过滤，不套用识别路径的"最大面积"规则
-            gated = gate_detections(candidates, original_size, check_max_area=False)
+            gated = gate_detections(candidates, original_size, dataset=True)
         except Exception as gate_err:
             logger.debug("裁剪质量门控不可用，跳过: %s", gate_err)
             gated = candidates
@@ -679,6 +679,7 @@ def crop_dataset(source_dir: str, output_dir: str, target_classes=None,
         DATASET_COMPRESS_QUALITY,
         DATASET_FILL_UNCROPPED,
         DATASET_IGNORE_CLEAN,
+        DATASET_CROP_MARGIN_RATIO,
         is_in_ignore_list,
     )
     from utils.concurrency import CancelToken, interruptible_map
@@ -824,6 +825,7 @@ def crop_dataset(source_dir: str, output_dir: str, target_classes=None,
                 data, info = detector.detect_and_crop_bytes(
                     src_img, target_classes=target_classes,
                     max_size=DATASET_COMPRESS_SIZE, quality=DATASET_COMPRESS_QUALITY,
+                    margin_ratio=DATASET_CROP_MARGIN_RATIO,
                 )
                 if data:
                     out_ext = (info or {}).get("ext") or ".jpg"

@@ -80,11 +80,25 @@ def test_crop_quality_ok_checks_aspect():
 
 # ---------------- 数据集裁剪路径也走门控 ----------------
 
-def test_check_max_area_can_be_skipped():
-    """数据集场景：框几乎占满整图是正常的（源图本身就是紧裁剪立绘）。"""
-    full_frame = _item(0.99, 1.0)                      # 面积 0.99 > CROP_MAX_AREA_RATIO
-    assert C.gate_detections([full_frame], (1000, 1000)) == []
-    assert C.gate_detections([full_frame], (1000, 1000), check_max_area=False) == [full_frame]
+def test_dataset_thresholds_are_separate(monkeypatch):
+    """数据集一套、识别一套：占满整图的框在数据集侧放行、识别侧拦截。"""
+    monkeypatch.setattr(C, "CROP_QUALITY_GATE", True)
+    monkeypatch.setattr(C, "CROP_MIN_AREA_RATIO", 0.06)
+    monkeypatch.setattr(C, "CROP_MAX_AREA_RATIO", 0.98)
+    monkeypatch.setattr(C, "DATASET_CROP_QUALITY_GATE", True)
+    monkeypatch.setattr(C, "DATASET_CROP_MIN_AREA_RATIO", 0.10)
+    monkeypatch.setattr(C, "DATASET_CROP_MAX_AREA_RATIO", 0)     # 不限制
+
+    full_frame = _item(0.99, 1.0)
+    assert C.gate_detections([full_frame], (1000, 1000)) == []              # 识别：面积超上限
+    assert C.gate_detections([full_frame], (1000, 1000), dataset=True) == [full_frame]
+
+    small = _item(0.3, 0.25)                                                # 面积 0.075
+    assert C.gate_detections([small], (1000, 1000)) == [small]              # 识别：>= 0.06 放行
+    assert C.gate_detections([small], (1000, 1000), dataset=True) == []     # 数据集：< 0.10 拦下
+
+    assert C.gate_thresholds(True)["min_area"] == 0.10
+    assert C.gate_thresholds(False)["max_area"] == 0.98
 
 
 def _detector_with(box, confidence=0.9):
@@ -124,7 +138,8 @@ def test_dataset_crop_gate_can_be_disabled(monkeypatch):
     try:
         from PIL import Image as _Image
 
-        monkeypatch.setattr(C, "CROP_QUALITY_GATE", False)
+        # 数据集裁剪看的是自己那套开关（与识别路径分开）
+        monkeypatch.setattr(C, "DATASET_CROP_QUALITY_GATE", False)
         src = root / "src.png"
         _Image.new("RGB", (1000, 1000), (5, 5, 5)).save(src)
 

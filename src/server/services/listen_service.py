@@ -25,6 +25,14 @@ from config.base import TCP_PORT
 logger = get_logger("listen_service")
 
 
+# 并发连接数与上限（背压：超过就明确拒绝，而不是无限接线程）
+_CONN_STATE = {
+    "active": 0,
+    "limit": int(os.getenv("MAX_NODE_CONNECTIONS", "200") or "200"),
+    "lock": threading.Lock(),
+}
+
+
 # TCP 服务端核心逻辑
 def handle_client(conn, addr):
     logger.info("新连接来自: %s:%s", addr[0], addr[1])
@@ -168,6 +176,30 @@ def start_tcp_server(host="0.0.0.0", port=TCP_PORT):
 
         while True:
             conn, addr = s.accept()
-            threading.Thread(
-                target=handle_client, args=(conn, addr), daemon=True
-            ).start()
+            # 连接数上限：超出时明确拒绝（回 busy 并关闭），不无限接线程
+            with _CONN_STATE["lock"]:
+                if _CONN_STATE["active"] >= _CONN_STATE["limit"]:
+                    logger.warning(
+                        "连接数已达上限 %d，拒绝 %s:%s", _CONN_STATE["limit"], addr[0], addr[1]
+                    )
+                    try:
+                        json_protocol.send_json(
+                            conn, {"type": "busy", "data": {"message": "server busy: too many connections"}}
+                        )
+                    except Exception:
+                        pass
+                    try:
+                        conn.close()
+                    except Exception:
+                        pass
+                    continue
+                _CONN_STATE["active"] += 1
+
+            def _serve(_conn=conn, _addr=addr):
+                try:
+                    handle_client(_conn, _addr)
+                finally:
+                    with _CONN_STATE["lock"]:
+                        _CONN_STATE["active"] = max(0, _CONN_STATE["active"] - 1)
+
+            threading.Thread(target=_serve, daemon=True).start()

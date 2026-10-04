@@ -18,17 +18,27 @@ app = Flask(__name__)
 # 限制上传体大小为 10MB
 app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024
 
-# CORS 配置
-# 前端（localhost:8000）通过 JS 跨域直连 Flask（localhost:13138）完成登录等操作，
-# 因此必须默认放行跨域；确需收紧时再在 .env 中配置 ALLOWED_ORIGINS 白名单。
+# CORS 配置（**默认收紧**）
+# 前端（如 PHP 站点）通过 JS 跨域直连 Flask 时，必须显式配置允许的来源：
+#   ALLOWED_ORIGINS=http://your-host:8000,http://127.0.0.1:8000
+# 未配置时不添加任何跨域响应头（仅同源可用）。
+# 开发期确实要放开所有来源，才设置 CORS_ALLOW_ALL=True（生产不要用）。
 allowed_origins = (os.getenv("ALLOWED_ORIGINS", "") or "").strip()
-if allowed_origins:
-    if allowed_origins == "*":
-        CORS(app, origins="*")
-    else:
-        CORS(app, origins=[o.strip() for o in allowed_origins.split(",") if o.strip()])
+allow_all = (os.getenv("CORS_ALLOW_ALL", "False") or "").strip().lower() == "true"
+if allowed_origins and allowed_origins != "*":
+    _origins = [o.strip() for o in allowed_origins.split(",") if o.strip()]
+    CORS(app, origins=_origins)
+    app.logger.info("CORS 白名单已启用: %s", _origins)
+elif allow_all or allowed_origins == "*":
+    CORS(app, origins="*")
+    app.logger.warning(
+        "CORS 已放开为所有来源（CORS_ALLOW_ALL=True / ALLOWED_ORIGINS=*）—— 仅建议开发环境使用"
+    )
 else:
-    CORS(app)  # 开发/默认环境回退为允许所有来源，保证登录等跨域请求可用
+    app.logger.warning(
+        "未配置 ALLOWED_ORIGINS：不添加跨域响应头（仅同源可用）。"
+        "需要前端跨域请配置来源白名单，例如 ALLOWED_ORIGINS=http://your-host:8000"
+    )
 
 # 注册路由蓝图
 from routes.upload_routes import upload_bp

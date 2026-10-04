@@ -39,6 +39,16 @@ FRONTEND_URL = os.getenv("FRONTEND_URL", "http://127.0.0.1:8000")
 # - DEBUG 模式
 TSAC_DEBUG = os.getenv("TSAC_DEBUG", "False").lower() == "true"
 
+# ==================== 背压与跨域（生产必备） ====================
+# 同时接受的节点 TCP 连接数上限，超出直接回 busy 并关闭
+MAX_NODE_CONNECTIONS = int(os.getenv("MAX_NODE_CONNECTIONS", "200") or "200")
+# 异步任务队列长度上限，满时**立即拒绝**新任务（不做无限排队）
+MAX_TASK_QUEUE = int(os.getenv("MAX_TASK_QUEUE", "1000") or "1000")
+# 允许跨域的来源白名单（逗号分隔）。留空=不加跨域头（仅同源）；
+# 开发期要放开所有来源请显式 CORS_ALLOW_ALL=True，生产请填写具体来源。
+ALLOWED_ORIGINS = (os.getenv("ALLOWED_ORIGINS", "") or "").strip()
+CORS_ALLOW_ALL = (os.getenv("CORS_ALLOW_ALL", "False") or "").strip().lower() == "true"
+
 # - 服务端口
 TCP_HOST = os.getenv("TCP_HOST", "0.0.0.0")
 TCP_PORT = int(os.getenv("TCP_PORT", "13137"))

@@ -12,9 +12,17 @@ logger = get_logger("async_processor")
 class AsyncTaskProcessor:
     """通用异步任务处理器"""
 
-    def __init__(self, max_workers=5):
+    def __init__(self, max_workers=5, max_queue=None):
         self.executor = ThreadPoolExecutor(max_workers=max_workers)
-        self.task_queue = Queue()
+        # 有界队列：线程池限制了"同时执行数"，队列限制"排队量"——
+        # 否则流量尖峰时不是及时拒绝，而是排队 + 内存 + 延迟一起涨。
+        if max_queue is None:
+            try:
+                from config.base import MAX_TASK_QUEUE as max_queue
+            except Exception:
+                max_queue = 1000
+        self.max_queue = max(1, int(max_queue or 1000))
+        self.task_queue = Queue(maxsize=self.max_queue)
         self.start_background_processor()
 
     def start_background_processor(self):
@@ -52,10 +60,19 @@ class AsyncTaskProcessor:
             pass
 
     def submit_task(self, func, *args, **kwargs):
-        """提交任务到异步处理器"""
+        """提交任务到异步处理器；队列满时**立即拒绝**（返回 False），不做排队等待"""
+        from queue import Full
+
         try:
-            self.task_queue.put((func, args, kwargs))
+            self.task_queue.put_nowait((func, args, kwargs))
             return True
+        except Full:
+            logger.warning(
+                "任务队列已满（上限 %d），拒绝新任务: %s",
+                self.max_queue,
+                func.__name__ if hasattr(func, '__name__') else str(func),
+            )
+            return False
         except Exception as e:
             logger.error("提交异步任务失败 func=%s args=%s: %s",
                          func.__name__ if hasattr(func, '__name__') else str(func),

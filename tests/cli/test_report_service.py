@@ -41,6 +41,11 @@ def test_start_run_writes_progress_and_html(env):
     assert data["meta"]["base"] == "dbv4-resnet18"
     html = (folder / "index.html").read_text(encoding="utf-8")
     assert '<meta http-equiv="refresh" content="5">' in html
+    assert "每 5 秒自动刷新" in html
+    assert "file:// 硬刷新 / http:// 软刷新" not in html
+    assert "jsstat" not in html
+    assert "图表交互已启用" not in html
+    assert "JS v12 已运行" not in html
     assert "dbv4-resnet18" in html and "181" in html
 
 

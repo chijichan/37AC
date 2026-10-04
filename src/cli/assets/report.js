@@ -64,10 +64,6 @@
   function boot() {
     var boxes = document.querySelectorAll(".chartbox");
     for (var i = 0; i < boxes.length; i++) { bindBox(boxes[i]); }
-    try {
-      var st = document.getElementById("jsstat");
-      if (st) { st.style.color = "#2FA36B"; st.textContent = "JS v12 已运行（悬浮交互）"; }
-    } catch (e) {}
   }
   if (document.readyState !== "loading") { boot(); }
   else { document.addEventListener("DOMContentLoaded", boot); }

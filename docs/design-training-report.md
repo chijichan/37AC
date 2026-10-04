@@ -22,8 +22,8 @@ src/cli/saves/reports/
 1. 训练端在**每轮结束**、**每 N 步**（默认 40 步）、**保存检查点**、**阶段切换**、**结束/中断**时：
    - 原子写 `progress.json`（临时文件 + `os.replace`，复用 checkpoint_service 的写法）；
    - 重新渲染 `index.html`（纯字符串模板，成本 ~1ms）。
-2. 页面里放 `&lt;meta http-equiv="refresh" content="10"&gt;`：浏览器每 10 秒整页重载 → 看到最新一次渲染。
-   **为什么不用 fetch + JS 轮询**：file:// 下 fetch 本地文件会被浏览器 CORS 拦掉，双击打开就失效；meta refresh 在 file:// 与 http:// 下都工作。
+2. 页面里放 `&lt;meta http-equiv="refresh" content="10"&gt;`：浏览器每 10 秒整页重载 → 看到最新一次渲染；`file://` 与 `http://` 均使用相同的整页刷新，不使用软刷新。
+  **为什么不用 fetch + JS 轮询**：file:// 下 fetch 本地文件会被浏览器 CORS 拦掉，双击打开就失效；meta refresh 在 file:// 与 http:// 下都工作。
 3. 进度粒度取舍：每次渲染都拿到"截至上一次写入"的数据，最坏滞后一轮（约 3.5 分钟）。若想要秒级，可选项③提供 `python -m http.server` 实时模式（文档末尾）。
 
 ## 3. 页面结构（单页、卡片式）

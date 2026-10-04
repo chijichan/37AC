@@ -69,14 +69,14 @@ require_once ROOT_PATH . '/views/layout.php';
 
 <section class="about-hero ac-container">
     <h2>关于 37AC</h2>
-    <p>基于深度学习的二次元角色识别系统，让每一张动漫图片都能被认出。</p>
+    <p>面向动漫与游戏图片的角色识别服务，支持本地模型、多模态识别和分布式推理。</p>
 </section>
 
 <section class="about-section ac-container">
     <p>
-        37AC（Anime Character Recognition）是一个基于深度学习的二次元角色识别系统。
-        项目采用分布式 C/S 架构，由中心服务器和多个边缘推理节点组成，支持多节点并行推理。
-        无论是本地模型推理还是接入多模态大模型（LLM），37AC 都能提供快速的角色识别能力。
+        37AC（Anime Character Recognition）用于识别动漫与游戏图片中的角色。上传图片后，YOLOv8 可定位人物区域，
+        本地分类模型负责识别角色；启用多模态大模型（LLM）时，也可补充处理本地模型难以判断的图片。
+        Flask 中心服务能够将任务分配给边缘推理节点，Web 页面通过实时事件流展示处理进度与识别结果。
     </p>
 </section>
 
@@ -86,19 +86,19 @@ require_once ROOT_PATH . '/views/layout.php';
     <div class="about-grid">
         <div class="card card-hover reveal">
             <h3><i class="ph ph-scan"></i>双引擎流水线</h3>
-            <p>YOLOv8 快速定位人物区域，ResNet18 与 CBAM 注意力机制精确分类，支持本地推理与 LLM 多模态识别双引擎。</p>
+            <p>YOLOv8 定位人物区域，ResNet18 与 CBAM 完成本地分类；启用 LLM 后可增加多模态识别能力。</p>
         </div>
         <div class="card card-hover reveal">
             <h3><i class="ph ph-share-network"></i>分布式架构</h3>
-            <p>中心服务器加边缘节点模式，支持能力感知调度、负载均衡、自动重连与心跳检测，保障服务可用性。</p>
+            <p>中心服务通过 TCP 管理边缘节点，根据节点能力分配任务，并以心跳和自动重连维护节点连接。</p>
         </div>
         <div class="card card-hover reveal">
             <h3><i class="ph ph-layout"></i>双前端架构</h3>
-            <p>Flask RESTful API 后端配合 PHP MVC 响应式前端，同时提供 Web 仪表盘和开放 API，方便二次开发。</p>
+            <p>Flask 提供识别与管理 API，PHP MVC 提供响应式 Web 页面，便于日常使用和系统集成。</p>
         </div>
         <div class="card card-hover reveal">
             <h3><i class="ph ph-broadcast"></i>实时推送</h3>
-            <p>基于 SSE（Server-Sent Events）的事件总线，任务状态与结果实时推送到前端，支持流式上传。</p>
+            <p>通过 SSE（Server-Sent Events）向浏览器推送上传、排队和识别状态，让任务进度与结果实时可见。</p>
         </div>
     </div>
 </section>

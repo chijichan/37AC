@@ -431,7 +431,7 @@ tbody tr.hl td{color:var(--ink900);font-weight:700}
 <div class="panel"><h2>检查点</h2>$ckpt_table</div>
 <div class="panel"><h2>事件</h2>$events</div>
 
-$chart_js<footer>数据源 progress.json ｜ 生成于 $generated_at ｜ 每 $refresh 秒自动刷新（file:// 硬刷新 / http:// 软刷新） ｜<span id="jsstat" style="color:#D64545">JS 未运行</span></footer>
+$chart_js<footer>数据源 progress.json ｜ 生成于 $generated_at ｜ 每 $refresh 秒自动刷新</footer>
 </div></body></html>
 """)
 

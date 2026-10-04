@@ -23,8 +23,8 @@ class Home_Controller extends Controller
     public function about()
     {
         $data = [
-            'title' => '关于我们',
-            'description' => '了解 37AC 的定位、识别能力与服务目标，帮助你更好地使用角色识别功能。',
+            'title' => '关于 37AC',
+            'description' => '了解 37AC 如何结合本地模型、多模态识别与分布式推理，识别动漫和游戏角色。',
             'keywords' => '关于37AC,动漫角色识别介绍,AI识别平台',
             'canonical_url' => '/about'
         ];

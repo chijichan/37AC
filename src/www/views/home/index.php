@@ -258,7 +258,7 @@ require_once ROOT_PATH . '/views/layout.php';
 
 <section class="cta ac-container reveal">
     <h2>上传第一张图片</h2>
-    <p>支持 JPG 与 PNG，最大 50MB（提交前自动压缩到最长边 512px）。</p>
+    <p>支持 JPG 与 PNG，最大 50MB。</p>
     <a href="/upload" class="btn btn-primary btn-lg">开始识别</a>
 </section>
 

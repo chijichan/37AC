@@ -69,7 +69,14 @@ def interruptible_map(func, items, max_workers=1, cancel_token=None,
 
         progress = as_completed(futures)
         if tqdm is not None and desc:
-            progress = tqdm(progress, total=len(futures), desc=desc, unit=unit, ncols=100)
+            progress = tqdm(
+                progress,
+                total=len(futures),
+                desc=desc,
+                unit=unit,
+                ncols=140,
+                bar_format="{desc}: {percentage:3.0f}%|{bar:50}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]",
+            )
 
         for future in progress:
             item = futures[future]

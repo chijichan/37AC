@@ -870,9 +870,12 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None, cancel
                 total = 0
 
                 from tqdm import tqdm
-                loop = tqdm(train_loader, desc=f"P1 训练 {epoch+1}/{PHASE1_EPOCHS}",
-                            bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, "
-                                        "{rate_fmt}{postfix}]")
+                loop = tqdm(
+                    train_loader,
+                    desc=f"P1 训练 {epoch+1}/{PHASE1_EPOCHS}",
+                    ncols=140,
+                    bar_format="{desc}: {percentage:3.0f}%|{bar:50}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}{postfix}]",
+                )
                 for batch_idx, (inputs, labels) in enumerate(loop):
                     if cancel_token is not None and cancel_token.cancelled():
                         raise TrainingCancelled()
@@ -913,8 +916,12 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None, cancel
                 if val_loader is not None:
                     model.eval()
                     val_correct = 0; val_total = 0
-                    val_loop = tqdm(val_loader, desc=f"P1 验证 {epoch+1}/{PHASE1_EPOCHS}",
-                                    bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]")
+                    val_loop = tqdm(
+                        val_loader,
+                        desc=f"P1 验证 {epoch+1}/{PHASE1_EPOCHS}",
+                        ncols=140,
+                        bar_format="{desc}: {percentage:3.0f}%|{bar:50}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]",
+                    )
                     with torch.no_grad():
                         for inputs, labels in val_loop:
                             inputs, labels = inputs.to(device), labels.to(device)
@@ -977,9 +984,12 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None, cancel
             current_lr = phase2_optimizer.param_groups[0]["lr"]
 
             from tqdm import tqdm
-            loop = tqdm(train_loader, desc=f"P2 训练 {epoch+1}/{phase2_epochs}",
-                        bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, "
-                                    "{rate_fmt}{postfix}]")
+            loop = tqdm(
+                train_loader,
+                desc=f"P2 训练 {epoch+1}/{phase2_epochs}",
+                ncols=140,
+                bar_format="{desc}: {percentage:3.0f}%|{bar:50}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}{postfix}]",
+            )
             for batch_idx, (inputs, labels) in enumerate(loop):
                 if cancel_token is not None and cancel_token.cancelled():
                     raise TrainingCancelled()
@@ -1021,8 +1031,12 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None, cancel
             if val_loader is not None:
                 model.eval()
                 val_correct = 0; val_total = 0
-                val_loop = tqdm(val_loader, desc=f"P2 验证 {epoch+1}/{phase2_epochs}",
-                                bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]")
+                val_loop = tqdm(
+                    val_loader,
+                    desc=f"P2 验证 {epoch+1}/{phase2_epochs}",
+                    ncols=140,
+                    bar_format="{desc}: {percentage:3.0f}%|{bar:50}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]",
+                )
                 with torch.no_grad():
                     for inputs, labels in val_loop:
                         inputs, labels = inputs.to(device), labels.to(device)

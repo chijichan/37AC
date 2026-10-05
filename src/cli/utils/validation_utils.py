@@ -129,7 +129,13 @@ def filter_missing_or_corrupt_images(dataset_dir: str) -> dict:
                 if fname.lower().endswith(IMAGE_EXTENSIONS_BASIC):
                     all_images.append(os.path.join(role_path, fname))
 
-    for file_path in tqdm(all_images, desc="训练前图片过滤", unit="张", ncols=100):
+    for file_path in tqdm(
+        all_images,
+        desc="训练前图片过滤",
+        unit="张",
+        ncols=140,
+        bar_format="{desc}: {percentage:3.0f}%|{bar:50}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]",
+    ):
         if not os.path.exists(file_path):
             result["missing"] += 1
             continue

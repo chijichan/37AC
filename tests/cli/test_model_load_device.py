@@ -33,3 +33,37 @@ def test_load_model_accepts_real_state_dict(tmp_path):
 
     loaded = CharacterRecognitionModel(2, pretrained=False).load_model(str(path), 2)
     assert loaded is not None
+
+
+def test_evaluate_raw_moves_input_to_model_device(monkeypatch, tmp_path):
+    """评估时必须把张量搬到模型所在设备，否则 DirectML/私有设备会报 type mismatch。"""
+    from PIL import Image
+
+    from services import eval_service
+
+    dataset_root = tmp_path / "dataset" / "IP-1" / "role-1"
+    dataset_root.mkdir(parents=True)
+    image_path = dataset_root / "sample.jpg"
+    Image.new("RGB", (8, 8), color="red").save(image_path)
+
+    class DeviceGuardModel:
+        device = torch.device("meta")
+
+        def eval(self):
+            return None
+
+        def __call__(self, x):
+            assert x.device == self.device, f"input device mismatch: {x.device} != {self.device}"
+            return torch.tensor([[1.0]], device="cpu")
+
+    model = DeviceGuardModel()
+
+    def fake_classifier():
+        return model, ["IP-1/role-1"], lambda im: torch.randn(3, 8, 8), torch
+
+    monkeypatch.setattr(eval_service, "_classifier", fake_classifier)
+    monkeypatch.setattr(eval_service, "DATASET_DIR", str(tmp_path / "dataset"))
+
+    result = eval_service.evaluate(mode="raw", per_class=1, limit=1)
+    assert result["total"] == 1
+    assert result["top1"] == 1

@@ -62,6 +62,26 @@ def pick_samples(per_class: int = 1, limit: int = None, source: str = "raw", see
     return samples
 
 
+def _model_device(model):
+    """返回模型实际运行设备；优先读取参数设备，兼容包装模型/DirectML 私有设备。"""
+    import torch
+
+    try:
+        params = list(getattr(model, "parameters", lambda: [])())
+        if params:
+            return params[0].device
+    except Exception:
+        pass
+
+    device = getattr(model, "device", None)
+    if device is None:
+        return None
+    try:
+        return torch.device(device)
+    except Exception:
+        return device
+
+
 def _classifier():
     """加载分类器（仅分类器口径用，不经过 YOLO）。"""
     import torch
@@ -110,6 +130,9 @@ def evaluate(mode: str = "raw", per_class: int = 1, limit: int = None):
                     from PIL import Image
                     with Image.open(path) as im:
                         x = transform(im.convert("RGB")).unsqueeze(0)
+                    model_device = _model_device(model)
+                    if model_device is not None:
+                        x = x.to(model_device)
                     probs = torch.softmax(model(x), dim=1)[0]
                     k = min(3, len(classes))
                     top = torch.topk(probs, k).indices.tolist()

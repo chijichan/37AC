@@ -10,7 +10,7 @@ from services import node_service as NS
 
 @pytest.fixture
 def env(monkeypatch, tmp_path_factory):
-    root = Path(__file__).resolve().parents[2] / ".tmp-tests" / ("uploads-" + str(int(time.time() * 1000)))
+    root = Path(__file__).resolve().parents[2] / "src" / "cli" / "saves" / "tmp" / ".tmp-tests" / ("uploads-" + str(int(time.time() * 1000)))
     root.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(NS, "IMAGE_PATH", str(root))
     yield root

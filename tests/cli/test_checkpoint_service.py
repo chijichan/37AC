@@ -23,7 +23,7 @@ def _make_model_dir(root: Path, version="0.0.12", weights=b"WEIGHTS-V1", classes
 
 @pytest.fixture
 def env(monkeypatch, tmp_path):
-    root = Path(__file__).resolve().parents[2] / ".tmp-tests"
+    root = Path(__file__).resolve().parents[2] / "src" / "cli" / "saves" / "tmp" / ".tmp-tests"
     root.mkdir(parents=True, exist_ok=True)
     work = root / ("ckpt-" + uuid.uuid4().hex[:8])
     model_dir = _make_model_dir(work / "models")

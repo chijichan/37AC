@@ -12,7 +12,7 @@ from detection.yolo_detector import YoloDetector
 
 
 def _make_root() -> Path:
-    base = Path(__file__).resolve().parents[2] / ".tmp-tests"
+    base = Path(__file__).resolve().parents[2] / "src" / "cli" / "saves" / "tmp" / ".tmp-tests"
     base.mkdir(parents=True, exist_ok=True)
     root = base / ("crop-" + uuid.uuid4().hex[:8])
     root.mkdir(parents=True, exist_ok=True)
@@ -105,6 +105,19 @@ def test_auto_uses_yolo_when_person_found(scene, monkeypatch):
     assert len(out["characters"]) == 1
     assert out["characters"][0]["bbox"] == (100, 100, 300, 500)
     assert out["characters"][0]["bbox_norm"] == {"x": 0.125, "y": 0.1667, "w": 0.25, "h": 0.6667}
+
+
+def test_auto_uses_default_temp_root_when_output_dir_omitted(scene, monkeypatch):
+    path, root = scene
+    monkeypatch.setattr("detection.yolo_detector.get_detector", lambda: FakeYolo([_person_box()]))
+    monkeypatch.setattr("detection.yolo_detector._tmp_root", lambda: root)
+    monkeypatch.setattr(mediapipe_detector, "is_available", lambda: False)
+
+    out = cropper.crop_characters_by_method(str(path), method="auto", margin_ratio=0.0)
+
+    assert out["crop_method"] == "yolo"
+    assert len(out["characters"]) == 1
+    assert Path(out["tmp_dir"]).parent == root
 
 
 def test_auto_falls_back_to_mediapipe(scene, monkeypatch):

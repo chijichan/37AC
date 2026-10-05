@@ -96,7 +96,10 @@ def mimetype_for(name) -> str:
 
 
 def _dir(label: str) -> Path:
-    return Path(getattr(cfg, _DIRS[label][0]))
+    path = Path(getattr(cfg, _DIRS[label][0]))
+    if path.resolve() == Path(cfg.ROOT_PATH).resolve().parent.parent:
+        raise ValueError("图片缓存/临时目录不能直接指向项目根目录")
+    return path
 
 
 def _limits(label: str) -> dict:

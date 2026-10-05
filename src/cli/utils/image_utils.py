@@ -1,6 +1,8 @@
 # utils/image_utils.py
 import os
+import uuid
 import warnings
+from pathlib import Path
 from PIL import Image
 from config.log_config import get_logger
 
@@ -8,6 +10,22 @@ logger = get_logger("image_utils")
 
 # 数据集压缩支持的图片扩展名
 _COMPRESS_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp")
+
+
+def _compression_temp_path(file_path: str) -> str:
+    """项目内图片压缩暂存到 saves/tmp，外部数据仍在源文件同卷暂存。"""
+    from config.base import ROOT_PATH
+
+    source = Path(file_path)
+    project_root = Path(ROOT_PATH).resolve().parents[1]
+    try:
+        source.resolve().relative_to(project_root)
+    except ValueError:
+        return f"{file_path}.37ac_tmp"
+
+    temp_root = Path(ROOT_PATH) / "saves" / "tmp"
+    temp_root.mkdir(parents=True, exist_ok=True)
+    return str(temp_root / f"compress_{uuid.uuid4().hex}.37ac_tmp")
 
 def validate_image_file(file_path: str) -> bool:
     """
@@ -117,6 +135,8 @@ def compress_image_file(file_path: str, max_size: int = 512, quality: int = 90) 
     """
     if max_size <= 0:
         return False
+    tmp_path = None
+    resized = None
     try:
         with Image.open(file_path) as img:
             img.load()
@@ -141,14 +161,21 @@ def compress_image_file(file_path: str, max_size: int = 512, quality: int = 90) 
         else:
             return False
 
-        tmp_path = f"{file_path}.37ac_tmp"
+        tmp_path = _compression_temp_path(file_path)
         resized.save(tmp_path, format=fmt, **save_kwargs)
-        resized.close()
         os.replace(tmp_path, file_path)
         return True
     except Exception as e:
         logger.debug("压缩图片失败 %s: %s", file_path, e)
         return False
+    finally:
+        if resized is not None:
+            resized.close()
+        if tmp_path and os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
 
 
 def convert_dataset_to_jpeg(dataset_dir: str, quality: int = 90, workers: int = 4,

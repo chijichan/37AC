@@ -81,7 +81,7 @@ def _wait_for(predicate, timeout=4.0):
 
 @pytest.fixture
 def env(monkeypatch):
-    base = Path(__file__).resolve().parents[2] / ".tmp-tests"
+    base = Path(__file__).resolve().parents[2] / "src" / "cli" / "saves" / "tmp" / ".tmp-tests"
     base.mkdir(parents=True, exist_ok=True)
     root = base / ("channels-" + uuid.uuid4().hex[:8])
     root.mkdir(parents=True, exist_ok=True)

@@ -229,7 +229,7 @@ def _finalize(items, image_size):
 def crop_characters_by_method(image_path, method=None, max_characters=None, margin_ratio=None,
                               max_size=None, output_dir=None):
     """按指定/配置的裁剪方式检测并裁剪人物（需求1+2 的节点侧统一入口）。"""
-    from detection.yolo_detector import crop_characters as yolo_crop_characters
+    from detection.yolo_detector import _tmp_root, crop_characters as yolo_crop_characters
 
     method = (method or CROP_METHOD or "auto").strip().lower()
     max_characters = MAX_CHARACTERS if max_characters is None else max_characters

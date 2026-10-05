@@ -63,6 +63,33 @@ class TestPredictImage:
         assert result["success"] is False
         assert "类别" in result["error"]
 
+    def test_yolo_temp_dir_removed_when_prediction_returns_early(
+        self, valid_png: Path, tmp_path: Path, monkeypatch
+    ):
+        """模型类别加载失败时也清理已生成的单图 YOLO 裁剪目录。"""
+        import prediction.predictor as predictor
+
+        temp_dir = tmp_path / "37ac_yolo_test"
+        temp_dir.mkdir()
+        crop_path = temp_dir / "crop.png"
+        crop_path.write_bytes(valid_png.read_bytes())
+
+        monkeypatch.setattr(predictor, "YOLO_ENABLED", True)
+        monkeypatch.setattr(predictor, "YOLO_AVAILABLE", True)
+        monkeypatch.setattr(predictor, "MULTI_CHARACTER_ENABLED", False)
+        monkeypatch.setattr(
+            predictor, "crop_best_character",
+            lambda _path: (str(crop_path), {"confidence": 0.9}),
+        )
+        monkeypatch.setattr(predictor, "crop_quality_ok", lambda *_args: True)
+        monkeypatch.setattr(predictor, "_classes_cache", None)
+        monkeypatch.setattr(predictor, "load_classes_from_file", lambda *_args: [])
+
+        result = predictor.predict_image(str(valid_png))
+
+        assert result["success"] is False
+        assert not temp_dir.exists()
+
     def test_predict_character_signature(self):
         """测试 predict_character 函数存在"""
         from prediction.predictor import predict_character

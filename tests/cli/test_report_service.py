@@ -12,7 +12,7 @@ from services import report_service as RS
 
 @pytest.fixture
 def env(monkeypatch):
-    root = Path(__file__).resolve().parents[2] / ".tmp-tests"
+    root = Path(__file__).resolve().parents[2] / "src" / "cli" / "saves" / "tmp" / ".tmp-tests"
     root.mkdir(parents=True, exist_ok=True)
     work = root / ("report-" + uuid.uuid4().hex[:8])
     monkeypatch.setattr(RS, "REPORT_DIR", work)

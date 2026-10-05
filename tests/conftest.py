@@ -19,7 +19,7 @@ import pytest
 # ── 临时目录重定向 ──
 # 受限沙箱下系统 TEMP（C:\Users\<user>\AppData\Local\Temp）不可写，会让所有用
 # tmp_path / tempfile 的用例集体报 PermissionError(WinError 5)。这里把临时根目录
-# 固定到仓库内 .tmp-tests/，并按进程号隔离，CLI 与 SERVER 并发执行也互不干扰。
+# 固定到 src/cli/saves/tmp/.tmp-tests/，并按进程号隔离，CLI 与 SERVER 并发执行也互不干扰。
 
 # 沙箱下用非默认权限（0o700）创建的目录，创建后连列举/写入都会被拒绝；而 pytest 的
 # basetemp、tmp_path、tempfile.mkdtemp 全部用 0o700 建目录。测试进程内直接丢掉 mode。
@@ -34,7 +34,7 @@ os.mkdir = _mkdir_without_mode
 
 
 def _redirect_temp_root():
-    base = Path(__file__).resolve().parents[1] / ".tmp-tests" / f"pytest-{os.getpid()}"
+    base = Path(__file__).resolve().parents[1] / "src" / "cli" / "saves" / "tmp" / ".tmp-tests" / f"pytest-{os.getpid()}"
     try:
         base.mkdir(parents=True, exist_ok=True)
         probe = base / ".write-probe"

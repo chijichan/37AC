@@ -62,3 +62,34 @@ class TestValidateImageFile:
         img.save(str(path))
         # 灰度图应能成功转为 RGB → 验证通过
         assert validate_image_file(str(path)) is True
+
+
+def test_project_image_compression_uses_managed_temp_root(tmp_path: Path, monkeypatch):
+    from PIL import Image
+    from config import base as config
+    import utils.image_utils as image_utils
+
+    project_root = tmp_path / "37AC"
+    cli_root = project_root / "src" / "cli"
+    cli_root.mkdir(parents=True)
+    source = project_root / "large.png"
+    Image.new("RGB", (1200, 800), (128, 64, 32)).save(source)
+
+    monkeypatch.setattr(config, "ROOT_PATH", cli_root)
+    staged_paths = []
+    original_temp_path = image_utils._compression_temp_path
+
+    def capture_temp_path(file_path):
+        path = original_temp_path(file_path)
+        staged_paths.append(Path(path))
+        return path
+
+    monkeypatch.setattr(image_utils, "_compression_temp_path", capture_temp_path)
+
+    assert image_utils.compress_image_file(str(source), max_size=512)
+    assert staged_paths[0].parent == cli_root / "saves" / "tmp"
+    assert not staged_paths[0].exists()
+    assert not Path(f"{source}.37ac_tmp").exists()
+    assert not list(project_root.glob("*.37ac_tmp"))
+    with Image.open(source) as compressed:
+        assert max(compressed.size) <= 512

@@ -311,6 +311,7 @@ def predict_image(image_path, model_path=None, classes_file=None, use_cache=True
         "characters": [],
         "crop_method": "full",
     }
+    yolo_tmp_dir = None
 
     try:
         # ======================
@@ -337,6 +338,8 @@ def predict_image(image_path, model_path=None, classes_file=None, use_cache=True
         if YOLO_ENABLED and YOLO_AVAILABLE:
             try:
                 crop_path, det_info = crop_best_character(image_path)
+                if crop_path:
+                    yolo_tmp_dir = os.path.dirname(crop_path)
                 if crop_path and os.path.exists(crop_path):
                     # 质量门控：COCO 检测器在二次元图上常误检/多检，裁错的框会拉低准确率
                     # （实测：不裁剪 79.0% vs 直接裁剪 71.3%）——不达标就回退整图
@@ -538,6 +541,9 @@ def predict_image(image_path, model_path=None, classes_file=None, use_cache=True
         result["error"] = f"未知错误: {str(e)}"
         logger.error("预测过程中出现未知错误: %s", e, exc_info=True)
         return result
+    finally:
+        if yolo_tmp_dir and os.path.basename(yolo_tmp_dir).startswith("37ac_yolo_"):
+            shutil.rmtree(yolo_tmp_dir, ignore_errors=True)
 
 
 # ======================

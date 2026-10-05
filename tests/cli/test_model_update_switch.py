@@ -1,6 +1,6 @@
 """模型自动更新开关（AUTO_UPDATE_MODEL）回归测试。
 
-不联网：requests.get 全部打桩；路径指向仓库内 .tmp-tests/。
+    不联网：requests.get 全部打桩；路径指向 saves/tmp/.tmp-tests/。
 """
 
 import hashlib
@@ -16,7 +16,7 @@ from services.node_service import should_sync_model
 
 
 def _root() -> Path:
-    base = Path(__file__).resolve().parents[2] / ".tmp-tests"
+    base = Path(__file__).resolve().parents[2] / "src" / "cli" / "saves" / "tmp" / ".tmp-tests"
     base.mkdir(parents=True, exist_ok=True)
     root = base / ("model-switch-" + uuid.uuid4().hex[:8])
     root.mkdir(parents=True, exist_ok=True)

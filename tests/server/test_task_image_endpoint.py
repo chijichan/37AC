@@ -36,7 +36,7 @@ def _dimensions(data):
 
 @pytest.fixture
 def client(monkeypatch):
-    base = Path(__file__).resolve().parents[2] / ".tmp-tests"
+    base = Path(__file__).resolve().parents[2] / "src" / "cli" / "saves" / "tmp" / ".tmp-tests"
     base.mkdir(parents=True, exist_ok=True)
     root = base / ("img-" + uuid.uuid4().hex[:8])
     tmp_dir, cache_dir = root / "tmp", root / "cache"

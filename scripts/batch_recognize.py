@@ -89,6 +89,10 @@ def redirect_temp_dirs(temp_root: Path):
     import itertools
     import tempfile
 
+    temp_root = Path(temp_root).expanduser().resolve()
+    if temp_root == REPO_ROOT.resolve():
+        raise ValueError("裁剪暂存目录不能直接指向仓库根目录")
+
     temp_root.mkdir(parents=True, exist_ok=True)
     os.environ["TEMP"] = str(temp_root)
     os.environ["TMP"] = str(temp_root)

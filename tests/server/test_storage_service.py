@@ -35,12 +35,12 @@ def _size_of(data):
 
 
 def _make_root() -> Path:
-    """测试根目录（仓库内 .tmp-tests/，已 gitignore）。
+    """测试根目录（src/cli/saves/tmp/.tmp-tests/，已 gitignore）。
 
     不用 pytest 的 tmp_path：受限文件沙箱下系统 TEMP 只能创建顶层目录、
     再往里建子目录会 PermissionError（实测），而仓库内路径可正常读写。
     """
-    base = Path(__file__).resolve().parents[2] / ".tmp-tests"
+    base = Path(__file__).resolve().parents[2] / "src" / "cli" / "saves" / "tmp" / ".tmp-tests"
     base.mkdir(parents=True, exist_ok=True)
     # 注意：不要用 tempfile.mkdtemp —— 本环境（受限文件沙箱）里 mkdtemp 出来的目录
     # 之后无法再建子目录/写入（WinError 5），普通 mkdir 则正常。
@@ -107,6 +107,18 @@ def test_invalid_task_id_rejected(store):
     assert storage_service.save_temp("", _png(), ".png") is None
     assert storage_service.normalize_task_id("..%2f") == ""
     assert storage_service.normalize_task_id("normal-uuid-123") == "normal-uuid-123"
+
+
+@pytest.mark.parametrize("label,setting", [
+    ("tmp", "IMAGE_TMP_PATH"),
+    ("cache", "IMAGE_CACHE_PATH"),
+])
+def test_storage_directory_cannot_be_project_root(label, setting, monkeypatch):
+    project_root = Path(storage_service.__file__).resolve().parents[3]
+    monkeypatch.setattr(cfg, setting, project_root)
+
+    with pytest.raises(ValueError, match="项目根目录"):
+        storage_service._dir(label)
 
 
 def test_unknown_extension_falls_back_to_jpg(store):

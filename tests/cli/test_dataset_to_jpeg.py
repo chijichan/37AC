@@ -10,7 +10,7 @@ from utils.image_utils import convert_dataset_to_jpeg
 
 
 def _root():
-    base = Path(__file__).resolve().parents[2] / ".tmp-tests"
+    base = Path(__file__).resolve().parents[2] / "src" / "cli" / "saves" / "tmp" / ".tmp-tests"
     base.mkdir(parents=True, exist_ok=True)
     root = base / ("tojpeg-" + uuid.uuid4().hex[:8])
     (root / "原神" / "荧").mkdir(parents=True, exist_ok=True)

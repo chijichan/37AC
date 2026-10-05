@@ -13,7 +13,7 @@ from training import trainer as T
 
 
 def _root() -> Path:
-    base = Path(__file__).resolve().parents[2] / ".tmp-tests"
+    base = Path(__file__).resolve().parents[2] / "src" / "cli" / "saves" / "tmp" / ".tmp-tests"
     base.mkdir(parents=True, exist_ok=True)
     root = base / ("enrich-" + uuid.uuid4().hex[:8])
     root.mkdir(parents=True, exist_ok=True)

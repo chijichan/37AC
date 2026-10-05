@@ -151,19 +151,23 @@ def record_epoch(epoch: int, phase: str, loss: float, train_acc: float,
                  val_acc: float, lr: float, secs: float = 0) -> None:
     if _data() is None:
         return
+    now = time.time()
+    last = _data().get("_last_epoch_ts")
+    started = _data().get("started_ts")
+    if last:
+        elapsed = max(0.0, now - float(last))
+    elif started:
+        elapsed = max(0.0, now - float(started))
+    else:
+        elapsed = max(0.0, float(secs) if secs else 0.0)
     _data()["epochs"].append({
         "epoch": int(epoch), "phase": phase,
         "loss": round(float(loss), 4), "train_acc": round(float(train_acc), 2),
         "val_acc": round(float(val_acc), 2), "lr": float(lr),
-        "secs": round(float(secs), 1), "at": _now(),
+        "secs": round(float(secs) if secs else elapsed, 1), "at": _now(),
     })
     ph = _data()["phase"]
     ph["epoch"] = int(epoch)
-    # 耗时：用相邻两次记录的时间差（训练端不必传秒数；退出重进也不会算错）
-    now = time.time()
-    last = _data().get("_last_epoch_ts")
-    if last:
-        _data()["epochs"][-1]["secs"] = round(now - float(last), 1)
     _data()["_last_epoch_ts"] = now
     best = _data().get("best_val")
     if best is None or float(val_acc) > float(best):
@@ -470,8 +474,14 @@ def render_html(data: dict) -> str:
     pairs = [("基模", meta.get("base")), ("类别数", meta.get("classes") or meta.get("class_count"))]
     if meta.get("train") or meta.get("val"):
         pairs.append(("训练/验证", "%s / %s" % (meta.get("train") or "-", meta.get("val") or "-")))
-    pairs += [("batch", meta.get("batch")), ("分辨率", meta.get("image_size")),
-              ("设备", meta.get("device")), ("best val", data.get("best_val"))]
+    pairs += [
+        ("batch", meta.get("batch")),
+        ("batch P1", meta.get("batch_p1")),
+        ("batch P2", meta.get("batch_p2")),
+        ("分辨率", meta.get("image_size")),
+        ("设备", meta.get("device")),
+        ("best val", data.get("best_val")),
+    ]
     for k, v in pairs:
         if v in (None, "", "None", "None / None"):
             continue

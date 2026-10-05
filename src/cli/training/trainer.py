@@ -615,7 +615,8 @@ def _report_start_once(version: str, extra: dict = None) -> None:
     try:
         from services import report_service as report
 
-        if report.run_dir() is not None:
+        current_version = (report._data() or {}).get("meta", {}).get("version")
+        if report.run_dir() is not None and str(current_version) == str(version):
             return
         from config.base import (BATCH_SIZE, BATCH_SIZE_P1, BATCH_SIZE_P2, DATASET_DIR,
                                  IMAGE_SIZE, PRETRAINED_BASE,

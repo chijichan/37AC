@@ -2,6 +2,7 @@
 
 import json
 import shutil
+import time
 import uuid
 from pathlib import Path
 
@@ -93,6 +94,42 @@ def test_list_and_latest_run(env):
     runs = RS.list_runs()
     assert {r["run_id"] for r in runs} == {first.name, second.name}
     assert RS.latest_run()["report"].endswith("index.html")
+
+
+def test_first_epoch_uses_started_ts_for_elapsed_time(env, monkeypatch):
+    times = iter([1000.0, 1000.0, 1000.0, 1000.0, 1000.0, 1010.0, 1010.0, 1010.0])
+    monkeypatch.setattr(time, "time", lambda: next(times))
+
+    folder = RS.start_run({"version": "0.0.17"}, version="0.0.17")
+    RS.record_epoch(1, "P1", 2.5, 80.0, 85.0, 1e-4)
+
+    data = _load(folder)
+    assert data["epochs"][0]["secs"] == 10.0
+
+
+def test_report_start_once_starts_new_run_for_new_version(env):
+    from training import trainer
+
+    first = RS.start_run({"version": "0.0.24"}, version="0.0.24")
+    trainer._report_start_once("0.0.25")
+
+    assert RS.run_dir() is not None
+    assert RS.run_dir() != first
+    assert RS.run_dir().name.startswith("0.0.25-")
+
+
+def test_batch_cards_show_p1_and_p2(env):
+    folder = RS.start_run({
+        "version": "0.0.17",
+        "batch": 32,
+        "batch_p1": 64,
+        "batch_p2": 16,
+        "image_size": 224,
+    }, version="0.0.17")
+
+    html = (folder / "index.html").read_text(encoding="utf-8")
+    assert "batch P1" in html and "64" in html
+    assert "batch P2" in html and "16" in html
 
 
 def test_disabled_writes_nothing(env, monkeypatch):

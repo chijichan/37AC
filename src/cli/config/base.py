@@ -178,6 +178,7 @@ TCP_PORT = int(os.getenv("TCP_PORT", "13137"))
 SERVER_HTTP_URL = os.getenv("SERVER_HTTP_URL", "http://127.0.0.1:13138").rstrip("/")
 # 节点选择的识别模型（注册后按 register_ack.data.models 里的该模型同步）
 MODEL_ID = os.getenv("MODEL_ID", "37ac")
+DATASET_PUBLIC_NAME = os.getenv("DATASET_PUBLIC_NAME", f"{MODEL_ID}-dataset")
 LOCAL_PORT = os.getenv("LOCAL_PORT")
 if LOCAL_PORT:
     LOCAL_PORT = int(LOCAL_PORT)

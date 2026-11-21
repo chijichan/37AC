@@ -90,6 +90,47 @@ def _file_sha256(path) -> str:
         return ""
 
 
+def _safe_repo_path(path):
+    """把本地绝对路径改为相对仓库路径或文件名，避免发布到公开模型时泄露机器目录。"""
+    if path is None:
+        return None
+    text = str(path).strip()
+    if not text:
+        return None
+    try:
+        p = Path(text)
+        try:
+            rel = os.path.relpath(str(p), str(ROOT_PATH))
+            if rel and rel != ".":
+                return rel.replace("\\", "/")
+        except Exception:
+            pass
+        return p.name or text
+    except Exception:
+        return text
+
+
+def _public_dataset_name(dataset_path=None):
+    """公开模型配置必须使用稳定的公开数据集名，而不是本机目录。"""
+    public_name = os.getenv("DATASET_PUBLIC_NAME", "").strip()
+    if public_name:
+        return public_name
+    return f"{MODEL_ID}-dataset"
+
+
+def _public_resume_name(resume_path=None):
+    """继续训练来源写为稳定的版本名/模型名，而不是本地绝对路径。"""
+    if resume_path is None:
+        return None
+    text = str(resume_path).strip()
+    if not text:
+        return None
+    stem = Path(text).stem or text
+    if stem:
+        return stem
+    return text
+
+
 def _write_model_config(version: str):
     """把模型信息（含 model/classes 的 file + SHA-256）写入 saves/models/config.json。
 
@@ -99,6 +140,11 @@ def _write_model_config(version: str):
     下载 URL 不在配置里，由节点用 config.json 的下载地址（urljoin）推导同目录文件。
     """
     from datetime import datetime
+
+    if not MODEL_PATH.exists():
+        raise FileNotFoundError(f"模型权重不存在，无法写入 config.json: {MODEL_PATH}")
+    if not CLASSES_JSON_PATH.exists():
+        raise FileNotFoundError(f"classes.json 不存在，无法写入 config.json: {CLASSES_JSON_PATH}")
 
     weights_sha = _file_sha256(MODEL_PATH)
     classes_sha = _file_sha256(CLASSES_JSON_PATH)
@@ -128,6 +174,8 @@ def _write_model_config(version: str):
         "optimizer": "AdamNoLerp(DirectML 友好)" if PRETRAINED_BASE is not None else "adam",
         "trained_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     })
+    training["dataset"] = _public_dataset_name(training.get("dataset") or DATASET_DIR)
+    training["resumed_from"] = _public_resume_name(training.get("resumed_from")) if training.get("resumed_from") else None
     if training.get("class_count") is None:
         try:
             training["class_count"] = len(load_classes_from_file(str(CLASSES_JSON_PATH)) or [])
@@ -135,6 +183,9 @@ def _write_model_config(version: str):
             pass
 
     cfg.update({
+        "schema_version": 1,
+        "framework": "pytorch",
+        "format": "pytorch_state_dict",
         "model_id": "37ac",
         "version": version,
         "model": {"file": MODEL_PATH.name, "sha256": weights_sha},
@@ -624,8 +675,8 @@ def _report_start_once(version: str, extra: dict = None) -> None:
         meta = {
             "version": version,
             "base": PRETRAINED_BASE,
-            "dataset": str(DATASET_DIR),
-            "cropped_dataset": str(CROPPED_DATASET_DIR),
+            "dataset": _safe_repo_path(DATASET_DIR),
+            "cropped_dataset": _safe_repo_path(CROPPED_DATASET_DIR),
             "batch": BATCH_SIZE,
             "batch_p1": BATCH_SIZE_P1,
             "batch_p2": BATCH_SIZE_P2,
@@ -828,8 +879,8 @@ def train_model(dataset_dir=None, use_yolo_crop=False, resume_model=None, cancel
             if "val_subset" in dir():
                 val_size = len(val_subset)
             _TRAINING_INFO.update({
-                "dataset": str(dataset_dir or ""),
-                "resumed_from": str(resume_path) if resume_path else None,
+                "dataset": _public_dataset_name(dataset_dir or DATASET_DIR),
+                "resumed_from": _public_resume_name(resume_path) if resume_path else None,
                 "class_count": len(class_names) if class_names else None,
                 "train_size": train_size,
                 "val_size": val_size,

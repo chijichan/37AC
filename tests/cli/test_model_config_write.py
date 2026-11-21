@@ -44,6 +44,9 @@ def test_write_model_config_records_version_and_hashes(tmp_path, monkeypatch):
     T._write_model_config("v1.0.0")
     first = json.loads(info.read_text(encoding="utf-8"))
     assert first["version"] == "v1.0.0"
+    assert first["schema_version"] == 1
+    assert first["framework"] == "pytorch"
+    assert first["format"] == "pytorch_state_dict"
     assert first["model"]["sha256"] == T._file_sha256(model)
     assert first["classes"]["sha256"] == T._file_sha256(classes)
 
@@ -55,3 +58,41 @@ def test_write_model_config_records_version_and_hashes(tmp_path, monkeypatch):
     assert second["model"]["sha256"] != first["model"]["sha256"]
     assert second["model"]["sha256"] == T._file_sha256(model)
     assert second["trained_at"]
+
+
+def test_write_model_config_uses_public_names_for_training_metadata(tmp_path, monkeypatch):
+    model = tmp_path / "model.pth"
+    classes = tmp_path / "classes.json"
+    info = tmp_path / "config.json"
+    model.write_bytes(b"WEIGHTS-V1")
+    classes.write_text('{"a": 1}', encoding="utf-8")
+
+    monkeypatch.setattr(T, "MODEL_PATH", model)
+    monkeypatch.setattr(T, "CLASSES_JSON_PATH", classes)
+    monkeypatch.setattr(T, "MODEL_INFO_PATH", info)
+    monkeypatch.setattr(T, "_TRAINING_INFO", {
+        "dataset": str(tmp_path / "C:/Users/Test/Desktop/PrivateDataset"),
+        "resumed_from": str(tmp_path / "models/37ac-v0.0.1.pth"),
+    })
+    monkeypatch.setattr(T, "MODEL_ID", "37ac")
+
+    T._write_model_config("v1.0.0")
+    cfg = json.loads(info.read_text(encoding="utf-8"))
+    assert cfg["training"]["dataset"] == "37ac-dataset"
+    assert cfg["training"]["resumed_from"] == "37ac-v0.0.1"
+
+
+def test_write_model_config_rejects_missing_artifacts(tmp_path, monkeypatch):
+    model = tmp_path / "missing.pth"
+    classes = tmp_path / "classes.json"
+    info = tmp_path / "config.json"
+    classes.write_text('{"a": 1}', encoding="utf-8")
+
+    monkeypatch.setattr(T, "MODEL_PATH", model)
+    monkeypatch.setattr(T, "CLASSES_JSON_PATH", classes)
+    monkeypatch.setattr(T, "MODEL_INFO_PATH", info)
+
+    import pytest
+    with pytest.raises(FileNotFoundError):
+        T._write_model_config("v1.0.0")
+    assert not info.exists()

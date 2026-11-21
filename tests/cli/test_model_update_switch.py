@@ -199,3 +199,33 @@ def test_enabled_updates_when_version_changes(paths, monkeypatch):
 
     assert node_service.MODEL_PATH.read_bytes() == weights
     assert json.loads(node_service.MODEL_INFO_PATH.read_text(encoding="utf-8"))["version"] == "3.0.0"
+
+
+def test_enabled_repairs_corrupt_local_files_even_when_version_matches(paths, monkeypatch):
+    weights = b"verified-weights"
+    classes = b'{"a": 4}'
+    node_service.MODEL_PATH.write_bytes(b"corrupt")
+    node_service.CLASSES_JSON_PATH.write_text("{}", encoding="utf-8")
+    node_service.MODEL_INFO_PATH.write_text(json.dumps({"version": "4.0.0"}), encoding="utf-8")
+    cfg = {
+        "version": "4.0.0",
+        "model": {"file": "m.pth", "sha256": hashlib.sha256(weights).hexdigest()},
+        "classes": {"file": "classes.json", "sha256": hashlib.sha256(classes).hexdigest()},
+    }
+
+    def fake_get(url, **kwargs):
+        if url.endswith("config.json"):
+            return FakeResponse(json.dumps(cfg).encode())
+        if url.endswith("m.pth"):
+            return FakeResponse(weights)
+        if url.endswith("classes.json"):
+            return FakeResponse(classes)
+        raise AssertionError(url)
+
+    monkeypatch.setattr("requests.get", fake_get)
+    node_service._sync_local_model(
+        [{"id": "37ac", "config_url": "http://host/config.json"}], auto_update=True
+    )
+
+    assert node_service.MODEL_PATH.read_bytes() == weights
+    assert node_service.CLASSES_JSON_PATH.read_bytes() == classes

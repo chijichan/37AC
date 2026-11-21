@@ -211,3 +211,63 @@ def download_base(repo_id: str, name: str = None, use_mirror: bool = True,
     desc = write_base_desc(Path(path), repo_id, meta)
     logger.info("下载完成: %s（%s, %s）", short, desc["arch"], desc.get("weights"))
     return {"id": short, "dir": str(path), "meta": meta, "desc": desc}
+
+
+def publish_model(repo_id: str, model_path, classes_path, config_path,
+                  token: str = None, private: bool = True, use_mirror: bool = True,
+                  repo_type: str = "model") -> dict:
+    """把已训练好的 PyTorch checkpoint / classes / config 发布到 HF Hub。
+
+    发布物遵循项目定义的标准结构：
+      - model: {file, sha256}
+      - classes: {file, sha256}
+      - config.json 包含 schema_version / framework / format
+    该接口仅负责上传，不负责训练或清理本地文件。
+    """
+    hf_import()
+    apply_endpoint(use_mirror)
+    if token:
+        os.environ["HF_TOKEN"] = token
+
+    from huggingface_hub import HfApi
+
+    api = HfApi(token=token or os.environ.get("HF_TOKEN"))
+    repo = api.create_repo(repo_id=repo_id, repo_type=repo_type, private=private, exist_ok=True)
+
+    model_path = Path(model_path)
+    classes_path = Path(classes_path)
+    config_path = Path(config_path)
+
+    for file_path in (model_path, classes_path, config_path):
+        if not file_path.exists():
+            raise FileNotFoundError(f"发布所需文件缺失：{file_path}")
+
+    uploads = [
+        (model_path, model_path.name),
+        (classes_path, classes_path.name),
+        (config_path, config_path.name),
+    ]
+    for local_path, repo_name in uploads:
+        api.upload_file(
+            path_or_fileobj=str(local_path),
+            path_in_repo=repo_name,
+            repo_id=repo_id,
+            repo_type=repo_type,
+        )
+
+    base_url = f"https://huggingface.co/{repo_id}/resolve/main"
+    result = {
+        "repo_id": repo_id,
+        "repo_type": repo_type,
+        "private": private,
+        "model_url": f"{base_url}/{model_path.name}",
+        "weights_url": f"{base_url}/{model_path.name}",
+        "classes_url": f"{base_url}/{classes_path.name}",
+        "config_url": f"{base_url}/{config_path.name}",
+        "files": [model_path.name, classes_path.name, config_path.name],
+        "created": bool(repo),
+        "repo": repo,
+        "api": api,
+    }
+    logger.info("已发布模型到 HF Hub: %s (%s)", repo_id, ", ".join(result["files"]))
+    return result

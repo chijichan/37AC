@@ -478,6 +478,7 @@ def show_model_menu():
     print("  [2] 检查点管理（列表 / 回滚 / 删除 / 清理）")
     print("  [3] 训练基模（查看当前基模）")
     print("  [4] 当前模型信息")
+    print("  [5] Publish to HF Hub")
     print("  [0] 返回主菜单")
     print("  " + "─" * 30)
     print("  ESC / Ctrl+Z 返回上级菜单，Ctrl+C 结束程序")
@@ -581,7 +582,7 @@ def run_model_settings(args=None):
         drain_pending_input()
         show_model_menu()
         try:
-            choice = ask("请选择 (1/2/3/4/0): ", valid=("1", "2", "3", "4", "0"))
+            choice = ask("请选择 (1/2/3/4/5/0): ", valid=("1", "2", "3", "4", "5", "0"))
         except GoBack:
             print()
             return
@@ -596,6 +597,8 @@ def run_model_settings(args=None):
             _show_base_model()
         elif choice == "4":
             _show_current_model()
+        elif choice == "5":
+            _publish_model_to_hf()
 
 
 def _show_base_model():
@@ -680,6 +683,59 @@ def _show_base_model():
         print()
         return
         return
+
+
+def _publish_model_to_hf():
+    """把当前模型包发布到 Hugging Face Hub。"""
+    from config.base import MODEL_PATH, CLASSES_JSON_PATH, MODEL_INFO_PATH
+    from services.hf_download import publish_model
+    from utils.cli_input import GoBack, ask
+
+    print()
+    print("=" * 56)
+    print("  Publish to HF Hub")
+    print("=" * 56)
+
+    missing = [p for p in (MODEL_PATH, CLASSES_JSON_PATH, MODEL_INFO_PATH) if not p.exists()]
+    if missing:
+        logger.error("当前模型包不完整，缺失: %s", ", ".join(str(p) for p in missing))
+        logger.info("先完成训练并确保 %s / %s / %s 都存在", MODEL_PATH, CLASSES_JSON_PATH, MODEL_INFO_PATH)
+        print("=" * 56)
+        return
+
+    try:
+        repo_id = ask("  输入 HF Repo ID（例如 yourname/37ac）: ")
+    except GoBack:
+        print()
+        return
+    repo_id = (repo_id or "").strip()
+    if not repo_id or "/" not in repo_id:
+        logger.warning("Repo ID 应为 user/repo 的格式，例如 yourname/37ac")
+        print("=" * 56)
+        return
+
+    try:
+        token = ask("  输入 HF Token（留空则读取 .env / 环境变量；回车取消）: ")
+    except GoBack:
+        print()
+        return
+    token = (token or "").strip()
+
+    try:
+        info = publish_model(
+            repo_id=repo_id,
+            model_path=MODEL_PATH,
+            classes_path=CLASSES_JSON_PATH,
+            config_path=MODEL_INFO_PATH,
+            token=token or None,
+            private=True,
+        )
+        print("  发布成功")
+        for key in ("weights_url", "classes_url", "config_url"):
+            print("  %-12s %s" % (key, info.get(key)))
+    except Exception as e:
+        logger.error("HF 发布失败: %s", e)
+    print("=" * 56)
 
 
 def _show_current_model():

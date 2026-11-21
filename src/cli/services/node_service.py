@@ -269,15 +269,30 @@ def _sync_local_model(models, auto_update=None):
             logger.warning("config.json 缺少 version/model，跳过模型同步")
             return
 
-        # 2) 比对本地版本
+        # 2) 比对本地版本：版本一致也必须校验本地文件哈希；损坏/篡改时认为本地需要修复
         local_info = {}
         if MODEL_INFO_PATH.exists():
             try:
                 local_info = json.loads(MODEL_INFO_PATH.read_text(encoding="utf-8"))
             except Exception:
                 local_info = {}
-        weights_ok = MODEL_PATH.exists()
-        classes_ok = (not classes_url) or CLASSES_JSON_PATH.exists()
+
+        def _hash_matches(path_obj, expected_hash):
+            if not path_obj or not path_obj.exists():
+                return False
+            if not expected_hash:
+                return True
+            try:
+                h = hashlib.sha256()
+                with open(path_obj, "rb") as f:
+                    for chunk in iter(lambda: f.read(8192), b""):
+                        h.update(chunk)
+                return h.hexdigest().lower() == expected_hash.lower()
+            except Exception:
+                return False
+
+        weights_ok = _hash_matches(MODEL_PATH, model_sha)
+        classes_ok = True if not classes_url or not classes_sha else _hash_matches(CLASSES_JSON_PATH, classes_sha)
         if local_info.get("version") == remote_version and weights_ok and classes_ok:
             logger.debug("模型 %s 已是最新版本 %s", MODEL_ID, remote_version)
             return

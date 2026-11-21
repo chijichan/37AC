@@ -9,22 +9,22 @@ require_once ROOT_PATH . '/views/layout.php';
 <style>
     .upload-page {
         max-width: 860px;
-        padding-top: 2.2rem;
+        padding-top: 2.25rem;
         padding-bottom: 3.5rem;
     }
 
     .upload-page>.page-head {
-        margin-bottom: 1.8rem;
+        margin-bottom: 1.75rem;
     }
 
     .upload-page>.page-head p {
-        margin-top: .4rem;
+        margin-top: .5rem;
     }
 
     /* 上传区 */
     .upload-card {
         padding: 1.5rem;
-        margin-bottom: 1.3rem;
+        margin-bottom: 1.25rem;
     }
 
     .upload-area {
@@ -32,7 +32,7 @@ require_once ROOT_PATH . '/views/layout.php';
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        gap: .7rem;
+        gap: .75rem;
         min-height: 180px;
         border: 2px dashed var(--ac-ink-100);
         border-radius: var(--ac-radius-card);
@@ -73,7 +73,7 @@ require_once ROOT_PATH . '/views/layout.php';
         display: flex;
         align-items: center;
         gap: 1rem;
-        margin: 1.3rem 0 .9rem;
+        margin: 1.25rem 0 1rem;
         color: var(--ac-ink-300);
         font-size: .82rem;
     }
@@ -87,7 +87,7 @@ require_once ROOT_PATH . '/views/layout.php';
 
     .link-row {
         display: flex;
-        gap: .6rem;
+        gap: .5rem;
     }
 
     .link-row .input {
@@ -101,8 +101,8 @@ require_once ROOT_PATH . '/views/layout.php';
     /* 分组卡片（重置 fieldset 默认样式） */
     fieldset.option-group {
         border: none;
-        padding: 1.2rem 1.3rem;
-        margin: 0 0 1.3rem;
+        padding: 1.25rem 1.25rem;
+        margin: 0 0 1.25rem;
         border-radius: var(--ac-radius-card);
         background: var(--ac-surface);
         box-shadow: var(--ac-shadow-card);
@@ -119,14 +119,14 @@ require_once ROOT_PATH . '/views/layout.php';
         font-weight: 600;
         font-size: .82rem;
         color: var(--ac-ink-500);
-        margin-left: .4rem;
+        margin-left: .5rem;
     }
 
     fieldset.option-group legend {
         float: left;
         width: 100%;
         padding: 0;
-        margin-bottom: .9rem;
+        margin-bottom: 1rem;
         font-family: var(--ac-font-display);
         font-weight: 800;
         font-size: 1rem;
@@ -157,8 +157,8 @@ require_once ROOT_PATH . '/views/layout.php';
 
     .sub-options {
         display: none;
-        margin-top: .9rem;
-        padding: .9rem 1rem;
+        margin-top: 1rem;
+        padding: 1rem 1rem;
         border-radius: var(--ac-radius-input);
         background: var(--ac-bg);
     }
@@ -261,19 +261,19 @@ require_once ROOT_PATH . '/views/layout.php';
     /* 裁剪区 */
     .cropper-wrap {
         display: none;
-        margin-bottom: 1.3rem;
+        margin-bottom: 1.25rem;
     }
 
     .cropper-wrap.active {
         display: grid;
         grid-template-columns: 1.4fr 1fr;
-        gap: 1.2rem;
+        gap: 1.25rem;
     }
 
     .cropper-col {
         display: flex;
         flex-direction: column;
-        gap: .6rem;
+        gap: .5rem;
         min-width: 0;
     }
 
@@ -312,13 +312,13 @@ require_once ROOT_PATH . '/views/layout.php';
     .cropper-actions {
         display: flex;
         flex-direction: column;
-        gap: .6rem;
+        gap: .5rem;
     }
 
     /* 提交区 */
     .submit-wrap {
         display: none;
-        margin-bottom: 1.3rem;
+        margin-bottom: 1.25rem;
     }
 
     .submit-wrap.active {
@@ -337,7 +337,7 @@ require_once ROOT_PATH . '/views/layout.php';
 
     /* 裁剪面板里的尺寸提示：太小变警示色 */
     .crop-size-hint {
-        margin: 0 0 .2rem;
+        margin: 0 0 .25rem;
         font-size: .78rem;
         color: var(--ac-ink-500);
     }
@@ -371,9 +371,9 @@ require_once ROOT_PATH . '/views/layout.php';
         display: none;
         flex-direction: column;
         align-items: center;
-        gap: .8rem;
+        gap: .75rem;
         padding: 2rem 0;
-        margin-bottom: 1.3rem;
+        margin-bottom: 1.25rem;
         text-align: center;
     }
 
@@ -408,15 +408,15 @@ require_once ROOT_PATH . '/views/layout.php';
     }
 
     .result-card {
-        padding: 1.6rem;
+        padding: 1.5rem;
     }
 
     .result-top {
         display: flex;
         align-items: center;
         flex-wrap: wrap;
-        gap: .6rem;
-        margin-bottom: .2rem;
+        gap: .5rem;
+        margin-bottom: .25rem;
     }
 
     .result-name {
@@ -424,7 +424,7 @@ require_once ROOT_PATH . '/views/layout.php';
         font-size: 1.5rem;
         font-weight: 800;
         color: var(--ac-ink-900);
-        margin-right: .2rem;
+        margin-right: .25rem;
     }
 
     .result-link {
@@ -434,7 +434,7 @@ require_once ROOT_PATH . '/views/layout.php';
     .result-confidence {
         color: var(--ac-ink-500);
         font-size: .92rem;
-        margin-bottom: 1.2rem;
+        margin-bottom: 1.25rem;
     }
 
     .result-confidence .mono {
@@ -445,13 +445,13 @@ require_once ROOT_PATH . '/views/layout.php';
     .prob-list {
         display: flex;
         flex-direction: column;
-        gap: .7rem;
+        gap: .75rem;
     }
 
     .prob-item {
         display: flex;
         align-items: center;
-        gap: .8rem;
+        gap: .75rem;
     }
 
     .prob-item .name {
@@ -504,9 +504,9 @@ require_once ROOT_PATH . '/views/layout.php';
     .skeleton-card {
         display: grid;
         grid-template-columns: 64px 1fr auto;
-        gap: .8rem;
+        gap: .75rem;
         align-items: center;
-        padding: .6rem;
+        padding: .5rem;
         border: 1px solid var(--ac-line, #f0e6ea);
         border-radius: var(--ac-radius-card);
     }
@@ -567,7 +567,7 @@ require_once ROOT_PATH . '/views/layout.php';
     /* 一张图多个角色：待提交列表 */
     .human-form-actions {
         display: flex;
-        gap: .6rem;
+        gap: .5rem;
         flex-wrap: wrap;
     }
 
@@ -578,7 +578,7 @@ require_once ROOT_PATH . '/views/layout.php';
     .pending-item {
         display: grid;
         grid-template-columns: 56px 1fr auto;
-        gap: .7rem;
+        gap: .75rem;
         align-items: center;
         padding: .5rem;
         margin-top: .5rem;
@@ -602,14 +602,14 @@ require_once ROOT_PATH . '/views/layout.php';
 
     /* 已有票：按投票人分组 */
     .vote-group {
-        margin-top: .8rem;
+        margin-top: .75rem;
     }
 
     .vote-group-head {
         font-size: .8rem;
         font-weight: 700;
         color: var(--ac-ink-600);
-        padding-bottom: .2rem;
+        padding-bottom: .25rem;
         border-bottom: 1px solid var(--ac-line, #f0e6ea);
     }
 
@@ -668,7 +668,7 @@ require_once ROOT_PATH . '/views/layout.php';
 
     .human-crop-side .col-label {
         display: block;
-        margin-bottom: .4rem;
+        margin-bottom: .5rem;
         font-size: .8rem;
         font-weight: 700;
         color: var(--ac-ink-600);
@@ -677,7 +677,7 @@ require_once ROOT_PATH . '/views/layout.php';
     .human-crop-actions {
         display: flex;
         justify-content: flex-end;
-        margin-bottom: .4rem;
+        margin-bottom: .5rem;
     }
 
     /* 能工智人：左边自己拉框，右边预览 */
@@ -686,7 +686,7 @@ require_once ROOT_PATH . '/views/layout.php';
         grid-template-columns: minmax(0, 1fr) 200px;
         gap: 1rem;
         align-items: start;
-        margin-bottom: 1.1rem;
+        margin-bottom: 1rem;
     }
 
     .human-crop-canvas {
@@ -702,7 +702,7 @@ require_once ROOT_PATH . '/views/layout.php';
     }
 
     .human-crop-side .hint {
-        margin-bottom: .6rem;
+        margin-bottom: .5rem;
     }
 
     .human-crop-preview {
@@ -711,7 +711,7 @@ require_once ROOT_PATH . '/views/layout.php';
         overflow: hidden;
         border-radius: var(--ac-radius-card);
         background: var(--ac-surface-2, #f6f2f4);
-        margin-bottom: .6rem;
+        margin-bottom: .5rem;
     }
 
     .human-crop-preview img {
@@ -722,7 +722,7 @@ require_once ROOT_PATH . '/views/layout.php';
     .form-row {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-        gap: .9rem;
+        gap: 1rem;
     }
 
     .history-item.active {
@@ -738,8 +738,8 @@ require_once ROOT_PATH . '/views/layout.php';
 
     /* 37ac 卡片里的"每个人物"区块 */
     .char-block {
-        margin-top: .7rem;
-        padding-top: .55rem;
+        margin-top: .75rem;
+        padding-top: .5rem;
         border-top: 1px dashed var(--ac-line, #f0e6ea);
     }
 
@@ -751,9 +751,9 @@ require_once ROOT_PATH . '/views/layout.php';
     .char-head {
         display: flex;
         align-items: center;
-        gap: .35rem;
+        gap: .25rem;
         flex-wrap: wrap;
-        margin-bottom: .35rem;
+        margin-bottom: .25rem;
     }
 
     .char-index {
@@ -780,13 +780,13 @@ require_once ROOT_PATH . '/views/layout.php';
     }
 
     .cand-ip {
-        margin-left: .35rem;
+        margin-left: .25rem;
         font-size: .68rem;
         vertical-align: middle;
     }
 
     .cand-link {
-        margin: -.1rem 0 .35rem;
+        margin: 0rem 0 .25rem;
         font-size: .75rem;
         text-align: right;
     }
@@ -823,8 +823,8 @@ require_once ROOT_PATH . '/views/layout.php';
     /* ---------- 标签页：上传识别 / 历史识别 / 能工智人 ---------- */
     .upload-tabs {
         display: flex;
-        gap: .4rem;
-        margin-bottom: 1.2rem;
+        gap: .5rem;
+        margin-bottom: 1.25rem;
         border-bottom: 1px solid var(--ac-line, #f0e6ea);
         flex-wrap: wrap;
     }
@@ -833,7 +833,7 @@ require_once ROOT_PATH . '/views/layout.php';
         appearance: none;
         border: 0;
         background: transparent;
-        padding: .6rem 1rem;
+        padding: .5rem 1rem;
         font: inherit;
         font-weight: 800;
         color: var(--ac-ink-500);
@@ -841,7 +841,7 @@ require_once ROOT_PATH . '/views/layout.php';
         border-bottom: 2px solid transparent;
         display: inline-flex;
         align-items: center;
-        gap: .35rem;
+        gap: .25rem;
     }
 
     .upload-tab:hover {
@@ -870,12 +870,12 @@ require_once ROOT_PATH . '/views/layout.php';
     }
 
     .panel-head h3 {
-        margin: 0 0 .2rem;
+        margin: 0 0 .25rem;
     }
 
     .tag-human {
         display: inline-block;
-        padding: .1rem .45rem;
+        padding: 0rem .5rem;
         border-radius: var(--ac-radius-pill);
         background: var(--ac-pink-100);
         color: var(--ac-pink-700);
@@ -894,7 +894,7 @@ require_once ROOT_PATH . '/views/layout.php';
     }
 
     .channel-card {
-        padding: 1.1rem 1.2rem;
+        padding: 1rem 1.25rem;
     }
 
     .channel-head {
@@ -902,7 +902,7 @@ require_once ROOT_PATH . '/views/layout.php';
         justify-content: space-between;
         align-items: center;
         gap: .5rem;
-        margin-bottom: .7rem;
+        margin-bottom: .75rem;
     }
 
     .channel-title {
@@ -917,7 +917,7 @@ require_once ROOT_PATH . '/views/layout.php';
 
     .channel-chip {
         display: inline-block;
-        padding: .1rem .45rem;
+        padding: 0rem .5rem;
         border-radius: var(--ac-radius-pill);
         font-size: .72rem;
         font-weight: 700;
@@ -950,7 +950,7 @@ require_once ROOT_PATH . '/views/layout.php';
     /* 通道回退：节点做不了请求的推理方式，这条其实是另一种模型给的（别当成该通道自己的结果） */
     .channel-fallback {
         margin-top: .5rem;
-        padding: .35rem .55rem;
+        padding: .25rem .5rem;
         border-radius: var(--ac-radius-input);
         background: var(--ac-warning-bg, #FCF0DE);
         color: #8a6100;
@@ -965,10 +965,10 @@ require_once ROOT_PATH . '/views/layout.php';
 
     .result-tools {
         display: flex;
-        gap: .6rem;
+        gap: .5rem;
         align-items: center;
         flex-wrap: wrap;
-        margin-top: .2rem;
+        margin-top: .25rem;
     }
 
     .task-id-line {
@@ -981,15 +981,15 @@ require_once ROOT_PATH . '/views/layout.php';
     .history-list {
         display: flex;
         flex-direction: column;
-        gap: .6rem;
+        gap: .5rem;
     }
 
     .history-item {
         display: grid;
         grid-template-columns: 64px 1fr auto;
-        gap: .8rem;
+        gap: .75rem;
         align-items: center;
-        padding: .6rem;
+        padding: .5rem;
         border: 1px solid var(--ac-line, #f0e6ea);
         border-radius: var(--ac-radius-card);
     }
@@ -1004,7 +1004,7 @@ require_once ROOT_PATH . '/views/layout.php';
 
     .history-line {
         display: flex;
-        gap: .6rem;
+        gap: .5rem;
         align-items: baseline;
         flex-wrap: wrap;
     }
@@ -1020,19 +1020,19 @@ require_once ROOT_PATH . '/views/layout.php';
 
     .history-chips {
         display: flex;
-        gap: .35rem;
+        gap: .25rem;
         flex-wrap: wrap;
-        margin-top: .35rem;
+        margin-top: .25rem;
     }
 
     .history-actions {
         display: flex;
-        gap: .4rem;
+        gap: .5rem;
     }
 
     /* ---------- 能工智人（人工通道） ---------- */
     .human-preview {
-        margin: .4rem 0 1rem;
+        margin: .5rem 0 1rem;
     }
 
     .human-preview img {
@@ -1045,7 +1045,7 @@ require_once ROOT_PATH . '/views/layout.php';
     .human-form {
         display: flex;
         flex-direction: column;
-        gap: .9rem;
+        gap: 1rem;
         max-width: 520px;
     }
 
@@ -1055,9 +1055,9 @@ require_once ROOT_PATH . '/views/layout.php';
 
     .name-suggest {
         display: flex;
-        gap: .35rem;
+        gap: .25rem;
         flex-wrap: wrap;
-        margin-top: .4rem;
+        margin-top: .5rem;
     }
 
     .name-suggest button {
@@ -1065,7 +1065,7 @@ require_once ROOT_PATH . '/views/layout.php';
         border: 1px solid var(--ac-line, #e6dade);
         background: var(--ac-surface, #fff);
         border-radius: var(--ac-radius-pill);
-        padding: .15rem .6rem;
+        padding: .25rem .5rem;
         font: inherit;
         font-size: .8rem;
         cursor: pointer;
@@ -1077,14 +1077,14 @@ require_once ROOT_PATH . '/views/layout.php';
     }
 
     .human-votes {
-        margin-top: 1.2rem;
+        margin-top: 1.25rem;
     }
 
     .vote-row {
         display: flex;
-        gap: .6rem;
+        gap: .5rem;
         align-items: baseline;
-        padding: .45rem 0;
+        padding: .5rem 0;
         border-bottom: 1px dashed var(--ac-line, #f0e6ea);
         font-size: .9rem;
         flex-wrap: wrap;
@@ -1119,7 +1119,7 @@ require_once ROOT_PATH . '/views/layout.php';
         color: var(--ac-pink-700);
         background: var(--ac-pink-50);
         border-radius: var(--ac-radius-pill);
-        padding: .1rem .5rem;
+        padding: 0rem .5rem;
         white-space: nowrap;
     }
 
@@ -1142,8 +1142,8 @@ require_once ROOT_PATH . '/views/layout.php';
     .char-block[data-index] .char-conf::after {
         content: '详情';
         display: inline-block;
-        margin-left: .4rem;
-        padding: .02rem .38rem;
+        margin-left: .5rem;
+        padding: 0rem .5rem;
         border-radius: var(--ac-radius-pill);
         background: var(--ac-pink-50);
         color: var(--ac-pink-700);
@@ -1164,7 +1164,7 @@ require_once ROOT_PATH . '/views/layout.php';
     .detail-modal {
         width: min(1040px, calc(100vw - 2rem));
         max-height: 90vh;
-        padding: 1.15rem 1.25rem;
+        padding: 1.25rem 1.25rem;
     }
 
     /* 关掉之后必须真的看不见：.ac-modal 的 display:flex 是作者样式，
@@ -1190,8 +1190,8 @@ require_once ROOT_PATH . '/views/layout.php';
 
     .detail-tabs {
         display: flex;
-        gap: .2rem;
-        padding: .2rem;
+        gap: .25rem;
+        padding: .25rem;
         border-radius: var(--ac-radius-pill);
         background: var(--ac-surface-2);
     }
@@ -1203,7 +1203,7 @@ require_once ROOT_PATH . '/views/layout.php';
         font: inherit;
         font-size: .82rem;
         font-weight: 700;
-        padding: .22rem .7rem;
+        padding: .25rem .75rem;
         border-radius: var(--ac-radius-pill);
         cursor: pointer;
         transition: background var(--ac-dur-fast) var(--ac-ease-out), color var(--ac-dur-fast) var(--ac-ease-out);
@@ -1221,7 +1221,7 @@ require_once ROOT_PATH . '/views/layout.php';
         color: var(--ac-ink-500);
         font-size: 1rem;
         line-height: 1;
-        padding: .3rem .45rem;
+        padding: .25rem .5rem;
         border-radius: var(--ac-radius-pill);
         cursor: pointer;
     }
@@ -1237,7 +1237,7 @@ require_once ROOT_PATH . '/views/layout.php';
         align-items: center;
         gap: .5rem;
         flex-wrap: wrap;
-        margin-bottom: .7rem;
+        margin-bottom: .75rem;
         font-size: .8rem;
         color: var(--ac-ink-500);
     }
@@ -1316,7 +1316,7 @@ require_once ROOT_PATH . '/views/layout.php';
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
-        padding: .08rem .45rem;
+        padding: 0rem .5rem;
         border-radius: var(--ac-radius-pill);
         background: var(--ac-pink-500);
         color: #fff;
@@ -1340,13 +1340,13 @@ require_once ROOT_PATH . '/views/layout.php';
         gap: .5rem;
         max-height: 62vh;
         overflow-y: auto;
-        padding-right: .2rem;
+        padding-right: .25rem;
     }
 
     .detail-row {
         border: 1px solid var(--ac-line, #f0e6ea);
         border-radius: var(--ac-radius-input);
-        padding: .55rem .7rem;
+        padding: .5rem .75rem;
         cursor: pointer;
         transition: border-color var(--ac-dur-fast) var(--ac-ease-out), background var(--ac-dur-fast) var(--ac-ease-out);
     }
@@ -1359,7 +1359,7 @@ require_once ROOT_PATH . '/views/layout.php';
     .detail-row-head {
         display: flex;
         align-items: center;
-        gap: .45rem;
+        gap: .5rem;
         flex-wrap: wrap;
     }
 
@@ -1374,18 +1374,18 @@ require_once ROOT_PATH . '/views/layout.php';
         color: var(--ac-pink-700);
         background: var(--ac-pink-100);
         border-radius: var(--ac-radius-pill);
-        padding: .05rem .4rem;
+        padding: 0rem .5rem;
     }
 
     .detail-bbox {
-        margin-top: .3rem;
+        margin-top: .25rem;
         font-family: var(--ac-font-mono);
         font-size: .72rem;
         color: var(--ac-ink-500);
     }
 
     .detail-sub {
-        margin-top: .3rem;
+        margin-top: .25rem;
         font-size: .78rem;
         color: var(--ac-ink-500);
     }
@@ -1394,7 +1394,7 @@ require_once ROOT_PATH . '/views/layout.php';
     .detail-empty {
         font-size: .84rem;
         color: var(--ac-ink-500);
-        padding: .3rem 0;
+        padding: .25rem 0;
     }
 
     @media (max-width: 860px) {
@@ -2073,7 +2073,7 @@ require_once ROOT_PATH . '/views/layout.php';
                     el.textContent = '';
                     el.classList.remove('warn');
                 }
-                if (btn) btn.disabled = false;
+                Btn.loading(btn, false);
                 return;
             }
             const tooSmall = Math.min(size.width, size.height) < MIN_IMAGE_SHORT_SIDE ||
@@ -2090,7 +2090,7 @@ require_once ROOT_PATH . '/views/layout.php';
         /* 处理文件选择 */
         handleFileSelect(event) {
             const file = event.target.files[0];
-            if (file) this.handleFile(file).catch((e) => Notify.error('图片处理失败：' + (e.message || e)));
+            if (file) this.handleFile(file).catch((e) => Notify.errorFrom(e, '图片处理失败，请换一张图片重试'));
         }
 
         /* 处理拖拽 */
@@ -2108,7 +2108,7 @@ require_once ROOT_PATH . '/views/layout.php';
             event.preventDefault();
             this.uploadArea.classList.remove('drag-over');
             const files = event.dataTransfer.files;
-            if (files.length > 0) this.handleFile(files[0]).catch((e) => Notify.error('图片处理失败：' + (e.message || e)));
+            if (files.length > 0) this.handleFile(files[0]).catch((e) => Notify.errorFrom(e, '图片处理失败，请换一张图片重试'));
         }
 
         /* 处理图片文件（返回 true 表示已收下） */
@@ -2863,9 +2863,10 @@ require_once ROOT_PATH . '/views/layout.php';
                     };
                 }
                 if (!resp.ok && !opts.tolerant) {
-                    const err = new Error(data.message || ('读取失败 (' + resp.status + ')'));
+                    const err = new Error(data.message || '任务读取失败，请稍后重试');
                     err.status = resp.status;
                     err.data = data;
+                    err.userFacing = true;
                     throw err;
                 }
                 return result;
@@ -2887,7 +2888,7 @@ require_once ROOT_PATH . '/views/layout.php';
         /* 回退查询任务结果：SSE 完成事件丢失时，查一次 /api/tasks/{task_id}，没好就交给统一轮询 */
         async recoverResult() {
             if (!this.currentTaskId) {
-                throw new Error('未收到识别结果');
+                throw Object.assign(new Error('未收到识别结果'), { userFacing: true });
             }
             const taskId = this.currentTaskId;
             this.updateProgressStatus('正在获取识别结果...');
@@ -2908,7 +2909,7 @@ require_once ROOT_PATH . '/views/layout.php';
                 return;
             }
             if (data.status === 'failed' || data.status === 'error') {
-                throw new Error(data.message || '识别失败，请稍后重试');
+                throw Object.assign(new Error(data.message || '识别失败，请稍后重试'), { userFacing: true });
             }
 
             // 还没有最终结果：先把已有通道画出来，剩下交给轮询链自动更新
@@ -2937,12 +2938,12 @@ require_once ROOT_PATH . '/views/layout.php';
 
                 const response = await fetch(url);
                 if (!response.ok) {
-                    throw new Error(`无法加载图片 (${response.status})`);
+                    throw Object.assign(new Error('图片链接已失效，无法加载'), { userFacing: true });
                 }
 
                 const blob = await response.blob();
                 if (!blob.type.match('image.*')) {
-                    throw new Error('链接返回的不是图片文件');
+                    throw Object.assign(new Error('链接返回的不是图片文件'), { userFacing: true });
                 }
 
                 const fileName = `url_image_${Date.now()}.${blob.type.split('/')[1]}`;
@@ -3062,8 +3063,8 @@ require_once ROOT_PATH . '/views/layout.php';
                 '<span class="sk-thumb flow-empty"></span>' +
                 '<span class="sk-body">' +
                 '<span class="sk-line flow-empty" style="width:42%"></span>' +
-                '<span class="sk-line flow-empty" style="width:72%;margin-top:.5rem"></span>' +
-                '<span class="sk-chip flow-empty" style="margin-top:.5rem"></span>' +
+                '<span class="sk-line flow-empty" style="width:72%;margin-top: .5rem"></span>' +
+                '<span class="sk-chip flow-empty" style="margin-top: .5rem"></span>' +
                 '</span>' +
                 '<span class="sk-btn flow-empty"></span>' +
                 '</div>';
@@ -3074,8 +3075,8 @@ require_once ROOT_PATH . '/views/layout.php';
             const one = '<div class="card channel-card">' +
                 '<div class="channel-head"><span class="sk-line flow-empty" style="width:38%"></span></div>' +
                 '<span class="sk-line flow-empty" style="width:88%"></span>' +
-                '<span class="sk-line flow-empty" style="width:74%;margin-top:.55rem"></span>' +
-                '<span class="sk-line flow-empty" style="width:56%;margin-top:.55rem"></span>' +
+                '<span class="sk-line flow-empty" style="width:74%;margin-top: .5rem"></span>' +
+                '<span class="sk-line flow-empty" style="width:56%;margin-top: .5rem"></span>' +
                 '</div>';
             return '<div class="channel-grid">' + new Array(count || 3).fill(one).join('') + '</div>';
         }
@@ -3423,7 +3424,7 @@ require_once ROOT_PATH . '/views/layout.php';
             html += '<strong>' + escapeHtml(row.title) + '</strong>';
             if (row.ip) html += '<span class="badge badge-neutral cand-ip">' + escapeHtml(row.ip) + '</span>';
             if (row.prob !== null && row.prob !== undefined) {
-                html += '<span class="mono" style="margin-left:auto">' + row.prob.toFixed(2) + '%</span>';
+                html += '<span class="mono" style="margin-left: auto">' + row.prob.toFixed(2) + '%</span>';
             }
             html += '</div>';
             if (row.box) {
@@ -3606,7 +3607,7 @@ require_once ROOT_PATH . '/views/layout.php';
             const meta = CHANNEL_META.find((m) => m.key === state.key) || CHANNEL_META[0];
             const rowSkeleton = '<div class="detail-row">' +
                 '<span class="sk-line flow-empty" style="width:58%"></span>' +
-                '<span class="sk-line flow-empty" style="width:36%;margin-top:.45rem"></span>' +
+                '<span class="sk-line flow-empty" style="width:36%;margin-top: .5rem"></span>' +
                 '</div>';
             let html = '';
             html += '<div class="detail-head">';
@@ -3881,7 +3882,7 @@ require_once ROOT_PATH . '/views/layout.php';
                     wrap.innerHTML = '';
                     wrap.classList.remove('active');
                 }
-                Notify.error('读取任务结果失败：' + (e.message || e));
+                Notify.errorFrom(e, '任务结果读取失败，请稍后重试');
             } finally {
                 this.setBusy(false);
             }
@@ -4021,7 +4022,10 @@ require_once ROOT_PATH . '/views/layout.php';
                 });
                 const data = await resp.json();
                 if (!resp.ok || data.success === false) {
-                    throw new Error(data.message || ('加载失败 (' + resp.status + ')'));
+                    // 后端返回的 message 是面向用户的文案，可原样提示
+                    const err = new Error(data.message || '加载失败，请稍后重试');
+                    err.userFacing = true;
+                    throw err;
                 }
                 const tasks = (data.data && data.data.tasks) || [];
                 this.publicTasks = tasks;
@@ -4033,7 +4037,7 @@ require_once ROOT_PATH . '/views/layout.php';
             } catch (e) {
                 this.publicTasks = [];
                 wrap.innerHTML = '<div class="empty"><div class="empty-icon"><i class="ph ph-cloud-slash"></i></div><p>暂时拿不到列表，点「刷新」重试</p></div>';
-                Notify.error('加载最近任务失败：' + (e.message || e));
+                Notify.errorFrom(e, '最近任务加载失败，请稍后重试');
             } finally {
                 this.setBusy(false);
             }
@@ -4084,7 +4088,10 @@ require_once ROOT_PATH . '/views/layout.php';
                 });
                 const data = await resp.json();
                 if (!resp.ok || data.success === false) {
-                    throw new Error(data.message || ('加载失败 (' + resp.status + ')'));
+                    // 后端返回的 message 是面向用户的文案，可原样提示
+                    const err = new Error(data.message || '加载失败，请稍后重试');
+                    err.userFacing = true;
+                    throw err;
                 }
                 const tasks = ((data.data && data.data.tasks) || []).filter((t) => t.image_available);
                 this.humanTaskPool = tasks;
@@ -4112,7 +4119,7 @@ require_once ROOT_PATH . '/views/layout.php';
                 this.humanTaskPool = [];
                 wrap.style.minHeight = '';
                 wrap.innerHTML = '<div class="empty"><div class="empty-icon"><i class="ph ph-cloud-slash"></i></div><p>暂时拿不到待标注任务，点「刷新任务」重试</p></div>';
-                Notify.error('加载待标注任务失败：' + (e.message || e));
+                Notify.errorFrom(e, '待标注任务加载失败，请稍后重试');
             } finally {
                 this.listLoading = false;
                 this.setBusy(false);
@@ -4373,7 +4380,7 @@ require_once ROOT_PATH . '/views/layout.php';
                 this.releaseListPin();
                 if (meta) meta.textContent = '';
                 if (this.humanVotes) this.humanVotes.innerHTML = '';
-                Notify.error('任务读取失败：' + (e.message || e));
+                Notify.errorFrom(e, '任务读取失败，请稍后重试');
             } finally {
                 this.setBusy(false);
             }
@@ -4637,7 +4644,7 @@ require_once ROOT_PATH . '/views/layout.php';
             };
 
             const btn = this.btnSubmitVotes || this.humanForm.querySelector('button[type="submit"]');
-            if (btn) btn.disabled = true;
+            Btn.loading(btn, true);
             try {
                 const resp = await fetch(window.API_BASE_URL + '/upload/human', {
                     method: 'POST',
@@ -4649,7 +4656,7 @@ require_once ROOT_PATH . '/views/layout.php';
                 });
                 const data = await resp.json();
                 if (!resp.ok || data.success === false) {
-                    throw new Error(data.message || ('提交失败 (' + resp.status + ')'));
+                    throw Object.assign(new Error(data.message || '提交失败，请稍后重试'), { userFacing: true });
                 }
                 Notify.success('已提交 ' + list.length + ' 个角色标注，感谢投喂！');
                 this.pendingVotes = [];
@@ -4659,9 +4666,9 @@ require_once ROOT_PATH . '/views/layout.php';
                 await this.loadHumanTask(taskId);
                 this.loadHumanTaskList();
             } catch (e) {
-                Notify.error('提交失败：' + (e.message || e));
+                Notify.errorFrom(e, '提交失败，请稍后重试');
             } finally {
-                if (btn) btn.disabled = false;
+                Btn.loading(btn, false);
             }
         }
     }

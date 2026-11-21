@@ -95,8 +95,7 @@ require_once ROOT_PATH . '/views/layout.php';
             return;
         }
 
-        btn.disabled = true;
-        btn.textContent = '注册中…';
+        Btn.loading(btn, true);
 
         try {
             const response = await fetch(`${API_BASE_URL}/auth/register`, {
@@ -120,13 +119,11 @@ require_once ROOT_PATH . '/views/layout.php';
                 }, 1500);
             } else {
                 showError(result.message || '注册失败');
-                btn.disabled = false;
-                btn.textContent = '注册';
+                Btn.loading(btn, false);
             }
         } catch (error) {
             showError('网络错误，请检查服务器连接');
-            btn.disabled = false;
-            btn.textContent = '注册';
+            Btn.loading(btn, false);
         }
     }
 

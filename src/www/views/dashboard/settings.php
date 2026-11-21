@@ -10,26 +10,26 @@ if (!$isAjax) {
 
 <style>
     .dash-page-head {
-        margin-bottom: 1.6rem;
+        margin-bottom: 1.5rem;
     }
 
     .dash-page-head h2 {
-        margin-bottom: .2rem;
+        margin-bottom: .25rem;
     }
 
     .settings-section {
         background: var(--ac-surface);
-        padding: 1.4rem 1.5rem;
+        padding: 1.5rem 1.5rem;
         border-radius: var(--ac-radius-card);
         box-shadow: var(--ac-shadow-card);
-        margin-bottom: 1.3rem;
+        margin-bottom: 1.25rem;
     }
 
     .settings-section h3 {
         display: flex;
         align-items: center;
-        gap: .45rem;
-        margin: 0 0 1.1rem;
+        gap: .5rem;
+        margin: 0 0 1rem;
         padding-bottom: .75rem;
         border-bottom: 1px solid var(--ac-surface-2);
     }
@@ -52,7 +52,7 @@ if (!$isAjax) {
         font-weight: 600;
         color: var(--ac-ink-900);
         cursor: pointer;
-        padding: .35rem 0;
+        padding: .25rem 0;
         width: fit-content;
     }
 
@@ -65,7 +65,7 @@ if (!$isAjax) {
 
     .danger-zone {
         display: flex;
-        gap: .8rem;
+        gap: .75rem;
         flex-wrap: wrap;
     }
 
@@ -141,7 +141,7 @@ if (!$isAjax) {
             <input type="checkbox" name="node_offline" checked />
             节点离线时通知
         </label>
-        <div style="margin-top: .9rem;">
+        <div style="margin-top: 1rem;">
             <button type="submit" class="btn btn-primary"><i class="ph ph-floppy-disk"></i> 保存偏好</button>
         </div>
     </form>
@@ -159,23 +159,16 @@ if (!$isAjax) {
 
 <script>
     function showDeleteAccountConfirm() {
-        Modal.show('删除账户', `
-            <p style="color: var(--ac-danger); font-weight: 600;">此操作不可恢复。</p>
-            <p>确定要删除你的账户吗？所有数据将被永久清除。</p>
-        `, [{
-                text: '取消',
-                class: 'btn btn-ghost btn-sm',
-                click: () => Modal.close()
-            },
-            {
-                text: '确认删除',
-                class: 'btn btn-danger btn-sm',
-                click: () => {
-                    Modal.close();
-                    Notify.info('请联系管理员删除账户');
-                }
-            }
-        ]);
+        Modal.confirm({
+            title: '删除账户',
+            description: `
+                <p style="color: var(--ac-danger); font-weight: 600;">此操作不可恢复。</p>
+                <p>确定要删除你的账户吗？所有数据将被永久清除。</p>
+            `,
+            confirmText: '删除账户',
+            danger: true,
+            onConfirm: () => Notify.info('请联系管理员删除账户'),
+        });
     }
 
     // 加载个人信息
@@ -204,7 +197,7 @@ if (!$isAjax) {
         };
 
         const btn = form.querySelector('button[type="submit"]');
-        btn.disabled = true;
+        Btn.loading(btn, true);
 
         try {
             const result = await Auth.put(`${window.API_BASE_URL}/users/profile`, data);
@@ -217,7 +210,7 @@ if (!$isAjax) {
         } catch (e) {
             Notify.error('网络错误');
         } finally {
-            btn.disabled = false;
+            Btn.loading(btn, false);
         }
     });
 
@@ -240,7 +233,7 @@ if (!$isAjax) {
         }
 
         const btn = form.querySelector('button[type="submit"]');
-        btn.disabled = true;
+        Btn.loading(btn, true);
 
         try {
             const result = await Auth.put(`${window.API_BASE_URL}/users/change-password`, {
@@ -256,7 +249,7 @@ if (!$isAjax) {
         } catch (e) {
             Notify.error('网络错误');
         } finally {
-            btn.disabled = false;
+            Btn.loading(btn, false);
         }
     });
 
@@ -271,7 +264,7 @@ if (!$isAjax) {
         };
 
         const btn = form.querySelector('button[type="submit"]');
-        btn.disabled = true;
+        Btn.loading(btn, true);
 
         try {
             // 保存到本地存储（后端预留接口）
@@ -280,7 +273,7 @@ if (!$isAjax) {
         } catch (e) {
             Notify.error('保存失败');
         } finally {
-            btn.disabled = false;
+            Btn.loading(btn, false);
         }
     });
 

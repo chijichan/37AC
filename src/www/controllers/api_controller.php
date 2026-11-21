@@ -157,11 +157,13 @@ class api_controller extends controller
         $response = curl_exec($ch);
 
         if ($response === false) {
+            // curl 错误码只写日志排查，不回显给用户
             $errno = curl_errno($ch);
+            error_log('[api_controller] 上游请求失败 curl_errno=' . $errno);
             curl_close($ch);
             http_response_code(502);
             header('Content-Type: application/json; charset=utf-8');
-            echo json_encode(['success' => false, 'message' => '后端服务不可用 (curl ' . $errno . ')']);
+            echo json_encode(['success' => false, 'message' => '识别服务暂时不可用，请稍后重试']);
             return;
         }
 

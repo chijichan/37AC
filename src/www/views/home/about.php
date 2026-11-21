@@ -13,28 +13,28 @@ require_once ROOT_PATH . '/views/layout.php';
     }
 
     .about-section {
-        padding: 2.2rem 0;
+        padding: 2.25rem 0;
     }
 
     .about-section h2 {
-        margin-bottom: .4rem;
+        margin-bottom: .5rem;
     }
 
     .about-section .section-sub {
-        margin-bottom: 1.6rem;
+        margin-bottom: 1.5rem;
     }
 
     .about-grid {
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: 1.2rem;
+        gap: 1.25rem;
     }
 
     .about-grid .card h3 {
         display: flex;
         align-items: center;
         gap: .5rem;
-        margin-bottom: .6rem;
+        margin-bottom: .5rem;
     }
 
     .about-grid .card h3 i {
@@ -49,7 +49,7 @@ require_once ROOT_PATH . '/views/layout.php';
     .tech-stack {
         display: flex;
         flex-wrap: wrap;
-        gap: .55rem;
+        gap: .5rem;
     }
 
     .project-tree {

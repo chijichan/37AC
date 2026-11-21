@@ -10,16 +10,16 @@ if (!$isAjax) {
 
 <style>
     .dash-page-head {
-        margin-bottom: 1.6rem;
+        margin-bottom: 1.5rem;
     }
 
     .dash-page-head h2 {
-        margin-bottom: .2rem;
+        margin-bottom: .25rem;
     }
 
     .toolbar {
         display: flex;
-        gap: .6rem;
+        gap: .5rem;
         align-items: center;
         flex-wrap: wrap;
         margin-bottom: 1rem;
@@ -39,7 +39,7 @@ if (!$isAjax) {
     .user-table th,
     .user-table td {
         text-align: left;
-        padding: .65rem .7rem;
+        padding: .75rem .75rem;
         border-bottom: 1px solid var(--ac-surface-2);
         vertical-align: middle;
     }
@@ -67,12 +67,12 @@ if (!$isAjax) {
 
     .row-actions {
         display: flex;
-        gap: .35rem;
+        gap: .25rem;
         flex-wrap: wrap;
     }
 
     .modal-form .field {
-        margin-bottom: .8rem;
+        margin-bottom: .75rem;
     }
 </style>
 
@@ -88,7 +88,7 @@ if (!$isAjax) {
     <button class="btn btn-ghost btn-sm" onclick="loadUsers()"><i class="ph ph-arrows-clockwise"></i> 刷新</button>
 </div>
 
-<div class="card" style="padding:1.2rem 1.3rem;">
+<div class="card" style="padding: 1.25rem 1.25rem;">
     <div id="users-wrap">
         <div class="skeleton" style="height: 120px;"></div>
     </div>
@@ -160,7 +160,7 @@ if (!$isAjax) {
                 <div class="field"><label>用户名</label><input type="text" name="username" class="input" required maxlength="50" /></div>
                 <div class="field"><label>密码</label><input type="password" name="password" class="input" required minlength="6" /></div>
                 <div class="field"><label>邮箱（可选）</label><input type="email" name="email" class="input" /></div>
-                <div class="field" style="margin-bottom:0;"><label>角色</label>
+                <div class="field" style="margin-bottom: 0;"><label>角色</label>
                     <select name="role" class="select"><option value="user" selected>普通用户</option><option value="admin">管理员</option></select>
                 </div>
             </form>`;
@@ -180,7 +180,7 @@ if (!$isAjax) {
             role: form.role.value,
         };
         if (!data.username || !data.password) { Notify.error('用户名和密码不能为空'); return; }
-        if (btn) { btn.disabled = true; btn.textContent = '创建中…'; }
+        Btn.loading(btn, true);
         try {
             const result = await Auth.post(`${window.API_BASE_URL}/admin/users`, data);
             if (result.success) {
@@ -191,7 +191,7 @@ if (!$isAjax) {
                 Notify.error(result.message || '创建失败');
             }
         } catch (e) { Notify.error('网络错误'); }
-        finally { if (btn) { btn.disabled = false; btn.textContent = '创建'; } }
+        finally { Btn.loading(btn, false); }
     }
 
     function showEditUserModal(id) {
@@ -207,7 +207,7 @@ if (!$isAjax) {
                         <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>管理员</option>
                     </select>
                 </div>
-                <div class="field" style="margin-bottom:0;"><label>状态</label>
+                <div class="field" style="margin-bottom: 0;"><label>状态</label>
                     <select name="status" class="select">
                         <option value="1" ${Number(user.status) === 1 ? 'selected' : ''}>启用</option>
                         <option value="0" ${Number(user.status) === 0 ? 'selected' : ''}>禁用</option>
@@ -228,7 +228,7 @@ if (!$isAjax) {
             role: form.role.value,
             status: parseInt(form.status.value, 10),
         };
-        if (btn) { btn.disabled = true; btn.textContent = '保存中…'; }
+        Btn.loading(btn, true);
         try {
             const result = await Auth.put(`${window.API_BASE_URL}/admin/users/${id}`, data);
             if (result.success) {
@@ -239,7 +239,7 @@ if (!$isAjax) {
                 Notify.error(result.message || '更新失败');
             }
         } catch (e) { Notify.error('网络错误'); }
-        finally { if (btn) { btn.disabled = false; btn.textContent = '保存'; } }
+        finally { Btn.loading(btn, false); }
     }
 
     async function toggleUserStatus(id, status) {
@@ -257,10 +257,13 @@ if (!$isAjax) {
     function confirmDeleteUser(id) {
         const user = currentUsers.find((u) => u.id === id);
         const name = user ? user.username : `#${id}`;
-        Modal.show('删除用户', `<p>确定要删除用户 <b>${escapeHtml(name)}</b> 吗？此操作不可恢复。</p>`, [
-            { text: '删除', class: 'btn btn-danger btn-sm', click: () => { Modal.close(); deleteUser(id); } },
-            { text: '取消', class: 'btn btn-ghost btn-sm', click: () => Modal.close() }
-        ]);
+        Modal.confirm({
+            title: '删除用户',
+            description: `<p>确定要删除用户 <b>${escapeHtml(name)}</b> 吗？此操作不可恢复。</p>`,
+            confirmText: '删除用户',
+            danger: true,
+            onConfirm: () => deleteUser(id),
+        });
     }
 
     async function deleteUser(id) {

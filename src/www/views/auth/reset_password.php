@@ -256,8 +256,7 @@ require_once ROOT_PATH . '/views/layout.php';
         }
 
         hideAlerts();
-        btn.disabled = true;
-        btn.textContent = '重置中…';
+        Btn.loading(btn, true);
 
         try {
             const response = await fetch(`${API_BASE_URL}/auth/reset-password`, {
@@ -280,13 +279,11 @@ require_once ROOT_PATH . '/views/layout.php';
                 startRedirectCountdown(5);
             } else {
                 showError(result.message || '密码重置失败，请重试');
-                btn.disabled = false;
-                btn.textContent = '重置密码';
+                Btn.loading(btn, false);
             }
         } catch (error) {
             showError('网络错误：无法连接到服务器，请检查网络或联系管理员');
-            btn.disabled = false;
-            btn.textContent = '重置密码';
+            Btn.loading(btn, false);
         }
     }
 

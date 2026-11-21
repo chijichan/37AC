@@ -29,8 +29,8 @@ require_once ROOT_PATH . '/views/layout.php';
     .contact-method {
         display: flex;
         align-items: flex-start;
-        gap: .9rem;
-        padding: 1.2rem 1.3rem;
+        gap: 1rem;
+        padding: 1.25rem 1.25rem;
     }
 
     .contact-method .icon {
@@ -53,7 +53,7 @@ require_once ROOT_PATH . '/views/layout.php';
 
     .contact-method .info strong {
         display: block;
-        margin-bottom: .15rem;
+        margin-bottom: .25rem;
     }
 
     .contact-method .info a {
@@ -63,7 +63,7 @@ require_once ROOT_PATH . '/views/layout.php';
 
     .contact-method .info span {
         display: block;
-        margin-top: .2rem;
+        margin-top: .25rem;
         font-size: .85rem;
         color: var(--ac-ink-500);
     }

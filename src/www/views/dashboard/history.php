@@ -10,26 +10,26 @@ if (!$isAjax) {
 
 <style>
     .dash-page-head {
-        margin-bottom: 1.6rem;
+        margin-bottom: 1.5rem;
     }
 
     .dash-page-head h2 {
-        margin-bottom: .2rem;
+        margin-bottom: .25rem;
     }
 
     .stat-summary {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-        gap: 1.1rem;
-        margin-bottom: 1.6rem;
+        gap: 1rem;
+        margin-bottom: 1.5rem;
     }
 
     .filter-card {
         background: var(--ac-surface);
         border-radius: var(--ac-radius-card);
         box-shadow: var(--ac-shadow-card);
-        padding: 1.2rem 1.4rem;
-        margin-bottom: 1.6rem;
+        padding: 1.25rem 1.5rem;
+        margin-bottom: 1.5rem;
     }
 
     .filter-grid {
@@ -54,7 +54,7 @@ if (!$isAjax) {
 
     .api-key-tag {
         display: inline-block;
-        padding: .15rem .6rem;
+        padding: .25rem .5rem;
         border-radius: var(--ac-radius-pill);
         font-size: .75rem;
         background: var(--ac-bg);
@@ -67,7 +67,7 @@ if (!$isAjax) {
         justify-content: center;
         align-items: center;
         gap: 1rem;
-        margin-top: 1.4rem;
+        margin-top: 1.5rem;
     }
 
     .pagination-bar .page-info {
@@ -79,7 +79,7 @@ if (!$isAjax) {
     .detail-grid {
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: .8rem 1.2rem;
+        gap: .75rem 1.25rem;
         margin-bottom: 1rem;
     }
 
@@ -87,7 +87,7 @@ if (!$isAjax) {
         display: block;
         font-size: .78rem;
         color: var(--ac-ink-500);
-        margin-bottom: .2rem;
+        margin-bottom: .25rem;
         font-weight: 600;
     }
 
@@ -99,7 +99,7 @@ if (!$isAjax) {
 
     pre.detail-json {
         background: var(--ac-bg);
-        padding: .9rem 1rem;
+        padding: 1rem 1rem;
         border-radius: var(--ac-radius-input);
         overflow-x: auto;
         font-size: .8rem;
@@ -116,7 +116,7 @@ if (!$isAjax) {
         }
 
         .filter-grid .field {
-            margin-bottom: .9rem;
+            margin-bottom: 1rem;
         }
 
         .detail-grid {
@@ -321,11 +321,11 @@ if (!$isAjax) {
                 <div class="detail-item"><strong>置信度</strong><span>${taskConf != null ? escapeHtml(String(taskConf)) + '%' : '--'}</span></div>
                 <div class="detail-item"><strong>API 密钥</strong><span>${escapeHtml(task.api_key_name || '--')}</span></div>
             </div>
-            <strong style="display:block; font-size:.78rem; color:var(--ac-ink-500); margin-bottom:.3rem;">原始返回数据</strong>
+            <strong style="display:block; font-size:.78rem; color:var(--ac-ink-500); margin-bottom: .25rem;">原始返回数据</strong>
             <pre class="detail-json">${escapeHtml(resultJson)}</pre>
         `;
 
-        Modal.show('任务详情', bodyHtml, [{
+        Modal.drawer('任务详情', bodyHtml, [{
             text: '关闭',
             class: 'btn btn-ghost btn-sm',
             click: () => Modal.close()

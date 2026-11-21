@@ -6,7 +6,7 @@ require_once ROOT_PATH . '/views/layout.php';
 <style>
     .admin-badge {
         display: inline-block;
-        padding: .15rem .5rem;
+        padding: .25rem .5rem;
         border-radius: var(--ac-radius-pill);
         background: var(--ac-pink-100);
         color: var(--ac-pink-700);
@@ -17,20 +17,20 @@ require_once ROOT_PATH . '/views/layout.php';
     }
 
     .dashboard-subnav {
-        padding-top: 1.4rem;
+        padding-top: 1.5rem;
     }
 
     .dash-nav-desktop {
         display: flex;
-        gap: .35rem;
+        gap: .25rem;
         flex-wrap: wrap;
     }
 
     .dash-nav-desktop a {
         display: inline-flex;
         align-items: center;
-        gap: .45rem;
-        padding: .5rem 1.05rem;
+        gap: .5rem;
+        padding: .5rem 1rem;
         border-radius: var(--ac-radius-pill);
         color: var(--ac-ink-700);
         font-weight: 600;
@@ -63,7 +63,7 @@ require_once ROOT_PATH . '/views/layout.php';
         align-items: center;
         justify-content: space-between;
         width: 100%;
-        padding: .65rem 1.1rem;
+        padding: .75rem 1rem;
         border-radius: var(--ac-radius-input);
         background: var(--ac-surface);
         border: 1.5px solid var(--ac-ink-100);
@@ -97,7 +97,7 @@ require_once ROOT_PATH . '/views/layout.php';
         background: var(--ac-surface);
         border-radius: var(--ac-radius-input);
         box-shadow: var(--ac-shadow-float);
-        padding: .45rem;
+        padding: .5rem;
         z-index: var(--ac-z-dropdown);
     }
 
@@ -109,8 +109,8 @@ require_once ROOT_PATH . '/views/layout.php';
     .dash-nav-dropdown a {
         display: flex;
         align-items: center;
-        gap: .55rem;
-        padding: .6rem .8rem;
+        gap: .5rem;
+        padding: .5rem .75rem;
         border-radius: 8px;
         font-weight: 600;
         font-size: .93rem;
@@ -128,7 +128,7 @@ require_once ROOT_PATH . '/views/layout.php';
     }
 
     .dashboard-main {
-        padding: 1.6rem 0 3rem;
+        padding: 1.5rem 0 3rem;
     }
 
     #dashboard-content {
@@ -166,8 +166,8 @@ require_once ROOT_PATH . '/views/layout.php';
 </style>
 
 <div class="dashboard-subnav ac-container">
-    <div class="admin-head-row" style="margin-bottom:.6rem;">
-        <h2 style="margin:0;font-size:1.15rem;">后台管理 <span class="admin-badge">ADMIN</span></h2>
+    <div class="admin-head-row" style="margin-bottom: .5rem;">
+        <h2 style="margin: 0;font-size:1.15rem;">后台管理 <span class="admin-badge">ADMIN</span></h2>
         <small style="color:var(--ac-ink-500);">37AC 管理控制台</small>
     </div>
 

@@ -10,26 +10,26 @@ if (!$isAjax) {
 
 <style>
     .dash-page-head {
-        margin-bottom: 1.6rem;
+        margin-bottom: 1.5rem;
     }
 
     .dash-page-head h2 {
-        margin-bottom: .2rem;
+        margin-bottom: .25rem;
     }
 
     .stat-summary {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-        gap: 1.1rem;
-        margin-bottom: 1.6rem;
+        gap: 1rem;
+        margin-bottom: 1.5rem;
     }
 
     .api-key-card {
         background: var(--ac-surface);
-        padding: 1.4rem 1.5rem;
+        padding: 1.5rem 1.5rem;
         border-radius: var(--ac-radius-card);
         box-shadow: var(--ac-shadow-card);
-        margin-bottom: 1.1rem;
+        margin-bottom: 1rem;
         transition: box-shadow var(--ac-dur) var(--ac-ease-out);
     }
 
@@ -39,13 +39,13 @@ if (!$isAjax) {
 
     .key-display {
         display: flex;
-        gap: .8rem;
+        gap: .75rem;
         align-items: center;
         background: var(--ac-bg);
-        padding: .65rem 1rem;
+        padding: .75rem 1rem;
         border-radius: var(--ac-radius-input);
         font-family: var(--ac-font-mono);
-        margin: .9rem 0;
+        margin: 1rem 0;
         font-size: .88rem;
     }
 
@@ -61,7 +61,7 @@ if (!$isAjax) {
         word-break: break-all;
         background: var(--ac-pink-50);
         border: 1.5px dashed var(--ac-pink-300);
-        padding: .9rem 1rem;
+        padding: 1rem 1rem;
         border-radius: var(--ac-radius-input);
         font-family: var(--ac-font-mono);
         font-size: .85rem;
@@ -78,7 +78,7 @@ if (!$isAjax) {
     }
 
     .card-header h4 {
-        margin: 0 0 .15rem;
+        margin: 0 0 .25rem;
     }
 
     .card-meta {
@@ -92,7 +92,7 @@ if (!$isAjax) {
     .card-meta dt {
         color: var(--ac-ink-500);
         font-size: .75rem;
-        margin-bottom: .15rem;
+        margin-bottom: .25rem;
     }
 
     .card-meta dd {
@@ -102,7 +102,7 @@ if (!$isAjax) {
     }
 
     .usage-row {
-        margin-top: .9rem;
+        margin-top: 1rem;
     }
 
     .usage-row .usage-label {
@@ -110,7 +110,7 @@ if (!$isAjax) {
         justify-content: space-between;
         font-size: .8rem;
         color: var(--ac-ink-500);
-        margin-bottom: .4rem;
+        margin-bottom: .5rem;
     }
 
     .card-footer {
@@ -154,10 +154,10 @@ if (!$isAjax) {
     <div class="stat"><span class="stat-value" id="stat-total-usage">--</span><span class="stat-label">总使用次数</span></div>
 </div>
 
-<section style="margin-bottom: 1.6rem;">
+<section style="margin-bottom: 1.5rem;">
     <div class="api-key-card">
-        <h3 style="margin-bottom:.4rem;">生成新密钥</h3>
-        <p style="font-size:.92rem; margin-bottom:1.1rem;">创建后请立即复制并安全保存，关闭提示后将无法再次查看完整密钥。</p>
+        <h3 style="margin-bottom: .5rem;">生成新密钥</h3>
+        <p style="font-size:.92rem; margin-bottom: 1rem;">创建后请立即复制并安全保存，关闭提示后将无法再次查看完整密钥。</p>
         <form id="form-create-key">
             <div class="create-form">
                 <div class="field full-width">
@@ -177,7 +177,7 @@ if (!$isAjax) {
                     <input type="number" name="max_usage" class="input" value="10000" min="0" />
                     <span class="hint">0 表示无限制</span>
                 </div>
-                <div class="field full-width" style="margin-bottom:0;">
+                <div class="field full-width" style="margin-bottom: 0;">
                     <button type="submit" class="btn btn-primary"><i class="ph ph-lock"></i> 生成密钥</button>
                 </div>
             </div>
@@ -198,22 +198,17 @@ if (!$isAjax) {
 <script>
     var allKeys = [];
 
-    // 确认对话框
+    // 确认对话框：统一走 Modal.confirm，避免各处再手搓一遍
     function showConfirm(title, message, onConfirm, danger = false) {
-        Modal.show(title, `<p>${message}</p>`, [{
-                text: '取消',
-                class: 'btn btn-ghost btn-sm',
-                click: () => Modal.close()
+        Modal.confirm({
+            title: title,
+            description: `<p>${message}</p>`,
+            confirmText: danger ? '确认删除' : '确认',
+            danger: danger,
+            onConfirm: () => {
+                if (onConfirm) onConfirm();
             },
-            {
-                text: '确认',
-                class: danger ? 'btn btn-danger btn-sm' : 'btn btn-primary btn-sm',
-                click: () => {
-                    Modal.close();
-                    if (onConfirm) onConfirm();
-                }
-            }
-        ]);
+        });
     }
 
     async function loadKeys() {
@@ -342,8 +337,7 @@ if (!$isAjax) {
 
         const btn = form.querySelector('button[type="submit"]');
         if (btn) {
-            btn.disabled = true;
-            btn.textContent = '生成中…';
+            Btn.loading(btn, true);
         }
 
         try {
@@ -378,10 +372,7 @@ if (!$isAjax) {
         } catch (e) {
             Notify.error('网络错误，请检查服务器连接');
         } finally {
-            if (btn) {
-                btn.disabled = false;
-                btn.innerHTML = '<i class="ph ph-lock"></i> 生成密钥';
-            }
+            Btn.loading(btn, false);
         }
     });
 

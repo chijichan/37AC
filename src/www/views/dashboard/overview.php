@@ -10,37 +10,37 @@ if (!$isAjax) {
 
 <style>
     .dash-page-head {
-        margin-bottom: 1.6rem;
+        margin-bottom: 1.5rem;
     }
 
     .dash-page-head h2 {
-        margin-bottom: .2rem;
+        margin-bottom: .25rem;
     }
 
     .dash-banner {
         background: linear-gradient(135deg, var(--ac-pink-50), var(--ac-pink-100));
         border-radius: var(--ac-radius-card);
-        padding: 1.6rem 1.8rem;
-        margin-bottom: 1.6rem;
+        padding: 1.5rem 1.75rem;
+        margin-bottom: 1.5rem;
     }
 
     .dash-banner h2 {
-        margin-bottom: .2rem;
+        margin-bottom: .25rem;
     }
 
     .stats-grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-        gap: 1.1rem;
-        margin-bottom: 1.6rem;
+        gap: 1rem;
+        margin-bottom: 1.5rem;
     }
 
     .dash-section-title {
         font-size: 1.1rem;
-        margin: 1.8rem 0 .9rem;
+        margin: 1.75rem 0 1rem;
         display: flex;
         align-items: center;
-        gap: .45rem;
+        gap: .5rem;
     }
 
     .dash-section-title i {
@@ -56,8 +56,8 @@ if (!$isAjax) {
     .action-button {
         display: flex;
         align-items: center;
-        gap: .8rem;
-        padding: 1.1rem 1.2rem;
+        gap: .75rem;
+        padding: 1rem 1.25rem;
         background: var(--ac-surface);
         border-radius: var(--ac-radius-card);
         box-shadow: var(--ac-shadow-card);
@@ -89,7 +89,7 @@ if (!$isAjax) {
     .dash-grid {
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: 1.1rem;
+        gap: 1rem;
     }
 
     .progress-container {
@@ -99,7 +99,7 @@ if (!$isAjax) {
     .progress-label {
         display: flex;
         justify-content: space-between;
-        margin-bottom: .45rem;
+        margin-bottom: .5rem;
         font-size: .88rem;
     }
 
@@ -117,8 +117,8 @@ if (!$isAjax) {
     .activity-item {
         display: flex;
         align-items: center;
-        gap: .9rem;
-        padding: .8rem 0;
+        gap: 1rem;
+        padding: .75rem 0;
         border-bottom: 1px solid var(--ac-surface-2);
     }
 
@@ -252,7 +252,7 @@ if (!$isAjax) {
             </div>
             <span class="prob-bar"><i id="system-disk-bar" style="width:0%"></i></span>
         </div>
-        <div class="progress-container" style="margin-bottom:0;">
+        <div class="progress-container" style="margin-bottom: 0;">
             <div class="progress-label">
                 <span>网络带宽</span>
                 <strong id="system-network">-- KB/s</strong>

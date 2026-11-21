@@ -19,16 +19,16 @@ require_once ROOT_PATH . '/views/layout.php';
         font-weight: 800;
         line-height: 1;
         color: var(--ac-pink-500);
-        margin-bottom: .8rem;
+        margin-bottom: .75rem;
     }
 
     .error-page p {
-        margin: 0 auto 1.8rem;
+        margin: 0 auto 1.75rem;
     }
 
     .error-actions {
         display: flex;
-        gap: .8rem;
+        gap: .75rem;
         justify-content: center;
         flex-wrap: wrap;
     }

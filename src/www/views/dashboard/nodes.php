@@ -10,33 +10,33 @@ if (!$isAjax) {
 
 <style>
     .dash-page-head {
-        margin-bottom: 1.6rem;
+        margin-bottom: 1.5rem;
     }
 
     .dash-page-head h2 {
-        margin-bottom: .2rem;
+        margin-bottom: .25rem;
     }
 
     .stat-summary {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-        gap: 1.1rem;
-        margin-bottom: 1.6rem;
+        gap: 1rem;
+        margin-bottom: 1.5rem;
     }
 
     .action-bar {
         display: flex;
-        gap: .7rem;
+        gap: .75rem;
         flex-wrap: wrap;
-        margin-bottom: 1.6rem;
+        margin-bottom: 1.5rem;
     }
 
     .node-card {
         background: var(--ac-surface);
-        padding: 1.4rem 1.5rem;
+        padding: 1.5rem 1.5rem;
         border-radius: var(--ac-radius-card);
         box-shadow: var(--ac-shadow-card);
-        margin-bottom: 1.1rem;
+        margin-bottom: 1rem;
         transition: transform var(--ac-dur) var(--ac-ease-spring),
             box-shadow var(--ac-dur) var(--ac-ease-out);
     }
@@ -55,19 +55,19 @@ if (!$isAjax) {
     }
 
     .node-header h3 {
-        margin: 0 0 .15rem;
+        margin: 0 0 .25rem;
     }
 
     .node-meta {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-        gap: .7rem;
+        gap: .75rem;
         margin: 1rem 0;
     }
 
     .node-meta-item {
         text-align: center;
-        padding: .7rem .5rem;
+        padding: .75rem .5rem;
         background: var(--ac-bg);
         border-radius: var(--ac-radius-input);
     }
@@ -82,7 +82,7 @@ if (!$isAjax) {
     .node-meta-label {
         font-size: .75rem;
         color: var(--ac-ink-500);
-        margin-top: .2rem;
+        margin-top: .25rem;
     }
 
     .node-info-line {
@@ -91,14 +91,14 @@ if (!$isAjax) {
         display: flex;
         flex-wrap: wrap;
         align-items: center;
-        gap: .4rem .8rem;
+        gap: .5rem .75rem;
     }
 
     .node-detail-row {
         display: flex;
         justify-content: space-between;
         gap: 1rem;
-        padding: .45rem 0;
+        padding: .5rem 0;
         font-size: .88rem;
         border-bottom: 1px solid var(--ac-surface-2);
     }
@@ -312,7 +312,7 @@ if (!$isAjax) {
             </div>
         `).join('');
 
-        Modal.show(node.name || '未命名节点', bodyHtml, [{
+        Modal.drawer(node.name || '未命名节点', bodyHtml, [{
             text: '删除',
             class: 'btn btn-danger btn-sm',
             click: () => confirmDeleteNode(node.id)
@@ -326,7 +326,7 @@ if (!$isAjax) {
     // 添加节点弹窗
     function showAddNodeModal() {
         const bodyHtml = `
-            <p style="margin-bottom:1rem;">添加一个推理节点到集群中。节点需要运行客户端程序并配置正确的 Token。</p>
+            <p style="margin-bottom: 1rem;">添加一个推理节点到集群中。节点需要运行客户端程序并配置正确的 Token。</p>
             <form id="form-add-node">
                 <div class="field">
                     <label>节点名称</label>
@@ -342,7 +342,7 @@ if (!$isAjax) {
                     <input type="text" name="addr" class="input" placeholder="例如：192.168.1.100:13137" />
                     <span class="hint">可选，节点 IP 和端口</span>
                 </div>
-                <div class="field" style="margin-bottom:0;">
+                <div class="field" style="margin-bottom: 0;">
                     <label>识别能力</label>
                     <select name="capabilities" class="select">
                         <option value="local">仅本地模型 (local)</option>
@@ -382,10 +382,7 @@ if (!$isAjax) {
             return;
         }
 
-        if (btn) {
-            btn.disabled = true;
-            btn.textContent = '添加中…';
-        }
+        Btn.loading(btn, true);
 
         try {
             const response = await Auth.fetch(`${window.API_BASE_URL}/nodes`, {
@@ -408,22 +405,19 @@ if (!$isAjax) {
         } catch (e) {
             Notify.error('网络错误，请检查服务器连接');
         } finally {
-            if (btn) {
-                btn.disabled = false;
-                btn.textContent = '确认添加';
-            }
+            Btn.loading(btn, false);
         }
     }
 
     // 展示一次性生成的节点 Token
     function showGeneratedToken(token) {
         const bodyHtml = `
-            <p style="margin-bottom:1rem;">节点已创建！这是该节点唯一的通信 Token，<strong>请立即复制保存</strong>，关闭后将无法再次查看。</p>
-            <div style="display:flex;gap:.5rem;align-items:center;">
-                <code style="flex:1;padding:.6rem .8rem;background:var(--ac-bg);border-radius:var(--ac-radius-input);word-break:break-all;font-size:.82rem;">${escapeHtml(token)}</code>
+            <p style="margin-bottom: 1rem;">节点已创建！这是该节点唯一的通信 Token，<strong>请立即复制保存</strong>，关闭后将无法再次查看。</p>
+            <div style="display:flex;gap: .5rem;align-items:center;">
+                <code style="flex:1;padding: .5rem .75rem;background:var(--ac-bg);border-radius:var(--ac-radius-input);word-break:break-all;font-size:.82rem;">${escapeHtml(token)}</code>
                 <button class="btn btn-primary btn-sm" onclick="copyText('${token.replace(/'/g, "\\'")}', 'Token 已复制')">复制</button>
             </div>
-            <p style="margin-top:1rem;font-size:.85rem;color:var(--ac-ink-500);">将 Token 填入节点客户端 .env 的 <code>TOKEN=</code> 配置项。</p>
+            <p style="margin-top: 1rem;font-size:.85rem;color:var(--ac-ink-500);">将 Token 填入节点客户端 .env 的 <code>TOKEN=</code> 配置项。</p>
         `;
         Modal.show('节点 Token（仅显示一次）', bodyHtml, [{
             text: '我已保存',
@@ -446,7 +440,7 @@ if (!$isAjax) {
         }
 
         const bodyHtml = `
-            <p style="margin-bottom:1rem;">修改节点 <strong>${escapeHtml(node.name || '未命名')}</strong> 的配置。</p>
+            <p style="margin-bottom: 1rem;">修改节点 <strong>${escapeHtml(node.name || '未命名')}</strong> 的配置。</p>
             <form id="form-edit-node">
                 <div class="field">
                     <label>节点名称</label>
@@ -462,7 +456,7 @@ if (!$isAjax) {
                     <input type="text" name="addr" class="input" value="${escapeHtml(node.addr || '')}" placeholder="例如：192.168.1.100:13137" />
                     <span class="hint">可选，节点 IP 和端口</span>
                 </div>
-                <div class="field" style="margin-bottom:0;">
+                <div class="field" style="margin-bottom: 0;">
                     <label>识别能力</label>
                     <select name="capabilities" class="select">
                         <option value="local" ${capsStr === 'local' ? 'selected' : ''}>仅本地模型 (local)</option>
@@ -493,28 +487,23 @@ if (!$isAjax) {
 
         const isOnline = node.status === 'online';
         const warning = isOnline ?
-            '<p style="margin-bottom:1rem;color:var(--ac-danger);">该节点当前<strong>在线</strong>，删除后其连接将被立即断开，节点客户端需要重新配置后才能注册。</p>' :
-            '<p style="margin-bottom:1rem;">删除后该节点将从集群中移除，不可恢复。</p>';
+            '<p style="margin-bottom: 1rem;color:var(--ac-danger);">该节点当前<strong>在线</strong>，删除后其连接将被立即断开，节点客户端需要重新配置后才能注册。</p>' :
+            '<p style="margin-bottom: 1rem;">删除后该节点将从集群中移除，不可恢复。</p>';
 
-        Modal.show('删除节点', `
-            <p style="margin-bottom:.5rem;">确定要删除节点 <strong>${escapeHtml(node.name || '未命名节点')}</strong>（ID: ${node.id}）吗？</p>
-            ${warning}
-        `, [{
-            text: '取消',
-            class: 'btn btn-ghost btn-sm',
-            click: () => Modal.close()
-        }, {
-            text: '确认删除',
-            class: 'btn btn-danger btn-sm',
-            click: (e) => deleteNode(nodeId, e.target)
-        }]);
+        Modal.confirm({
+            title: '删除节点',
+            description: `
+                <p style="margin-bottom: .5rem;">确定要删除节点 <strong>${escapeHtml(node.name || '未命名节点')}</strong>（ID: ${node.id}）吗？</p>
+                ${warning}
+            `,
+            confirmText: '删除节点',
+            danger: true,
+            onConfirm: (e) => deleteNode(nodeId, e.target),
+        });
     }
 
     async function deleteNode(nodeId, btn) {
-        if (btn) {
-            btn.disabled = true;
-            btn.textContent = '删除中…';
-        }
+        Btn.loading(btn, true);
 
         try {
             const response = await Auth.fetch(`${window.API_BASE_URL}/nodes/${nodeId}`, {
@@ -531,10 +520,7 @@ if (!$isAjax) {
         } catch (e) {
             Notify.error('网络错误，请检查服务器连接');
         } finally {
-            if (btn) {
-                btn.disabled = false;
-                btn.textContent = '确认删除';
-            }
+            Btn.loading(btn, false);
         }
     }
 
@@ -559,10 +545,7 @@ if (!$isAjax) {
             return;
         }
 
-        if (btn) {
-            btn.disabled = true;
-            btn.textContent = '修改中…';
-        }
+        Btn.loading(btn, true);
 
         try {
             const response = await Auth.fetch(`${window.API_BASE_URL}/nodes/${nodeId}`, {
@@ -580,10 +563,7 @@ if (!$isAjax) {
         } catch (e) {
             Notify.error('网络错误，请检查服务器连接');
         } finally {
-            if (btn) {
-                btn.disabled = false;
-                btn.textContent = '确认修改';
-            }
+            Btn.loading(btn, false);
         }
     }
 

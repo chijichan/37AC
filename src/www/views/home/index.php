@@ -18,12 +18,12 @@ require_once ROOT_PATH . '/views/layout.php';
 
     .hero-copy .lede {
         font-size: 1.08rem;
-        margin-bottom: 1.8rem;
+        margin-bottom: 1.75rem;
     }
 
     .hero-actions {
         display: flex;
-        gap: .8rem;
+        gap: .75rem;
         flex-wrap: wrap;
     }
 
@@ -62,24 +62,24 @@ require_once ROOT_PATH . '/views/layout.php';
     }
 
     .section-head p {
-        margin-top: .4rem;
+        margin-top: .5rem;
     }
 
     .bento {
         display: grid;
         grid-template-columns: repeat(3, 1fr);
-        gap: 1.2rem;
+        gap: 1.25rem;
     }
 
     .bento .cell {
-        padding: 1.6rem;
+        padding: 1.5rem;
         border-radius: var(--ac-radius-card);
         background: var(--ac-surface);
         box-shadow: var(--ac-shadow-card);
     }
 
     .bento .cell h3 {
-        margin-bottom: .55rem;
+        margin-bottom: .5rem;
     }
 
     .bento .cell p {
@@ -109,14 +109,14 @@ require_once ROOT_PATH . '/views/layout.php';
     .bento .cell-icon {
         font-size: 1.6rem;
         color: var(--ac-pink-500);
-        margin-bottom: .8rem;
+        margin-bottom: .75rem;
     }
 
     /* ===== 展示 ===== */
     .showcase-grid {
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: 1.6rem;
+        gap: 1.5rem;
         align-items: start;
     }
 
@@ -131,7 +131,7 @@ require_once ROOT_PATH . '/views/layout.php';
     }
 
     .showcase-grid figcaption {
-        margin-top: .6rem;
+        margin-top: .5rem;
         font-size: .85rem;
         color: var(--ac-ink-500);
     }
@@ -147,18 +147,18 @@ require_once ROOT_PATH . '/views/layout.php';
     }
 
     .cta h2 {
-        margin-bottom: .6rem;
+        margin-bottom: .5rem;
     }
 
     .cta p {
-        margin: 0 auto 1.6rem;
+        margin: 0 auto 1.5rem;
     }
 
     @media (max-width: 860px) {
         .hero {
             grid-template-columns: 1fr;
             gap: 2rem;
-            padding-top: 2.2rem;
+            padding-top: 2.25rem;
         }
 
         .hero-media::before {

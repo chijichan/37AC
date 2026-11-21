@@ -10,19 +10,19 @@ if (!$isAjax) {
 
 <style>
     .dash-page-head {
-        margin-bottom: 1.6rem;
+        margin-bottom: 1.5rem;
     }
 
     .dash-page-head h2 {
-        margin-bottom: .2rem;
+        margin-bottom: .25rem;
     }
 
     .model-card {
         background: var(--ac-surface);
-        padding: 1.3rem 1.4rem;
+        padding: 1.25rem 1.5rem;
         border-radius: var(--ac-radius-card);
         box-shadow: var(--ac-shadow-card);
-        margin-bottom: 1.1rem;
+        margin-bottom: 1rem;
     }
 
     .model-card .card-header {
@@ -33,21 +33,21 @@ if (!$isAjax) {
     }
 
     .model-card h4 {
-        margin: 0 0 .15rem;
+        margin: 0 0 .25rem;
     }
 
     .model-meta {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
         gap: .5rem;
-        margin-top: .9rem;
+        margin-top: 1rem;
         font-size: .88rem;
     }
 
     .model-meta dt {
         color: var(--ac-ink-500);
         font-size: .75rem;
-        margin-bottom: .15rem;
+        margin-bottom: .25rem;
     }
 
     .model-meta dd {
@@ -66,7 +66,7 @@ if (!$isAjax) {
     .model-table th,
     .model-table td {
         text-align: left;
-        padding: .6rem .7rem;
+        padding: .5rem .75rem;
         border-bottom: 1px solid var(--ac-surface-2);
         vertical-align: top;
     }
@@ -102,7 +102,7 @@ if (!$isAjax) {
         font-weight: 600;
         color: var(--ac-ink-900);
         cursor: pointer;
-        padding: .35rem 0;
+        padding: .25rem 0;
         width: fit-content;
     }
 
@@ -128,7 +128,7 @@ if (!$isAjax) {
         border: 1px solid var(--ac-ink-100);
         border-radius: var(--ac-radius-input);
         box-shadow: var(--ac-shadow-float);
-        padding: .35rem;
+        padding: .25rem;
         z-index: var(--ac-z-dropdown);
     }
 
@@ -136,7 +136,7 @@ if (!$isAjax) {
         display: block;
         width: 100%;
         text-align: left;
-        padding: .45rem .7rem;
+        padding: .5rem .75rem;
         border: none;
         background: none;
         border-radius: 8px;
@@ -168,7 +168,7 @@ if (!$isAjax) {
     <p>管理识别模型，节点启动时会自动拉取并更新到当前激活的本地模型。</p>
 </header>
 
-<section style="margin-bottom:1.6rem;">
+<section style="margin-bottom: 1.5rem;">
     <div class="model-card">
         <div class="card-header">
             <div>
@@ -185,8 +185,8 @@ if (!$isAjax) {
 
 <section id="admin-panel" style="display:none;">
     <div class="model-card">
-        <h3 style="margin-bottom:.4rem;">新增模型</h3>
-        <p style="font-size:.92rem; margin-bottom:1.1rem;">填写模型标识、展示名、类型、版本与下载信息；勾选“激活”可立即作为该模型的当前版本。</p>
+        <h3 style="margin-bottom: .5rem;">新增模型</h3>
+        <p style="font-size:.92rem; margin-bottom: 1rem;">填写模型标识、展示名、类型、版本与下载信息；勾选“激活”可立即作为该模型的当前版本。</p>
         <form id="form-create-model">
             <div class="create-form">
                 <div class="field">
@@ -226,7 +226,7 @@ if (!$isAjax) {
                     <label>说明</label>
                     <textarea name="notes" class="input" rows="2" placeholder="可选"></textarea>
                 </div>
-                <div class="field full-width" style="margin-bottom:0;">
+                <div class="field full-width" style="margin-bottom: 0;">
                     <button type="submit" class="btn btn-primary"><i class="ph-bold ph-plus"></i> 新增模型</button>
                 </div>
             </div>
@@ -234,8 +234,8 @@ if (!$isAjax) {
     </div>
 
     <div class="model-card">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:.8rem;">
-            <h3 style="margin:0;">模型列表</h3>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: .75rem;">
+            <h3 style="margin: 0;">模型列表</h3>
             <button class="btn btn-ghost btn-sm" onclick="loadModels()"><i class="ph ph-arrows-clockwise"></i> 刷新</button>
         </div>
         <div id="models-wrap">
@@ -404,7 +404,7 @@ if (!$isAjax) {
         const val = (v) => escapeHtml(v == null ? '' : String(v));
 
         const bodyHtml = `
-            <p style="margin-bottom:1rem;">修改模型 <strong>${escapeHtml(m.display_name || m.model_id)}</strong> 的配置。</p>
+            <p style="margin-bottom: 1rem;">修改模型 <strong>${escapeHtml(m.display_name || m.model_id)}</strong> 的配置。</p>
             <form id="form-edit-model">
                 <div class="field">
                     <label>模型标识（model_id）</label>
@@ -433,7 +433,7 @@ if (!$isAjax) {
                     <label>配置 SHA-256（可选）</label>
                     <input type="text" name="config_hash" class="input mono" value="${val(m.config_hash)}" maxlength="64" />
                 </div>
-                <div class="field" style="margin-bottom:0;">
+                <div class="field" style="margin-bottom: 0;">
                     <label>说明</label>
                     <textarea name="notes" class="input" rows="2">${val(m.notes)}</textarea>
                 </div>
@@ -469,10 +469,7 @@ if (!$isAjax) {
             Notify.error('请填写模型标识、版本号和 config.json 下载地址');
             return;
         }
-        if (btn) {
-            btn.disabled = true;
-            btn.textContent = '保存中…';
-        }
+        Btn.loading(btn, true);
         try {
             const result = await Auth.put(`${window.API_BASE_URL}/models/${id}`, data);
             if (result.success) {
@@ -486,30 +483,20 @@ if (!$isAjax) {
         } catch (err) {
             Notify.error('网络错误');
         } finally {
-            if (btn) {
-                btn.disabled = false;
-                btn.textContent = '确认修改';
-            }
+            Btn.loading(btn, false);
         }
     }
 
     function confirmDeleteModel(id) {
         const m = allModels.find((x) => x.id === id);
         const label = m ? `${m.display_name || m.model_id} v${m.version}` : `#${id}`;
-        Modal.show('删除模型', `<p>确定要删除模型 <b>${escapeHtml(label)}</b> 吗？此操作不可恢复。</p>`, [{
-                text: '删除',
-                class: 'btn btn-danger btn-sm',
-                click: () => {
-                    Modal.close();
-                    deleteModel(id);
-                }
-            },
-            {
-                text: '取消',
-                class: 'btn btn-ghost btn-sm',
-                click: () => Modal.close()
-            }
-        ]);
+        Modal.confirm({
+            title: '删除模型',
+            description: `<p>确定要删除模型 <b>${escapeHtml(label)}</b> 吗？此操作不可恢复。</p>`,
+            confirmText: '删除模型',
+            danger: true,
+            onConfirm: () => deleteModel(id),
+        });
     }
 
     async function deleteModel(id) {

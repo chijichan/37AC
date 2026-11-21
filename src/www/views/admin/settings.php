@@ -10,11 +10,11 @@ if (!$isAjax) {
 
 <style>
     .dash-page-head {
-        margin-bottom: 1.6rem;
+        margin-bottom: 1.5rem;
     }
 
     .dash-page-head h2 {
-        margin-bottom: .2rem;
+        margin-bottom: .25rem;
     }
 
     .settings-card {
@@ -22,7 +22,7 @@ if (!$isAjax) {
     }
 
     .settings-card .field {
-        margin-bottom: 1.1rem;
+        margin-bottom: 1rem;
     }
 
     .checkbox-row {
@@ -33,7 +33,7 @@ if (!$isAjax) {
         font-weight: 600;
         color: var(--ac-ink-900);
         cursor: pointer;
-        padding: .35rem 0;
+        padding: .25rem 0;
         width: fit-content;
     }
 
@@ -50,7 +50,7 @@ if (!$isAjax) {
     <p>修改会立即保存到服务端 settings 表。</p>
 </header>
 
-<div class="card settings-card" style="padding:1.5rem 1.6rem;">
+<div class="card settings-card" style="padding: 1.5rem 1.5rem;">
     <form id="form-admin-settings">
         <div class="field">
             <label>自动分流比例（37ac 占比 %）</label>
@@ -74,7 +74,7 @@ if (!$isAjax) {
                 <span>维护模式（仅记录，暂不拦截请求）</span>
             </label>
         </div>
-        <div class="field" style="margin-bottom:0;">
+        <div class="field" style="margin-bottom: 0;">
             <button type="submit" class="btn btn-primary"><i class="ph ph-floppy-disk"></i> 保存设置</button>
         </div>
     </form>

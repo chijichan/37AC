@@ -104,8 +104,7 @@ require_once ROOT_PATH . '/views/layout.php';
                 cooldownTimer = null;
                 panel.style.display = 'none';
                 form.style.display = 'block';
-                btn.disabled = false;
-                btn.textContent = '发送重置链接';
+                Btn.loading(btn, false);
             }
         }, 1000);
     }
@@ -128,8 +127,7 @@ require_once ROOT_PATH . '/views/layout.php';
         }
 
         hideAlerts();
-        btn.disabled = true;
-        btn.textContent = '发送中…';
+        Btn.loading(btn, true);
 
         try {
             const response = await fetch(`${API_BASE_URL}/auth/forgot-password`, {
@@ -146,6 +144,8 @@ require_once ROOT_PATH . '/views/layout.php';
 
             if (result.success) {
                 showSuccess('重置链接已发送，请检查你的邮箱');
+                // 先清掉转圈，再落到「已发送」的禁用终态
+                Btn.loading(btn, false);
                 btn.textContent = '已发送';
                 btn.disabled = true;
 
@@ -171,14 +171,12 @@ require_once ROOT_PATH . '/views/layout.php';
                     startCooldown(result.data.retry_after_minutes * 60);
                 } else {
                     showError(result.message || '发送失败，请稍后重试');
-                    btn.disabled = false;
-                    btn.textContent = '发送重置链接';
+                    Btn.loading(btn, false);
                 }
             }
         } catch (error) {
             showError('网络错误：无法连接到服务器，请检查网络或联系管理员');
-            btn.disabled = false;
-            btn.textContent = '发送重置链接';
+            Btn.loading(btn, false);
         }
     }
 

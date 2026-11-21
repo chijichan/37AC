@@ -10,25 +10,25 @@ if (!$isAjax) {
 
 <style>
     .dash-page-head {
-        margin-bottom: 1.6rem;
+        margin-bottom: 1.5rem;
     }
 
     .dash-page-head h2 {
-        margin-bottom: .2rem;
+        margin-bottom: .25rem;
     }
 
     .stat-summary {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-        gap: 1.1rem;
-        margin-bottom: 1.6rem;
+        gap: 1rem;
+        margin-bottom: 1.5rem;
     }
 
     .stat {
         background: var(--ac-surface);
         border-radius: var(--ac-radius-card);
         box-shadow: var(--ac-shadow-card);
-        padding: 1.2rem 1.3rem;
+        padding: 1.25rem 1.25rem;
     }
 
     .stat-value {
@@ -53,7 +53,7 @@ if (!$isAjax) {
     }
 
     .sys-item {
-        padding: .9rem 1rem;
+        padding: 1rem 1rem;
         border-radius: var(--ac-radius-input);
         background: var(--ac-bg);
     }
@@ -79,8 +79,8 @@ if (!$isAjax) {
     <div class="stat"><span class="stat-value" id="stats-accuracy">--</span><span class="stat-label">平均识别准确率</span></div>
 </div>
 
-<div class="card" style="padding:1.4rem 1.5rem;">
-    <h3 style="margin-bottom:1rem;">主机资源</h3>
+<div class="card" style="padding: 1.5rem 1.5rem;">
+    <h3 style="margin-bottom: 1rem;">主机资源</h3>
     <div class="sys-grid">
         <div class="sys-item">
             <div class="label"><span>CPU</span><span id="system-cpu">--</span></div>

@@ -73,8 +73,7 @@ require_once ROOT_PATH . '/views/layout.php';
             return;
         }
 
-        btn.disabled = true;
-        btn.textContent = '登录中…';
+        Btn.loading(btn, true);
 
         try {
             const response = await fetch(`${API_BASE_URL}/auth/login`, {
@@ -112,13 +111,11 @@ require_once ROOT_PATH . '/views/layout.php';
                 }, 800);
             } else {
                 showError(result.message || '登录失败');
-                btn.disabled = false;
-                btn.textContent = '登录';
+                Btn.loading(btn, false);
             }
         } catch (error) {
             showError('网络错误，请检查服务器连接');
-            btn.disabled = false;
-            btn.textContent = '登录';
+            Btn.loading(btn, false);
         }
     }
 

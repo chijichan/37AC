@@ -13,7 +13,7 @@
 .status-dot,
 .segmented,
 .segmented button,
-.site-nav .nav-links a,
+.site-nav .nav-links > li > a,
 .user-menu .user-trigger,
 .password-strength,
 /* upload.php 内联样式里的圆形取景手柄与骨架条 */
@@ -661,7 +661,7 @@
     padding: 0;
 }
 
-.site-nav .nav-links a {
+.site-nav .nav-links > li > a {
     display: inline-flex;
     padding: .5rem 1rem;
     border-radius: var(--ac-radius-pill);
@@ -672,12 +672,12 @@
         color var(--ac-dur-fast) var(--ac-ease-out);
 }
 
-.site-nav .nav-links a:hover {
+.site-nav .nav-links > li > a:hover {
     background: var(--ac-pink-50);
     color: var(--ac-pink-600);
 }
 
-.site-nav .nav-links a.active {
+.site-nav .nav-links > li > a.active {
     background: var(--ac-pink-100);
     color: var(--ac-pink-700);
 }
@@ -945,7 +945,7 @@ kbd {
 
 /* ---------- 响应式 ---------- */
 @media (max-width: 640px) {
-    .site-nav .nav-links a {
+    .site-nav .nav-links > li > a {
         padding: .5rem .75rem;
         font-size: .88rem;
     }

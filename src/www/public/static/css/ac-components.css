@@ -2,13 +2,35 @@
    37AC Components - 基于 ac-tokens.css
    ========================================================================== */
 
+/* ---------- 正圆与胶囊：排除连续曲率 ----------
+   ac-tokens.css 里的 corner-shape: squircle 是全局生效的，
+   它会把 border-radius: 50% 的正圆和 999px 的胶囊一并改成超椭圆
+   （转圈图标因此变成圆角方块、胶囊按钮两端发方）。
+   这些形状必须保持轮廓原型，逐个还原为 round。 */
+.btn,
+.btn.is-loading::before,
+.badge,
+.status-dot,
+.segmented,
+.segmented button,
+.site-nav .nav-links a,
+.user-menu .user-trigger,
+.password-strength,
+/* upload.php 内联样式里的圆形取景手柄与骨架条 */
+.cropper-point,
+.sk-line,
+.sk-chip,
+.sk-btn {
+    corner-shape: round;
+}
+
 /* ---------- 按钮 ---------- */
 .btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: .5rem;
-    padding: .6rem 1.4rem;
+    padding: .5rem 1.5rem;
     border-radius: var(--ac-radius-pill);
     font-family: var(--ac-font-display);
     font-weight: 700;
@@ -76,17 +98,41 @@
 }
 
 .btn-sm {
-    padding: .38rem 1rem;
+    padding: .5rem 1rem;
     font-size: .85rem;
 }
 
 .btn-lg {
-    padding: .8rem 1.9rem;
+    padding: .75rem 2rem;
     font-size: 1.05rem;
 }
 
 .btn-block {
     width: 100%;
+}
+
+/* 加载态：转圈 + 锁点击，防重复提交。
+   用 ::before 而非隐藏文字，既保留操作语义，也不受各变体前景色差异影响。 */
+.btn.is-loading {
+    pointer-events: none;
+    opacity: .78;
+}
+
+.btn.is-loading::before {
+    content: "";
+    flex: 0 0 auto;
+    width: .95em;
+    height: .95em;
+    border-radius: 50%;
+    border: 2px solid currentColor;
+    border-top-color: transparent;
+    animation: btn-spin .6s linear infinite;
+}
+
+@keyframes btn-spin {
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 /* ---------- 卡片 ---------- */
@@ -111,8 +157,8 @@
 .field {
     display: flex;
     flex-direction: column;
-    gap: .4rem;
-    margin-bottom: 1.1rem;
+    gap: .5rem;
+    margin-bottom: 1rem;
 }
 
 .field>label {
@@ -140,7 +186,7 @@
 .select,
 .textarea {
     width: 100%;
-    padding: .62rem 1rem;
+    padding: .5rem 1rem;
     border: 1.5px solid var(--ac-ink-100);
     border-radius: var(--ac-radius-input);
     background: var(--ac-surface);
@@ -173,41 +219,105 @@
     resize: vertical;
 }
 
+/* ---------- 下拉选择（可定制下拉，Chrome 135+） ----------
+   原生 <select> 的展开层由系统绘制，灰底反白、硬直角都无法用普通 CSS 改写。
+   开启 appearance: base-select 后可用 CSS 完整接管展开层；
+   不支持的浏览器会整段忽略，自动回落原生下拉，行为与现在完全一致。 */
+@supports (appearance: base-select) {
+
+    .select,
+    .select::picker(select) {
+        appearance: base-select;
+    }
+
+    /* 展开层：与输入框同一套圆角、描边与柔和阴影 */
+    .select::picker(select) {
+        margin-top: .25rem;
+        padding: .25rem;
+        border: 1px solid var(--ac-ink-100);
+        border-radius: var(--ac-radius-input);
+        background: var(--ac-surface);
+        box-shadow: var(--ac-shadow-float);
+    }
+
+    /* 右侧箭头默认由浏览器提供，这里只接管配色与展开时的翻转 */
+    .select::picker-icon {
+        color: var(--ac-ink-500);
+        transition: transform var(--ac-dur-fast) var(--ac-ease-out);
+    }
+
+    .select:open::picker-icon {
+        transform: rotate(180deg);
+    }
+
+    /* 选项行：8px = 外层 12px 圆角 − 4px 内边距，符合同心圆角 */
+    .select option {
+        padding: .5rem .75rem;
+        border-radius: 8px;
+        background: transparent;
+        color: var(--ac-ink-700);
+    }
+
+    .select option:hover {
+        background: var(--ac-pink-50);
+        color: var(--ac-pink-700);
+    }
+
+    /* 当前选中项：浅底 + 加粗即可表达，不再叠系统勾号 */
+    .select option:checked {
+        background: var(--ac-pink-100);
+        color: var(--ac-pink-700);
+        font-weight: 600;
+    }
+
+    /* 去掉浏览器默认画的勾号：勾号叠粉底是最典型的模板/AI 观感 */
+    .select option::checkmark {
+        content: none;
+        display: none;
+    }
+}
+
 /* ---------- 徽章 ---------- */
 .badge {
     display: inline-flex;
     align-items: center;
-    gap: .35rem;
-    padding: .18rem .7rem;
+    gap: .25rem;
+    padding: .25rem .75rem;
     border-radius: var(--ac-radius-pill);
     font-size: .78rem;
     font-weight: 600;
     line-height: 1.5;
 }
 
+/* 浅底深字：文字统一走 -ink 深色令牌，浅底上满足 WCAG AA 4.5:1 */
 .badge-pink {
     background: var(--ac-pink-100);
     color: var(--ac-pink-700);
 }
 
 .badge-mint {
-    background: #DFF5F3;
-    color: #23847D;
+    background: var(--ac-mint-bg);
+    color: var(--ac-mint-ink);
 }
 
 .badge-success {
     background: var(--ac-success-bg);
-    color: var(--ac-success);
+    color: var(--ac-success-ink);
 }
 
 .badge-warning {
     background: var(--ac-warning-bg);
-    color: var(--ac-warning);
+    color: var(--ac-warning-ink);
 }
 
 .badge-danger {
     background: var(--ac-danger-bg);
-    color: var(--ac-danger);
+    color: var(--ac-danger-ink);
+}
+
+.badge-info {
+    background: var(--ac-info-bg);
+    color: var(--ac-info-ink);
 }
 
 .badge-neutral {
@@ -247,7 +357,7 @@
 
 .table th {
     text-align: left;
-    padding: .85rem 1.1rem;
+    padding: .75rem 1rem;
     font-size: .78rem;
     font-weight: 700;
     color: var(--ac-ink-500);
@@ -256,7 +366,7 @@
 }
 
 .table td {
-    padding: .8rem 1.1rem;
+    padding: .75rem 1rem;
     border-bottom: 1px solid var(--ac-surface-2);
     color: var(--ac-ink-700);
     vertical-align: middle;
@@ -283,7 +393,7 @@
     box-shadow: var(--ac-shadow-float);
     width: min(440px, calc(100vw - 2.5rem));
     max-height: 85vh;
-    padding: 1.6rem;
+    padding: 1.5rem;
     margin: auto;
     animation: modal-pop .28s var(--ac-ease-spring);
 }
@@ -305,7 +415,8 @@
     font-family: var(--ac-font-display);
     font-size: 1.15rem;
     font-weight: 800;
-    margin-bottom: .6rem;
+    margin-bottom: .5rem;
+    text-wrap: balance;
 }
 
 .ac-modal .modal-body {
@@ -326,10 +437,43 @@
     flex: 0 0 auto;
     display: flex;
     justify-content: flex-end;
-    gap: .7rem;
+    gap: .75rem;
     margin-top: 1rem;
     padding-top: 1rem;
     border-top: 1px solid var(--ac-surface-2);
+}
+
+/* ---------- 侧边抽屉（查看详情保留列表上下文，不阻断整页） ----------
+   复用 .ac-modal 的内部结构样式，这里只覆盖定位与形状。 */
+.ac-drawer {
+    margin: 0 0 0 auto;
+    width: min(460px, calc(100vw - 2.5rem));
+    height: 100vh;
+    height: 100dvh;
+    max-height: 100vh;
+    max-height: 100dvh;
+    border-radius: var(--ac-radius-card) 0 0 var(--ac-radius-card);
+    padding: 1.5rem;
+    animation: drawer-in .28s var(--ac-ease-out);
+}
+
+@keyframes drawer-in {
+    from {
+        opacity: 0;
+        transform: translateX(24px);
+    }
+
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+@media (max-width: 640px) {
+    .ac-drawer {
+        width: 100vw;
+        border-radius: 0;
+    }
 }
 
 /* ---------- Toast 通知 ---------- */
@@ -340,7 +484,7 @@
     z-index: var(--ac-z-toast);
     display: flex;
     flex-direction: column;
-    gap: .6rem;
+    gap: .5rem;
     pointer-events: none;
 }
 
@@ -348,25 +492,52 @@
     pointer-events: auto;
     display: flex;
     align-items: flex-start;
-    gap: .6rem;
-    min-width: 260px;
+    gap: .5rem;
+    min-width: 240px;
     max-width: 360px;
     padding: .75rem 1rem;
     border-radius: var(--ac-radius-input);
     background: var(--ac-surface);
+    border: 1px solid var(--ac-ink-100);
     box-shadow: var(--ac-shadow-float);
-    font-size: .9rem;
+    font-size: .875rem;
+    line-height: 1.5;
     color: var(--ac-ink-900);
-    animation: toast-in .3s var(--ac-ease-spring);
-    border-left: 4px solid var(--ac-info);
+    animation: toast-in .28s var(--ac-ease-out);
 }
 
-.toast.success {
-    border-left-color: var(--ac-success);
+/* 语义由图标承载：不做整块染色、不加粗色条，避免模板化观感 */
+.toast-icon {
+    flex: 0 0 auto;
+    /* 1.2em = 16.8px，配合 line-height 1.25 让行盒恰好等于正文首行行盒（21px），
+       否则图标行盒更高、半行距更小，整体会比文字上浮约 1.7px */
+    font-size: 1.2em;
+    line-height: 1.25;
+    /* 图标字体的视觉重心本就在基线上方，再下移 1/10 字高做光学居中 */
+    transform: translateY(.1em);
+    color: var(--ac-ink-500);
 }
 
-.toast.error {
-    border-left-color: var(--ac-danger);
+.toast-text {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.toast.success .toast-icon {
+    color: var(--ac-success);
+}
+
+.toast.error .toast-icon {
+    color: var(--ac-danger);
+}
+
+.toast.warning .toast-icon {
+    color: var(--ac-warning);
+}
+
+.toast.info .toast-icon {
+    color: var(--ac-info);
 }
 
 .toast.leaving {
@@ -440,7 +611,7 @@
 
 .empty .empty-icon {
     font-size: 2.2rem;
-    margin-bottom: .8rem;
+    margin-bottom: .75rem;
     color: var(--ac-pink-300);
 }
 
@@ -470,7 +641,7 @@
 .site-nav .nav-logo {
     display: flex;
     align-items: center;
-    gap: .55rem;
+    gap: .5rem;
     font-family: var(--ac-font-display);
     font-weight: 800;
     font-size: 1.15rem;
@@ -485,14 +656,14 @@
 .site-nav .nav-links {
     display: flex;
     align-items: center;
-    gap: .35rem;
+    gap: .25rem;
     list-style: none;
     padding: 0;
 }
 
 .site-nav .nav-links a {
     display: inline-flex;
-    padding: .45rem 1rem;
+    padding: .5rem 1rem;
     border-radius: var(--ac-radius-pill);
     color: var(--ac-ink-700);
     font-weight: 600;
@@ -520,7 +691,7 @@
     display: inline-flex;
     align-items: center;
     gap: .5rem;
-    padding: .4rem .95rem;
+    padding: .5rem 1rem;
     border-radius: var(--ac-radius-pill);
     font-weight: 700;
     font-size: .9rem;
@@ -544,7 +715,7 @@
     background: var(--ac-surface);
     border-radius: var(--ac-radius-input);
     box-shadow: var(--ac-shadow-float);
-    padding: .45rem;
+    padding: .5rem;
     opacity: 0;
     transform: translateY(-6px);
     pointer-events: none;
@@ -559,9 +730,9 @@
 }
 
 .user-dropdown .ud-header {
-    padding: .6rem .8rem;
+    padding: .5rem .75rem;
     border-bottom: 1px solid var(--ac-surface-2);
-    margin-bottom: .35rem;
+    margin-bottom: .25rem;
 }
 
 .user-dropdown .ud-header .ud-name {
@@ -572,8 +743,8 @@
 .user-dropdown .ud-item {
     display: flex;
     align-items: center;
-    gap: .55rem;
-    padding: .55rem .8rem;
+    gap: .5rem;
+    padding: .5rem .75rem;
     border-radius: 8px;
     font-size: .9rem;
     font-weight: 600;
@@ -603,7 +774,7 @@
 }
 
 .segmented button {
-    padding: .45rem 1.2rem;
+    padding: .5rem 1.25rem;
     border-radius: var(--ac-radius-pill);
     font-weight: 700;
     font-size: .9rem;
@@ -624,10 +795,10 @@
     background: var(--ac-surface);
     border-radius: var(--ac-radius-card);
     box-shadow: var(--ac-shadow-card);
-    padding: 1.25rem 1.4rem;
+    padding: 1.25rem 1.5rem;
     display: flex;
     flex-direction: column;
-    gap: .3rem;
+    gap: .25rem;
 }
 
 .stat .stat-label {
@@ -647,13 +818,13 @@
 .stat .stat-value .stat-unit {
     font-size: .9rem;
     color: var(--ac-ink-500);
-    margin-left: .2rem;
+    margin-left: .25rem;
 }
 
 /* ---------- 页脚 ---------- */
 .site-footer {
     margin-top: auto;
-    padding: 2.2rem 0;
+    padding: 2.25rem 0;
     border-top: 1px solid var(--ac-ink-100);
     font-size: .88rem;
     color: var(--ac-ink-500);
@@ -664,7 +835,7 @@
     flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
-    gap: .8rem;
+    gap: .75rem;
 }
 
 .site-footer .footer-nav,
@@ -694,7 +865,7 @@
     }
 
     .site-footer .footer-copyright {
-        gap: .35rem;
+        gap: .25rem;
         white-space: normal;
     }
 }
@@ -761,10 +932,21 @@
     }
 }
 
+/* ---------- 数值防抖（等宽数字） ----------
+   表格数值列与指标卡在筛选/流式刷新时位数会变化，
+   不加 tabular-nums 会导致数字左右乱颤。 */
+.table,
+.stat .stat-value,
+.mono,
+code,
+kbd {
+    font-variant-numeric: tabular-nums;
+}
+
 /* ---------- 响应式 ---------- */
 @media (max-width: 640px) {
     .site-nav .nav-links a {
-        padding: .4rem .7rem;
+        padding: .5rem .75rem;
         font-size: .88rem;
     }
 

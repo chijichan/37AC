@@ -14,25 +14,25 @@
     background: var(--ac-surface);
     border-radius: var(--ac-radius-modal);
     box-shadow: var(--ac-shadow-float);
-    padding: 2.2rem 2rem;
+    padding: 2.25rem 2rem;
 }
 
 .auth-card h1 {
     text-align: center;
     font-size: 1.6rem;
-    margin-bottom: .35rem;
+    margin-bottom: .25rem;
 }
 
 .auth-card .subtitle {
     text-align: center;
     color: var(--ac-ink-500);
-    margin: 0 auto 1.8rem;
+    margin: 0 auto 1.75rem;
     font-size: .92rem;
 }
 
 .auth-message {
     display: none;
-    padding: .7rem 1rem;
+    padding: .75rem 1rem;
     border-radius: var(--ac-radius-input);
     margin-bottom: 1rem;
     font-size: .88rem;
@@ -51,7 +51,7 @@
 
 .auth-footer {
     text-align: center;
-    margin-top: 1.4rem;
+    margin-top: 1.5rem;
     font-size: .88rem;
     color: var(--ac-ink-500);
 }
@@ -68,7 +68,7 @@
     display: flex;
     align-items: center;
     gap: 1rem;
-    margin: 1.4rem 0 0;
+    margin: 1.5rem 0 0;
     color: var(--ac-ink-300);
     font-size: .82rem;
 }
@@ -83,8 +83,8 @@
 .auth-info-box {
     background: var(--ac-bg);
     border-radius: var(--ac-radius-input);
-    padding: .9rem 1rem;
-    margin-bottom: 1.3rem;
+    padding: 1rem 1rem;
+    margin-bottom: 1.25rem;
     font-size: .86rem;
     color: var(--ac-ink-500);
     line-height: 1.6;
@@ -113,7 +113,7 @@
     right: 8px;
     top: 50%;
     transform: translateY(-50%);
-    padding: .3rem .6rem;
+    padding: .25rem .5rem;
     color: var(--ac-ink-500);
     font-size: .8rem;
     font-weight: 600;
@@ -129,7 +129,7 @@
 
 /* 密码强度条 */
 .password-strength {
-    margin-top: .55rem;
+    margin-top: .5rem;
     height: 5px;
     border-radius: var(--ac-radius-pill);
     background: var(--ac-ink-100);
@@ -146,7 +146,7 @@
 
 .password-strength-text {
     font-size: .75rem;
-    margin-top: .3rem;
+    margin-top: .25rem;
     display: block;
     text-align: right;
 }
@@ -174,7 +174,7 @@
 .match-indicator {
     font-size: .8rem;
     display: none;
-    margin-top: .3rem;
+    margin-top: .25rem;
 }
 
 .match-indicator.match {
@@ -188,7 +188,7 @@
 /* 冷却倒计时面板 */
 .cooldown-timer {
     text-align: center;
-    padding: 1.2rem;
+    padding: 1.25rem;
     background: var(--ac-bg);
     border-radius: var(--ac-radius-input);
     margin-top: 1rem;
@@ -200,7 +200,7 @@
     font-size: 1.6rem;
     font-weight: 700;
     color: var(--ac-pink-600);
-    margin: .4rem 0;
+    margin: .5rem 0;
 }
 
 .cooldown-timer .timer-label {
@@ -218,7 +218,7 @@
     font-size: 2.6rem;
     color: var(--ac-pink-400);
     display: block;
-    margin-bottom: .8rem;
+    margin-bottom: .75rem;
 }
 
 .redirect-countdown {

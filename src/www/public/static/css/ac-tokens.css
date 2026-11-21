@@ -49,6 +49,7 @@
 
     /* 点缀（仅小面积：标签、状态点） */
     --ac-mint: #3DBDB4;
+    --ac-mint-bg: #DFF5F3;
 
     /* 语义色 */
     --ac-success: #2FA36B;
@@ -60,6 +61,21 @@
     --ac-info: #3E8FD9;
     --ac-info-bg: #E5F1FB;
 
+    /* 语义色：Badge 文字专用深色
+       上面的语义色直接用作浅底文字时对比度不足（success 仅 2.83:1、warning 2.38:1，
+       低于 WCAG AA 对小字号要求的 4.5:1）。这里只在色相不变的前提下加深明度，
+       浅底深字的观感不变，但五色全部达标。 */
+    --ac-success-ink: #1B7A4B;
+    /* 4.73:1 */
+    --ac-warning-ink: #8A5310;
+    /* 5.61:1 */
+    --ac-danger-ink: #B32727;
+    /* 5.47:1 */
+    --ac-info-ink: #2A6FA8;
+    /* 4.65:1 */
+    --ac-mint-ink: #1C6F69;
+    /* 5.24:1 */
+
     /* 字体栈 */
     --ac-font-display: 'Nunito', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
     --ac-font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
@@ -70,6 +86,12 @@
     --ac-radius-input: 12px;
     --ac-radius-card: 16px;
     --ac-radius-modal: 20px;
+
+    /* 圆角曲率：苹果风连续曲率 (Squircle)
+       标准 border-radius 是正圆弧，与直线相接处存在曲率突变，视觉上会"发尖"；
+       squircle 用超椭圆过渡，圆角更饱满连续，即 Apple 图标/卡片的观感。
+       仅在支持 corner-shape 的浏览器（Chromium 139+）生效，其余自动回落标准圆弧。 */
+    --ac-corner-shape: squircle;
 
     /* 阴影（柔光带粉调，禁纯黑投影） */
     --ac-shadow-card: 0 2px 12px rgba(50, 41, 49, .05);
@@ -92,6 +114,18 @@
     --ac-z-modal: 500;
     --ac-z-toast: 600;
     --ac-z-loading: 900;
+}
+
+/* ---------- 苹果风连续曲率（渐进增强） ----------
+   用通配选择器一次性覆盖全站：corner-shape 只对已设置 border-radius 的元素产生作用，
+   对没有圆角的元素完全无副作用；border-radius: 50% / 999px 的圆与胶囊不受影响。
+   因此新增组件无需再单独声明，未来也不会漏。 */
+@supports (corner-shape: squircle) {
+    *,
+    *::before,
+    *::after {
+        corner-shape: var(--ac-corner-shape);
+    }
 }
 
 /* ---------- 轻量 Reset ---------- */
@@ -139,6 +173,14 @@ select {
     color: inherit;
 }
 
+/* 原生勾选框 / 单选框 / 滑杆统一走樱花粉，避免浏览器默认蓝 */
+input[type='checkbox'],
+input[type='radio'],
+input[type='range'],
+progress {
+    accent-color: var(--ac-pink-600);
+}
+
 button {
     cursor: pointer;
     border: none;
@@ -182,6 +224,8 @@ h4 {
     line-height: 1.2;
     letter-spacing: -0.01em;
     color: var(--ac-ink-900);
+    /* 防孤字成行：排版引擎自动平摊各行字数，避免末行只掉下一个字 */
+    text-wrap: balance;
 }
 
 h1 {
